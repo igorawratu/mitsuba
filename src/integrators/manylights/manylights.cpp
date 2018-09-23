@@ -6,7 +6,7 @@
 
 #include <vector>
 #include <algorithm>
-
+#include <mutex>
 
 MTS_NAMESPACE_BEGIN
 
@@ -18,7 +18,6 @@ size_t generateVPLs(const Scene *scene, size_t offset, size_t count, int max_dep
 	Properties props("halton");
 	props.setInteger("scramble", 0);
 	Sampler *sampler = static_cast<Sampler*>(PluginManager::getInstance()->createObject(MTS_CLASS(Sampler), props));
-	auto sampler_scopeguard = makeScopeGuard([&sampler] {sampler->decRef(true); });
 	sampler->configure();
 	sampler->generate(Point2i(0));
 
@@ -166,18 +165,76 @@ public:
 	}
 
 	void cancel() {
-
+		std::lock_guard<std::mutex> lock(cancel_lock_);
+		cancel_ = true;
 	}
 
-	bool render(Scene *scene, RenderQueue *queue,
-		const RenderJob *job, int sceneResID, int sensorResID, int samplerResID) {
+	bool render(Scene *scene, RenderQueue *queue, const RenderJob *job, int sceneResID, int sensorResID, int samplerResID) {
 		
+		{
+			std::lock_guard<std::mutex> lock(cancel_lock_);
+			cancel_ = false;
+		}
+
+		ref<Sensor> sensor = scene->getSensor();
+		ref<Film> film = sensor->getFilm();
+		if (output_image_ == nullptr || output_image_->getSize() != film->getSize()) {
+			output_image_ = createBitmap(film->getSize());
+		}
+
+		std::uint8_t *image_buffer = output_image_->getUInt8Data();
+
+		for (std::uint32_t y = 0; y < output_image_->getSize().y; ++y) {
+			for (std::uint32_t x = 0; x < output_image_->getSize().x; ++x) {
+				{
+					std::lock_guard<std::mutex> lock(cancel_lock_);
+					if (cancel_) {
+						break;
+					}
+				}
+
+				//code to calculate the ray according to sensor properties here
+				Ray ray;
+				Intersection its;
+
+				size_t offset = (x + output_image_->getSize().x * y) * output_image_->getBytesPerPixel();
+				memset(image_buffer + offset, 0, output_image_->getBytesPerPixel());
+
+				if (scene->rayIntersect(ray, its)) {
+					std::vector<VPL> vpls;
+					getVPLs(vpls);
+
+					float r = 0.f, g = 0.f, b = 0.f;
+					for (int i = 0; i < vpls.size(); ++i) {
+						//light calculation here
+					}
+				}
+			}
+		}
+
+		film->setBitmap(output_image_);
+
+		return !cancel_;
 	}
 
 	MTS_DECLARE_CLASS()
+
 private:
+	ref<Bitmap> createBitmap(Vector2i dimensions) {
+		return nullptr;
+	}
+
+	//brute force for now, implement in selection strategy selection later
+	void getVPLs(std::vector<VPL>& vpls) {
+		vpls = vpls_;
+	}
+
+private:
+	ref<Bitmap> output_image_;
 	std::vector<VPL> vpls_;
 	std::uint32_t max_depth_;
+	std::mutex cancel_lock_;
+	bool cancel_;
 };
 
 MTS_IMPLEMENT_CLASS(ManyLightsIntegrator, false, Integrator)
