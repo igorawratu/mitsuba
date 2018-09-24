@@ -183,9 +183,10 @@ public:
 		}
 
 		std::uint8_t *image_buffer = output_image_->getUInt8Data();
+		memset(image_buffer, 0, output_image_->getBytesPerPixel() * output_image_->getSize().y * output_image_->getSize().x);
 
-		for (std::uint32_t y = 0; y < output_image_->getSize().y; ++y) {
-			for (std::uint32_t x = 0; x < output_image_->getSize().x; ++x) {
+		for (std::int32_t y = 0; y < output_image_->getSize().y; ++y) {
+			for (std::int32_t x = 0; x < output_image_->getSize().x; ++x) {
 				{
 					std::lock_guard<std::mutex> lock(cancel_lock_);
 					if (cancel_) {
@@ -193,22 +194,55 @@ public:
 					}
 				}
 
-				//code to calculate the ray according to sensor properties here
 				Ray ray;
-				Intersection its;
+
+				Point2 sample_position(x + 0.5f, y + 0.5f);
+				
+				//disregarding aperture and time sampling for now, as we are only dealing with a single sample per pixel
+				Point2 aperture_sample(0.5f, 0.5f);
+				Float time_sample(0.5f);
+
+				sensor->sampleRay(ray, sample_position, aperture_sample, time_sample);
+
+				Float t;
+				ConstShapePtr shape;
+				Normal n;
+				Point2 uv;
 
 				size_t offset = (x + output_image_->getSize().x * y) * output_image_->getBytesPerPixel();
-				memset(image_buffer + offset, 0, output_image_->getBytesPerPixel());
 
-				if (scene->rayIntersect(ray, its)) {
+				if (scene->rayIntersect(ray, t, shape, n, uv)) {
+					Point world_p = ray.o + ray.d * t;
+
 					std::vector<VPL> vpls;
 					getVPLs(vpls);
 
 					float r = 0.f, g = 0.f, b = 0.f;
-					for (int i = 0; i < vpls.size(); ++i) {
-						//light calculation here
+					for (std::uint32_t i = 0; i < vpls.size(); ++i) {
+						float d = (world_p - vpls[i].its.p).length();
+						d = std::min(0.01f, d);
+						float power = 1. / (d * d);
+
+						float lr, lg, lb;
+						vpls[i].P.toLinearRGB(lr, lg, lb);
+
+						float n_dot_ldir = std::max(0.f, dot(n, vpls[i].its.p - world_p));
+
+						r += lr * n_dot_ldir * power;
+						g += lg * n_dot_ldir * power;
+						b += lb * n_dot_ldir * power;
 					}
+
+					r = std::min(r, 1.f);	
+					g = std::min(g, 1.f);	
+					b = std::min(b, 1.f);
+
+					image_buffer[offset] = r * 255. + 0.5;
+					image_buffer[offset + 1] = g * 255. + 0.5;
+					image_buffer[offset + 2] = b * 255. + 0.5;
 				}
+
+				image_buffer[offset] = 0xff;
 			}
 		}
 
@@ -220,8 +254,13 @@ public:
 	MTS_DECLARE_CLASS()
 
 private:
-	ref<Bitmap> createBitmap(Vector2i dimensions) {
-		return nullptr;
+	ref<Bitmap> createBitmap(const Vector2i& dimensions) {
+		if(dimensions.x <= 0 || dimensions.y <= 0){
+			return nullptr;
+		}
+		
+		//make 8bit channels for now, can change it in the future
+		return new Bitmap(Bitmap::ESpectrum, Bitmap::EUInt8, dimensions);
 	}
 
 	//brute force for now, implement in selection strategy selection later
