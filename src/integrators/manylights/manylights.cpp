@@ -8,6 +8,8 @@
 #include <algorithm>
 #include <mutex>
 
+#include <iostream>
+
 MTS_NAMESPACE_BEGIN
 
 size_t generateVPLs(const Scene *scene, size_t offset, size_t count, int max_depth, bool prune, 
@@ -31,7 +33,6 @@ size_t generateVPLs(const Scene *scene, size_t offset, size_t count, int max_dep
 		sampler->setSampleIndex(++offset);
 
 		if (vpls.empty() && ++retries > 10000) {
-			/* Unable to generate VPLs in this scene -- give up. */
 			return 0;
 		}
 
@@ -56,7 +57,6 @@ size_t generateVPLs(const Scene *scene, size_t offset, size_t count, int max_dep
 			weight *= emitter->sampleDirection(direction_sample, point_sample, sampler->next2D());
 		}
 		else {
-			/* Hack to get the proper information for directional VPLs */
 			DirectSamplingRecord direct_sample(scene->getKDTree()->getAABB().getCenter(), point_sample.time);
 
 			Spectrum direct_sample_weight = emitter->sampleDirect(direct_sample, sampler->next2D())	/ scene->pdfEmitterDiscrete(emitter);
@@ -82,8 +82,7 @@ size_t generateVPLs(const Scene *scene, size_t offset, size_t count, int max_dep
 		int depth = 2;
 		Ray ray(point_sample.p, direction_sample.d, time);
 		Intersection its;
-
-		//generates vpls from additional bounces
+		//generates vpls from			bsdf_sample_weight.toLinearRGB(r2, g2, b2); additional bounces
 		while (!weight.isZero() && (depth < max_depth || max_depth == -1)) {
 			if (!scene->rayIntersect(ray, its))
 				break;
@@ -94,22 +93,22 @@ size_t generateVPLs(const Scene *scene, size_t offset, size_t count, int max_dep
 			if (bsdf_sample_weight.isZero())
 				break;
 
-			float albedo = std::fmin(0.95f, bsdf_sample_weight.max());
-			if (sampler->next1D() > albedo) {
+			float approx_albedo = std::fmin(0.95f, bsdf_sample_weight.max());
+
+            if (sampler->next1D() > approx_albedo){
 				break;
 			}
-			else {
-				weight /= albedo;
+            else{
+				weight /= approx_albedo;
 			}
 
+			weight *= bsdf_sample_weight;
 			VPL vpl(ESurfaceVPL, weight);
 			vpl.its = its;
-
+			
 			if (BSDF::getMeasure(bsdf_sample.sampledType) == ESolidAngle) {
 				vpls.push_back(vpl);
 			}
-				
-			weight *= bsdf_sample_weight;
 
 			Vector wi = -ray.d, wo = its.toWorld(bsdf_sample.wo);
 			ray = Ray(its.p, wo, 0.0f);
@@ -124,8 +123,10 @@ size_t generateVPLs(const Scene *scene, size_t offset, size_t count, int max_dep
 		}
 
 		size_t end = vpls.size();
-		for (size_t i = start; i < end; ++i)
-			vpls[i].emitterScale = 1.0f / (end - start);
+		float lights_added = end - start;
+		for (size_t i = start; i < end; ++i){
+			vpls[i].emitterScale = 1.0f / lights_added;
+		}
 	}
 
 	return offset;
@@ -156,7 +157,7 @@ public:
 		
 		for (size_t i = 0; i < vpls_.size(); ++i) {
 			vpls_[i].P *= normalization;
-			vpls_[i].emitterScale *= normalization;
+			//vpls_[i].emitterScale *= normalization;
 		}
 
 		Log(EInfo, "Generated %i virtual point lights", vpls_.size());
@@ -183,7 +184,13 @@ public:
 		}
 
 		std::uint8_t *image_buffer = output_image_->getUInt8Data();
-		memset(image_buffer, 0, output_image_->getBytesPerPixel() * output_image_->getSize().y * output_image_->getSize().x);
+		//memset(image_buffer, 0, output_image_->getBytesPerPixel() * output_image_->getSize().y * output_image_->getSize().x);
+
+		Properties props("independent");
+		props.setInteger("scramble", 0);
+		Sampler *sampler = static_cast<Sampler*>(PluginManager::getInstance()->createObject(MTS_CLASS(Sampler), props));
+		sampler->configure();
+		sampler->generate(Point2i(0));
 
 		for (std::int32_t y = 0; y < output_image_->getSize().y; ++y) {
 			for (std::int32_t x = 0; x < output_image_->getSize().x; ++x) {
@@ -204,45 +211,64 @@ public:
 
 				sensor->sampleRay(ray, sample_position, aperture_sample, time_sample);
 
-				Float t;
-				ConstShapePtr shape;
-				Normal n;
-				Point2 uv;
-
 				size_t offset = (x + output_image_->getSize().x * y) * output_image_->getBytesPerPixel();
 
-				if (scene->rayIntersect(ray, t, shape, n, uv)) {
-					Point world_p = ray.o + ray.d * t;
+				Intersection its;
 
-					std::vector<VPL> vpls;
-					getVPLs(vpls);
+				Point2i curr_pixel(x, y);
+				Spectrum accumulator(0.f);
 
-					float r = 0.f, g = 0.f, b = 0.f;
-					for (std::uint32_t i = 0; i < vpls.size(); ++i) {
-						float d = (world_p - vpls[i].its.p).length();
-						d = std::min(0.01f, d);
-						float power = 1. / (d * d);
+				if (scene->rayIntersect(ray, its)) {
+					BSDFSamplingRecord bsdf_sample(its, sampler, EImportance);
+					Spectrum albedo = its.getBSDF()->sample(bsdf_sample, sampler->next2D());
 
-						float lr, lg, lb;
-						vpls[i].P.toLinearRGB(lr, lg, lb);
-
-						float n_dot_ldir = std::max(0.f, dot(n, vpls[i].its.p - world_p));
-
-						r += lr * n_dot_ldir * power;
-						g += lg * n_dot_ldir * power;
-						b += lb * n_dot_ldir * power;
+					if(its.isEmitter()){
+						output_image_->setPixel(curr_pixel, albedo);
+						continue;
 					}
 
-					r = std::min(r, 1.f);	
-					g = std::min(g, 1.f);	
-					b = std::min(b, 1.f);
+					Normal n = its.geoFrame.n;
+					std::vector<VPL> vpls;
+					getVPLs(vpls);
+					
+					for (std::uint32_t i = 0; i < vpls.size(); ++i) {
+						Point ray_origin = its.p;
+						Ray shadow_ray(ray_origin, normalize(vpls[i].its.p - ray_origin), ray.time);
+						
+						Float t;
+						ConstShapePtr shape;
+						Normal norm;
+						Point2 uv;
 
-					image_buffer[offset] = r * 255. + 0.5;
-					image_buffer[offset + 1] = g * 255. + 0.5;
-					image_buffer[offset + 2] = b * 255. + 0.5;
+						if(scene->rayIntersect(shadow_ray, t, shape, norm, uv)){
+							if(abs((ray_origin - vpls[i].its.p).length() - t) > 0.1f ){
+								continue;
+							}
+						}
+
+						//only dealing with emitter and surface VPLs curently.
+						if (vpls[i].type != EPointEmitterVPL && vpls[i].type != ESurfaceVPL){
+							continue;
+						}
+
+						float d = std::max((its.p - vpls[i].its.p).length(), 100.0f);
+						float attenuation = 1.f / (d * d);
+
+						float n_dot_ldir = std::max(0.f, dot(normalize(n), normalize(vpls[i].its.p - its.p)));
+						float ln_dot_ldir = std::max(0.f, dot(normalize(vpls[i].its.shFrame.n), normalize(its.p - vpls[i].its.p)));
+
+						accumulator += vpls[i].P * n_dot_ldir * albedo * vpls[i].emitterScale * attenuation * ln_dot_ldir;
+
+						Spectrum test;
+						test.fromLinearRGB(0.01, 0.01, 0.01);
+						
+						//accumulator += test;
+					}
 				}
 
-				image_buffer[offset] = 0xff;
+				output_image_->setPixel(curr_pixel, accumulator);
+
+				//image_buffer[offset] = 0xff;
 			}
 		}
 
