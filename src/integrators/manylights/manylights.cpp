@@ -1,8 +1,9 @@
 #include <mitsuba/core/plugin.h>
 #include <mitsuba/hw/vpl.h>
 #include <mitsuba/core/statistics.h>
-
+#include <mitsuba/core/qmc.h>
 #include <mitsuba/core/scopeguard.h>
+
 
 #include <vector>
 #include <algorithm>
@@ -82,7 +83,7 @@ size_t generateVPLs(const Scene *scene, size_t offset, size_t count, int max_dep
 		int depth = 2;
 		Ray ray(point_sample.p, direction_sample.d, time);
 		Intersection its;
-		//generates vpls from			bsdf_sample_weight.toLinearRGB(r2, g2, b2); additional bounces
+		//generates vpls from additional bounces
 		while (!weight.isZero() && (depth < max_depth || max_depth == -1)) {
 			if (!scene->rayIntersect(ray, its))
 				break;
@@ -101,8 +102,9 @@ size_t generateVPLs(const Scene *scene, size_t offset, size_t count, int max_dep
             else{
 				weight /= approx_albedo;
 			}
-
+			
 			weight *= bsdf_sample_weight;
+			
 			VPL vpl(ESurfaceVPL, weight);
 			vpl.its = its;
 			
@@ -111,11 +113,13 @@ size_t generateVPLs(const Scene *scene, size_t offset, size_t count, int max_dep
 			}
 
 			Vector wi = -ray.d, wo = its.toWorld(bsdf_sample.wo);
+
 			ray = Ray(its.p, wo, 0.0f);
 
 			float wi_dot_geometricnormal = dot(its.geoFrame.n, wi);
 			float wo_dot_geometricnormal = dot(its.geoFrame.n, wo);
-			if (wi_dot_geometricnormal * Frame::cosTheta(bsdf_sample.wi) <= 0 || wo_dot_geometricnormal * Frame::cosTheta(bsdf_sample.wo) <= 0) {
+			if (wi_dot_geometricnormal * Frame::cosTheta(bsdf_sample.wi) <= 0 || 
+				wo_dot_geometricnormal * Frame::cosTheta(bsdf_sample.wo) <= 0) {
 				break;
 			}
 
@@ -136,7 +140,8 @@ class ManyLightsIntegrator : public Integrator {
 public:
 	ManyLightsIntegrator(const Properties &props) : 
 		Integrator(props),
-		max_depth_(props.getInteger("maxDepth", 5)){
+		max_depth_(props.getInteger("maxDepth", 5)),
+		clamping_(props.getFloat("clamping", 0.1f)){
 		
 	}
 
@@ -157,8 +162,83 @@ public:
 		
 		for (size_t i = 0; i < vpls_.size(); ++i) {
 			vpls_[i].P *= normalization;
-			//vpls_[i].emitterScale *= normalization;
+			vpls_[i].emitterScale *= normalization;
 		}
+
+		float acc_near = 0.f;
+		float acc_far = 0.f;
+		std::uint32_t lights_processed = 0;
+
+		for(std::uint32_t i = 0; i < vpls_.size(); ++i){
+			bool surface_emitter = vpls_[i].emitter->getType() & Emitter::EOnSurface;
+			float near = std::numeric_limits<float>::max();
+			float far = std::numeric_limits<float>::min();
+
+			for(int k = 0; k < 128; ++k){
+				if(vpls_[i].type == EDirectionalEmitterVPL){
+					continue;
+				}
+
+				Point2 sample(sample02(k));
+
+				Ray ray(vpls_[i].its.p,
+					surface_emitter ? vpls_[i].its.shFrame.toWorld(warp::squareToCosineHemisphere(sample))
+					: warp::squareToUniformSphere(sample), 0);
+
+				Float t;
+				ConstShapePtr shape;
+				Normal n;
+				Point2 uv;
+
+				float acc = 0.f;
+				bool hit = false;
+
+				for(std::uint8_t j = 0; j < 5; ++j){
+					if(!scene->rayIntersect(ray, t, shape, n, uv)){
+						break;
+					}
+
+					acc += t;
+					if (!(shape->getBSDF()->getType() & BSDF::ETransmission)) {
+						hit = true;
+						break;
+					}
+
+					ray.o = ray(t);
+				}
+				
+				if (hit && acc > 0.f) {
+					near = std::min(near, acc);
+					far = std::max(far, acc);
+				}
+
+			}
+
+			if(near >= far){
+				BSphere bsphere(scene->getKDTree()->getAABB().getBSphere());
+				Float min_dist = 0;
+
+				if ((vpls_[i].type == ESurfaceVPL || vpls_[i].type == EPointEmitterVPL) &&
+						!bsphere.contains(vpls_[i].its.p))
+					min_dist = (bsphere.center - vpls_[i].its.p).length() - bsphere.radius;
+
+				far = min_dist + bsphere.radius * 2.25f;
+				near = std::max(min_dist - 0.25f * bsphere.radius, far * 1e-5f);
+			}
+			else{
+				near = std::max(near / 1.5f, far * 1e-5f);
+				far *= 1.5f;
+			}
+
+			acc_near += near;
+			acc_far += far;
+			lights_processed++;
+		}
+
+		acc_near /= (float)lights_processed;
+		acc_far /= (float)lights_processed;
+
+		min_dist_ = acc_near + (acc_far - acc_near) * clamping_;
 
 		Log(EInfo, "Generated %i virtual point lights", vpls_.size());
 
@@ -171,7 +251,6 @@ public:
 	}
 
 	bool render(Scene *scene, RenderQueue *queue, const RenderJob *job, int sceneResID, int sensorResID, int samplerResID) {
-		
 		{
 			std::lock_guard<std::mutex> lock(cancel_lock_);
 			cancel_ = false;
@@ -183,7 +262,7 @@ public:
 			output_image_ = createBitmap(film->getSize());
 		}
 
-		std::uint8_t *image_buffer = output_image_->getUInt8Data();
+		//std::uint8_t *image_buffer = output_image_->getUInt8Data();
 		//memset(image_buffer, 0, output_image_->getBytesPerPixel() * output_image_->getSize().y * output_image_->getSize().x);
 
 		Properties props("independent");
@@ -211,14 +290,13 @@ public:
 
 				sensor->sampleRay(ray, sample_position, aperture_sample, time_sample);
 
-				size_t offset = (x + output_image_->getSize().x * y) * output_image_->getBytesPerPixel();
-
 				Intersection its;
 
 				Point2i curr_pixel(x, y);
 				Spectrum accumulator(0.f);
 
 				if (scene->rayIntersect(ray, its)) {
+					Normal n = its.geoFrame.n;
 					BSDFSamplingRecord bsdf_sample(its, sampler, EImportance);
 					Spectrum albedo = its.getBSDF()->sample(bsdf_sample, sampler->next2D());
 
@@ -226,15 +304,14 @@ public:
 						output_image_->setPixel(curr_pixel, albedo);
 						continue;
 					}
-
-					Normal n = its.geoFrame.n;
+					
 					std::vector<VPL> vpls;
 					getVPLs(vpls);
 					
 					for (std::uint32_t i = 0; i < vpls.size(); ++i) {
 						Point ray_origin = its.p;
 						Ray shadow_ray(ray_origin, normalize(vpls[i].its.p - ray_origin), ray.time);
-						
+
 						Float t;
 						ConstShapePtr shape;
 						Normal norm;
@@ -251,24 +328,17 @@ public:
 							continue;
 						}
 
-						float d = std::max((its.p - vpls[i].its.p).length(), 100.0f);
+						float d = std::max((its.p - vpls[i].its.p).length(), min_dist_);
 						float attenuation = 1.f / (d * d);
 
 						float n_dot_ldir = std::max(0.f, dot(normalize(n), normalize(vpls[i].its.p - its.p)));
 						float ln_dot_ldir = std::max(0.f, dot(normalize(vpls[i].its.shFrame.n), normalize(its.p - vpls[i].its.p)));
 
-						accumulator += vpls[i].P * n_dot_ldir * albedo * vpls[i].emitterScale * attenuation * ln_dot_ldir;
-
-						Spectrum test;
-						test.fromLinearRGB(0.01, 0.01, 0.01);
-						
-						//accumulator += test;
+						accumulator += (vpls[i].P * ln_dot_ldir * attenuation * n_dot_ldir * albedo) / 3.14159265359f;
 					}
 				}
 
 				output_image_->setPixel(curr_pixel, accumulator);
-
-				//image_buffer[offset] = 0xff;
 			}
 		}
 
@@ -300,6 +370,7 @@ private:
 	std::uint32_t max_depth_;
 	std::mutex cancel_lock_;
 	bool cancel_;
+	float clamping_, min_dist_;
 };
 
 MTS_IMPLEMENT_CLASS(ManyLightsIntegrator, false, Integrator)
