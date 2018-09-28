@@ -13,6 +13,8 @@
 
 MTS_NAMESPACE_BEGIN
 
+enum CLUSTERING_STRATEGY{NONE};
+
 float calculateMinDistance(const Scene *scene, const std::vector<VPL>& vpls, float clamping){
 	float acc_near = 0.f;
 	float acc_far = 0.f;
@@ -218,7 +220,8 @@ public:
 	ManyLightsIntegrator(const Properties &props) : 
 		Integrator(props),
 		max_depth_(props.getInteger("maxDepth", 5)),
-		clamping_(props.getFloat("clamping", 0.1f)){
+		clamping_(props.getFloat("clamping", 0.1f)),
+		clustering_strategy_(NONE){
 		
 	}
 
@@ -267,7 +270,6 @@ public:
 		}
 
 		//std::uint8_t *image_buffer = output_image_->getUInt8Data();
-		//memset(image_buffer, 0, output_image_->getBytesPerPixel() * output_image_->getSize().y * output_image_->getSize().x);
 
 		Properties props("independent");
 		props.setInteger("scramble", 0);
@@ -310,7 +312,7 @@ public:
 					}
 					
 					std::vector<VPL> vpls;
-					getVPLs(vpls);
+					getVPLs(vpls, clustering_strategy_);
 					
 					for (std::uint32_t i = 0; i < vpls.size(); ++i) {
 						Point ray_origin = its.p;
@@ -364,8 +366,15 @@ private:
 	}
 
 	//brute force for now, implement in selection strategy selection later
-	void getVPLs(std::vector<VPL>& vpls) {
-		vpls = vpls_;
+	void getVPLs(std::vector<VPL>& vpls, CLUSTERING_STRATEGY strategy) {
+		switch(strategy){
+			case NONE:
+				vpls = vpls_;
+				break;
+			default:
+				vpls = vpls_;
+				break;
+		}
 	}
 
 private:
@@ -375,6 +384,7 @@ private:
 	std::mutex cancel_lock_;
 	bool cancel_;
 	float clamping_, min_dist_;
+	CLUSTERING_STRATEGY clustering_strategy_;
 };
 
 MTS_IMPLEMENT_CLASS(ManyLightsIntegrator, false, Integrator)
