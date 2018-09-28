@@ -13,6 +13,83 @@
 
 MTS_NAMESPACE_BEGIN
 
+float calculateMinDistance(const Scene *scene, const std::vector<VPL>& vpls, float clamping){
+	float acc_near = 0.f;
+	float acc_far = 0.f;
+	std::uint32_t lights_processed = 0;
+
+	for(std::uint32_t i = 0; i < vpls.size(); ++i){
+		bool surface_emitter = vpls[i].emitter->getType() & Emitter::EOnSurface;
+		float near = std::numeric_limits<float>::max();
+		float far = std::numeric_limits<float>::min();
+
+		for(int k = 0; k < 128; ++k){
+			if(vpls[i].type == EDirectionalEmitterVPL){
+				continue;
+			}
+
+			Point2 sample(sample02(k));
+
+			Ray ray(vpls[i].its.p,
+				surface_emitter ? vpls[i].its.shFrame.toWorld(warp::squareToCosineHemisphere(sample))
+				: warp::squareToUniformSphere(sample), 0);
+
+			Float t;
+			ConstShapePtr shape;
+			Normal n;
+			Point2 uv;
+
+			float acc = 0.f;
+			bool hit = false;
+
+			for(std::uint8_t j = 0; j < 5; ++j){
+				if(!scene->rayIntersect(ray, t, shape, n, uv)){
+					break;
+				}
+
+				acc += t;
+				if (!(shape->getBSDF()->getType() & BSDF::ETransmission)) {
+					hit = true;
+					break;
+				}
+
+				ray.o = ray(t);
+			}
+			
+			if (hit && acc > 0.f) {
+				near = std::min(near, acc);
+				far = std::max(far, acc);
+			}
+
+		}
+
+		if(near >= far){
+			BSphere bsphere(scene->getKDTree()->getAABB().getBSphere());
+			Float min_dist = 0;
+
+			if ((vpls[i].type == ESurfaceVPL || vpls[i].type == EPointEmitterVPL) &&
+					!bsphere.contains(vpls[i].its.p))
+				min_dist = (bsphere.center - vpls[i].its.p).length() - bsphere.radius;
+
+			far = min_dist + bsphere.radius * 2.25f;
+			near = std::max(min_dist - 0.25f * bsphere.radius, far * 1e-5f);
+		}
+		else{
+			near = std::max(near / 1.5f, far * 1e-5f);
+			far *= 1.5f;
+		}
+
+		acc_near += near;
+		acc_far += far;
+		lights_processed++;
+	}
+
+	acc_near /= (float)lights_processed;
+	acc_far /= (float)lights_processed;
+
+	return acc_near + (acc_far - acc_near) * clamping;
+}
+
 size_t generateVPLs(const Scene *scene, size_t offset, size_t count, int max_depth, bool prune, 
 	std::vector<VPL> &vpls) {
 	if (max_depth <= 1)
@@ -165,80 +242,7 @@ public:
 			vpls_[i].emitterScale *= normalization;
 		}
 
-		float acc_near = 0.f;
-		float acc_far = 0.f;
-		std::uint32_t lights_processed = 0;
-
-		for(std::uint32_t i = 0; i < vpls_.size(); ++i){
-			bool surface_emitter = vpls_[i].emitter->getType() & Emitter::EOnSurface;
-			float near = std::numeric_limits<float>::max();
-			float far = std::numeric_limits<float>::min();
-
-			for(int k = 0; k < 128; ++k){
-				if(vpls_[i].type == EDirectionalEmitterVPL){
-					continue;
-				}
-
-				Point2 sample(sample02(k));
-
-				Ray ray(vpls_[i].its.p,
-					surface_emitter ? vpls_[i].its.shFrame.toWorld(warp::squareToCosineHemisphere(sample))
-					: warp::squareToUniformSphere(sample), 0);
-
-				Float t;
-				ConstShapePtr shape;
-				Normal n;
-				Point2 uv;
-
-				float acc = 0.f;
-				bool hit = false;
-
-				for(std::uint8_t j = 0; j < 5; ++j){
-					if(!scene->rayIntersect(ray, t, shape, n, uv)){
-						break;
-					}
-
-					acc += t;
-					if (!(shape->getBSDF()->getType() & BSDF::ETransmission)) {
-						hit = true;
-						break;
-					}
-
-					ray.o = ray(t);
-				}
-				
-				if (hit && acc > 0.f) {
-					near = std::min(near, acc);
-					far = std::max(far, acc);
-				}
-
-			}
-
-			if(near >= far){
-				BSphere bsphere(scene->getKDTree()->getAABB().getBSphere());
-				Float min_dist = 0;
-
-				if ((vpls_[i].type == ESurfaceVPL || vpls_[i].type == EPointEmitterVPL) &&
-						!bsphere.contains(vpls_[i].its.p))
-					min_dist = (bsphere.center - vpls_[i].its.p).length() - bsphere.radius;
-
-				far = min_dist + bsphere.radius * 2.25f;
-				near = std::max(min_dist - 0.25f * bsphere.radius, far * 1e-5f);
-			}
-			else{
-				near = std::max(near / 1.5f, far * 1e-5f);
-				far *= 1.5f;
-			}
-
-			acc_near += near;
-			acc_far += far;
-			lights_processed++;
-		}
-
-		acc_near /= (float)lights_processed;
-		acc_far /= (float)lights_processed;
-
-		min_dist_ = acc_near + (acc_far - acc_near) * clamping_;
+		min_dist_ = calculateMinDistance(scene, vpls_, clamping_);
 
 		Log(EInfo, "Generated %i virtual point lights", vpls_.size());
 
