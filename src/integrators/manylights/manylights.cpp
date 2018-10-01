@@ -13,6 +13,8 @@
 
 MTS_NAMESPACE_BEGIN
 
+const double PI = 3.14159265359;
+
 enum CLUSTERING_STRATEGY{NONE};
 
 float calculateMinDistance(const Scene *scene, const std::vector<VPL>& vpls, float clamping){
@@ -269,23 +271,23 @@ public:
 			output_image_ = createBitmap(film->getSize());
 		}
 
-		//std::uint8_t *image_buffer = output_image_->getUInt8Data();
+		std::uint8_t *image_buffer = output_image_->getUInt8Data();
 
 		Properties props("independent");
-		props.setInteger("scramble", 0);
 		Sampler *sampler = static_cast<Sampler*>(PluginManager::getInstance()->createObject(MTS_CLASS(Sampler), props));
 		sampler->configure();
 		sampler->generate(Point2i(0));
 
 		for (std::int32_t y = 0; y < output_image_->getSize().y; ++y) {
-			for (std::int32_t x = 0; x < output_image_->getSize().x; ++x) {
-				{
-					std::lock_guard<std::mutex> lock(cancel_lock_);
-					if (cancel_) {
-						break;
-					}
+			{
+				std::lock_guard<std::mutex> lock(cancel_lock_);
+				if (cancel_) {
+					break;
 				}
+			}
 
+			#pragma omp parallel for
+			for (std::int32_t x = 0; x < output_image_->getSize().x; ++x) {
 				Ray ray;
 
 				Point2 sample_position(x + 0.5f, y + 0.5f);
@@ -311,12 +313,9 @@ public:
 						continue;
 					}
 					
-					std::vector<VPL> vpls;
-					getVPLs(vpls, clustering_strategy_);
-					
-					for (std::uint32_t i = 0; i < vpls.size(); ++i) {
+					for (std::uint32_t i = 0; i < vpls_.size(); ++i) {
 						Point ray_origin = its.p;
-						Ray shadow_ray(ray_origin, normalize(vpls[i].its.p - ray_origin), ray.time);
+						Ray shadow_ray(ray_origin, normalize(vpls_[i].its.p - ray_origin), ray.time);
 
 						Float t;
 						ConstShapePtr shape;
@@ -324,27 +323,35 @@ public:
 						Point2 uv;
 
 						if(scene->rayIntersect(shadow_ray, t, shape, norm, uv)){
-							if(abs((ray_origin - vpls[i].its.p).length() - t) > 0.1f ){
+							if(abs((ray_origin - vpls_[i].its.p).length() - t) > 0.1f ){
 								continue;
 							}
 						}
 
 						//only dealing with emitter and surface VPLs curently.
-						if (vpls[i].type != EPointEmitterVPL && vpls[i].type != ESurfaceVPL){
+						if (vpls_[i].type != EPointEmitterVPL && vpls_[i].type != ESurfaceVPL){
 							continue;
 						}
 
-						float d = std::max((its.p - vpls[i].its.p).length(), min_dist_);
+						float d = std::max((its.p - vpls_[i].its.p).length(), min_dist_);
 						float attenuation = 1.f / (d * d);
 
-						float n_dot_ldir = std::max(0.f, dot(normalize(n), normalize(vpls[i].its.p - its.p)));
-						float ln_dot_ldir = std::max(0.f, dot(normalize(vpls[i].its.shFrame.n), normalize(its.p - vpls[i].its.p)));
+						float n_dot_ldir = std::max(0.f, dot(normalize(n), normalize(vpls_[i].its.p - its.p)));
+						float ln_dot_ldir = std::max(0.f, dot(normalize(vpls_[i].its.shFrame.n), normalize(its.p - vpls_[i].its.p)));
 
-						accumulator += (vpls[i].P * ln_dot_ldir * attenuation * n_dot_ldir * albedo) / 3.14159265359f;
+						accumulator += (vpls_[i].P * ln_dot_ldir * attenuation * n_dot_ldir * albedo) / PI;
 					}
 				}
 
-				output_image_->setPixel(curr_pixel, accumulator);
+				float r, g, b;
+				accumulator.toSRGB(r, g, b);
+
+				//can set the buffer directly since we have direct control over the format of the image
+				std::uint32_t offset = (x + y * output_image_->getSize().x) * output_image_->getBytesPerPixel();
+				
+				image_buffer[offset] = std::min(1.f, r) * 255 + 0.5f;
+				image_buffer[offset + 1] = std::min(1.f, g) * 255 + 0.5f;
+				image_buffer[offset + 2] = std::min(1.f, b) * 255 + 0.5f;
 			}
 		}
 
@@ -362,19 +369,7 @@ private:
 		}
 		
 		//make 8bit channels for now, can change it in the future
-		return new Bitmap(Bitmap::ESpectrum, Bitmap::EUInt8, dimensions);
-	}
-
-	//brute force for now, implement in selection strategy selection later
-	void getVPLs(std::vector<VPL>& vpls, CLUSTERING_STRATEGY strategy) {
-		switch(strategy){
-			case NONE:
-				vpls = vpls_;
-				break;
-			default:
-				vpls = vpls_;
-				break;
-		}
+		return new Bitmap(Bitmap::ERGB, Bitmap::EUInt8, dimensions);
 	}
 
 private:
