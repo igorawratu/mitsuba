@@ -305,11 +305,11 @@ public:
 
 				if (scene->rayIntersect(ray, its)) {
 					Normal n = its.geoFrame.n;
-					BSDFSamplingRecord bsdf_sample(its, sampler, EImportance);
-					Spectrum albedo = its.getBSDF()->sample(bsdf_sample, sampler->next2D());
+
+					Spectrum albedo(0.f);
 
 					if(its.isEmitter()){
-						output_image_->setPixel(curr_pixel, albedo);
+						output_image_->setPixel(curr_pixel, its.Le(-ray.d));
 						continue;
 					}
 					
@@ -327,6 +327,12 @@ public:
 								continue;
 							}
 						}
+
+						BSDFSamplingRecord bsdf_sample_record(its, sampler, ERadiance);
+						bsdf_sample_record.wi = its.toLocal(normalize(vpls_[i].its.p - its.p));
+						bsdf_sample_record.wo = its.toLocal(n);
+
+						albedo = its.getBSDF()->eval(bsdf_sample_record);
 
 						//only dealing with emitter and surface VPLs curently.
 						if (vpls_[i].type != EPointEmitterVPL && vpls_[i].type != ESurfaceVPL){
