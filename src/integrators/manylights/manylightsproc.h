@@ -39,7 +39,7 @@ public:
     ManyLightsWorkProcessor(Stream *stream, InstanceManager *manager);
     ref<WorkUnit> createWorkUnit();
     ref<WorkResult> createWorkResult();
-    ref<WorkProcessor> clone();ManyLightsWorkProcessor();
+    ref<WorkProcessor> clone();
     void prepare();
     void process(const WorkUnit *work_unit, WorkResult *work_result, const bool& stop);
 
