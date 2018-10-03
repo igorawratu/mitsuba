@@ -65,7 +65,7 @@ public:
 
 private:
     std::vector<VPL> point_vpls_, directional_vpls_, oriented_vpls_;
-    float *point_similarity_matrix_, *directional_similarity_matrix_, *oriented_similarity_matrix_;
+    std::vector<float> point_similarity_matrix_, directional_similarity_matrix_, oriented_similarity_matrix_;
     std::unique_ptr<LightTreeNode> point_tree_root_, directional_tree_root_, oriented_tree_root_;
 }
 
