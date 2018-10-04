@@ -1049,6 +1049,9 @@
     <ClCompile Include="..\src\integrators\manylights\manylights.cpp">
       <Filter>Source Files\integrators\manylights</Filter>
     </ClCompile>
+    <ClCompile Include="..\src\integrators\manylights\lighttree.cpp">
+      <Filter>Source Files\integrators\manylights</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup Label="Header Files">
     <ClInclude Include="..\src\bsdfs\ior.h">
@@ -1743,6 +1746,12 @@
     </ClInclude>
     <ClInclude Include="..\include\mitsuba\core\scopeguard.h">
       <Filter>Header Files\mitsuba\core</Filter>
+    </ClInclude>
+    <ClInclude Include="..\src\integrators\manylights\lighttree.h">
+      <Filter>Source Files\integrators\manylights</Filter>
+    </ClInclude>
+    <ClInclude Include="..\src\integrators\manylights\manylightsproc.h">
+      <Filter>Source Files\integrators\manylights</Filter>
     </ClInclude>
   </ItemGroup>
 </Project>

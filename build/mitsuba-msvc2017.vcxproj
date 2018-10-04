@@ -144,6 +144,8 @@
     </ClInclude>
     <ClInclude Include="..\src\integrators\erpt\erpt_proc.h">
     </ClInclude>
+    <ClInclude Include="..\src\integrators\manylights\lighttree.h" />
+    <ClInclude Include="..\src\integrators\manylights\manylightsproc.h" />
     <ClInclude Include="..\src\integrators\misc\irrcache_proc.h">
     </ClInclude>
     <ClInclude Include="..\src\integrators\mlt\mlt.h">
@@ -674,6 +676,7 @@
     </ClCompile>
     <ClCompile Include="..\src\integrators\erpt\erpt_proc.cpp">
     </ClCompile>
+    <ClCompile Include="..\src\integrators\manylights\lighttree.cpp" />
     <ClCompile Include="..\src\integrators\manylights\manylights.cpp" />
     <ClCompile Include="..\src\integrators\misc\adaptive.cpp">
     </ClCompile>

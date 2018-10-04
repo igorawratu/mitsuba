@@ -9,7 +9,7 @@
 MTS_NAMESPACE_BEGIN
 
 struct LightTreeNode{
-    LightTreeNode() : left(nullptr), right(nullptr), vpl(nullptr), emission_scale(0.f), tl(0.f), tr(0.f), cone_ray1(0.f),
+    LightTreeNode() : left(nullptr), right(nullptr), emission_scale(0.f), tl(0.f), tr(0.f), cone_ray1(0.f),
         cone_ray2(0.f){
     }
 
@@ -55,7 +55,7 @@ struct LightTreeNode{
     }
 
     std::unique_ptr<LightTreeNode> left, right;
-    VPL* vpl;
+    VPL vpl;
     float emission_scale;
     Point tl, br;
     Vector3 cone_ray1, cone_ray2;

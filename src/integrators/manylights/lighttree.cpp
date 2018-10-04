@@ -10,46 +10,6 @@ LightTree::LightTree() : point_tree_root_(nullptr), directional_tree_root_(nullp
 
 }
 
-void calculateSimilarityMatrices(const std::vector<VPL>& point_vpls, const std::vector<VPL>& directional_vpls, const std::vector<VPL>& oriented_vpls,
-	std::vector<float>& point_similarity_matrix, std::vector<float>& direction_similarity_matrix, std::vector<float>& oriented_similarity_matrix) {
-	
-	point_similarity_matrix.clear();
-	if (point_vpls.size() > 0) {
-		point_similarity_matrix.insert(point_similarity_matrix.begin(), point_vpls.size() * point_vpls.size(), 0.f);
-	}
-
-	direction_similarity_matrix.clear();
-	if (directional_vpls.size() > 0) {
-		direction_similarity_matrix.insert(direction_similarity_matrix.begin(), directional_vpls.size() * directional_vpls.size(), 0.f);
-	}
-
-	oriented_similarity_matrix.clear();
-	if (oriented_vpls.size() > 0) {
-		oriented_similarity_matrix.insert(oriented_similarity_matrix.begin(), oriented_vpls.size() * oriented_vpls.size(), 0.f);
-	}
-
-	for (std::uint32_t i = 0; i < point_vpls.size(); ++i) {
-		for (std::uint32_t j = 0; j < point_vpls.size(); ++j) {
-			std::uint32_t index = j + i * point_vpls.size();
-			point_similarity_matrix[index] = (point_vpls[i].its.p - point_vpls[j].its.p).length();
-		}
-	}
-
-	for (std::uint32_t i = 0; i < directional_vpls.size(); ++i) {
-		for (std::uint32_t j = 0; j < directional_vpls.size(); ++j) {
-			std::uint32_t index = j + i * directional_vpls.size();
-			direction_similarity_matrix[index] = dot(directional_vpls[i].its.shFrame.n, directional_vpls[j].its.shFrame.n);
-		}
-	}
-
-	for (std::uint32_t i = 0; i < oriented_vpls.size(); ++i) {
-		for (std::uint32_t j = 0; j < oriented_vpls.size(); ++j) {
-			std::uint32_t index = j + i * oriented_vpls.size();
-			oriented_similarity_matrix[index] = (oriented_vpls[i].its.p - oriented_vpls[j].its.p).length() + dot(oriented_vpls[i].its.shFrame.n, oriented_vpls[j].its.shFrame.n);
-		}
-	}
-}
-
 std::unique_ptr<LightTreeNode> createLightTree(const std::vector<VPL>& vpls, EVPLType vpl_type) {
 	if(vpls.size() == 0 || vpls[0].type != vpl_type){
 		return nullptr;
@@ -71,6 +31,8 @@ std::unique_ptr<LightTreeNode> createLightTree(const std::vector<VPL>& vpls, EVP
 			nodes[current_level][i]->cone_ray2 = vpls[i].its.shFrame.n;
 		}
 		
+		nodes[current_level][i]->vpl = vpls[i];
+		nodes[current_level][i]->emission_scale = 1.f;
 	}
 
 	typedef std::tuple<float, std::uint32_t, std::uint32_t> SimEntry;
@@ -79,12 +41,18 @@ std::unique_ptr<LightTreeNode> createLightTree(const std::vector<VPL>& vpls, EVP
 		return std::get<0>(l) < std::get<0>(r);
 	};
 
-	std::priority_queue<SimEntry, std::vector<SimEntry>, decltype(comparator)> similarity_matrix;
-	
+	Properties props("halton");
+	props.setInteger("scramble", 0);
+	Sampler *sampler = static_cast<Sampler*>(PluginManager::getInstance()->createObject(MTS_CLASS(Sampler), props));
+	sampler->configure();
+	sampler->generate(Point2i(0));
+
 	while(true){
 		if(nodes[current_level].size() == 1){
 			break;
 		}
+
+		std::priority_queue<SimEntry, std::vector<SimEntry>, decltype(comparator)> similarity_matrix;
 
 		for(int i = 0; i < nodes[current_level].size(); ++i){
 			for(int j = i + 1; j < nodes[current_level].size(); ++j){
@@ -94,7 +62,7 @@ std::unique_ptr<LightTreeNode> createLightTree(const std::vector<VPL>& vpls, EVP
 				}
 				
 				if(vpl_type != EPointEmitterVPL){
-					d += (1.f - dot(nodes[current_level][i]->cone_ray1, nodes[current_level][i]->cone_ray2)) / 0.5f;
+					d += (1.f - dot(nodes[current_level][i]->cone_ray1, nodes[current_level][i]->cone_ray2));
 				}
 
 				similarity_matrix.push(std::make_tuple(d, i, j));
@@ -105,6 +73,19 @@ std::unique_ptr<LightTreeNode> createLightTree(const std::vector<VPL>& vpls, EVP
 		std::uint8_t next_level = (current_level + 1) % 2;
 
 		while(nodes_left > 0){
+			if (nodes_left == 1) {
+				for (std::uint32_t i = 0; i < nodes[current_level].size(); ++i) {
+					if (nodes[current_level][i] != nullptr) {
+						nodes[next_level].push_back(std::move(nodes[current_level][i]));
+						nodes[current_level][i] = nullptr;
+						nodes_left--;
+						break;
+					}
+				}
+
+				continue;
+			}
+
 			SimEntry entry = similarity_matrix.top();
 			similarity_matrix.pop();
 
@@ -138,13 +119,39 @@ std::unique_ptr<LightTreeNode> createLightTree(const std::vector<VPL>& vpls, EVP
 					}
 
 					dp1 = dot(nodes[next_level].back()->cone_ray1, nodes[next_level].back()->cone_ray2);
-					dp2 = dot(nodes[next_level].back()->cone_ray1, c2->cone_ray1);
-					dp3 = dot(nodes[next_level].back()->cone_ray1, c2->cone_ray2);
-					
+					dp2 = dot(nodes[next_level].back()->cone_ray2, c2->cone_ray1);
+					dp3 = dot(nodes[next_level].back()->cone_ray2, c2->cone_ray2);
+
+					if (dp2 > dp1 || dp3 > dp1) {
+						nodes[next_level].back()->cone_ray1 = dp2 > dp3 ? c2->cone_ray1 : c2->cone_ray2;
+					}
 				}
 				
+				float c1_intensity = c1->vpl.P.getLuminance() * c1->emission_scale;
+				float c2_intensity = c2->vpl.P.getLuminance() * c2->emission_scale;
+
+				float sample = sampler->next1D();
+
+				if (sample < c1_intensity / (c1_intensity + c2_intensity)) {
+					nodes[next_level].back().vpl = c1->vpl;
+					nodes[next_level].back().emission_scale = c1->emission_scale + c2_intensity / c1->vpl.P.getLuminance();
+				}
+				else {
+					nodes[next_level].back().vpl = c2->vpl;
+					nodes[next_level].back().emission_scale = c2->emission_scale + c1_intensity / c2->vpl.P.getLuminance();
+				}
+
+				nodes[next_level].back().left = std::move(nodes[current_level][id1]);
+				nodes[next_level].back().right = std::move(nodes[current_level][id2]);
+
+				nodes[current_level][id1] = nullptr;
+				nodes[current_level][id2] = nullptr;
+
+				nodes_left -= 2;
 			}
 		}
+
+		current_level = next_level;
 	}
 
 	return std::move(nodes[current_level][0]);
@@ -167,7 +174,7 @@ LightTree::LightTree(const std::vector<VPL>& vpls) {
 		}
 	}
 
-	calculateSimilarityMatrices(point_vpls_, directional_vpls_, oriented_vpls_, point_similarity_matrix_, directional_similarity_matrix_, oriented_similarity_matrix_);
+	
 }
 
 LightTree::LightTree(const LightTree& other) {
@@ -176,11 +183,6 @@ LightTree::LightTree(const LightTree& other) {
 
 LightTree::LightTree(const LightTree&& other) {
 
-				continue;
-		}
-	}
-
-	calculateSimilarityMatrices(point_vpls_, directional_vpls_, oriented_vpls_, point_similarity_matrix_, directional_similarity_matrix_, oriented_similarity_matrix_);
 }
 
 LightTree::LightTree(const LightTree& other) {
