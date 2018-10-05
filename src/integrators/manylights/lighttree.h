@@ -9,29 +9,29 @@
 MTS_NAMESPACE_BEGIN
 
 struct LightTreeNode{
-    LightTreeNode() : left(nullptr), right(nullptr), emission_scale(0.f), tl(0.f), tr(0.f), cone_ray1(0.f),
-        cone_ray2(0.f){
+    LightTreeNode() : left(nullptr), right(nullptr), vpl(EPointEmitterVPL, Spectrum(0.f)), emission_scale(0.f), 
+        min_bounds(0.f), max_bounds(0.f), cone_ray1(0.f), cone_ray2(0.f){
     }
 
-    LightTreeNode(const LightTreeNode& other) : left(other.left == nullptr ? nullptr : std::make_unique<LightTreeNode>(other.left)),
-        right(other.right == nullptr ? nullptr : std::make_unique<LightTreeNode>(other.right)),
-        vpl(other.vpl), emission_scale(other.emission_scale), tl(other.tl), br(other.br), cone_ray1(other.cone_ray1),
+    LightTreeNode(const LightTreeNode& other) : left(other.left == nullptr ? nullptr : std::make_unique<LightTreeNode>(*other.left)),
+        right(other.right == nullptr ? nullptr : std::make_unique<LightTreeNode>(*other.right)),
+        vpl(other.vpl), emission_scale(other.emission_scale), min_bounds(other.min_bounds), max_bounds(other.max_bounds), cone_ray1(other.cone_ray1),
         cone_ray2(other.cone_ray2){
     }
 
     LightTreeNode(LightTreeNode&& other) : left(std::move(other.left)), right(std::move(other.right)),
-        vpl(other.vpl), emission_scale(other.emission_scale), tl(other.tl), br(other.br), cone_ray1(other.cone_ray1),
+        vpl(other.vpl), emission_scale(other.emission_scale), min_bounds(other.min_bounds), max_bounds(other.max_bounds), cone_ray1(other.cone_ray1),
         cone_ray2(other.cone_ray2){
     }
 
     LightTreeNode& operator = (const LightTreeNode& other){
        if(this != &other){
-           left = other.left == nullptr ? nullptr : std::make_unique<LightTreeNode>(other.left);
-           right = other.right == nullptr ? nullptr : std::make_unique<LightTreeNode>(other.right);
+           left = other.left == nullptr ? nullptr : std::make_unique<LightTreeNode>(*other.left);
+           right = other.right == nullptr ? nullptr : std::make_unique<LightTreeNode>(*other.right);
            vpl = other.vpl;
            emission_scale = other.emission_scale;
-           tl = other.tl;
-           br = other.br;
+           min_bounds = other.min_bounds;
+           max_bounds = other.max_bounds;
            cone_ray1 = other.cone_ray1;
            cone_ray2 = other.cone_ray2;
        }
@@ -45,8 +45,8 @@ struct LightTreeNode{
            right = std::move(other.right);
            vpl = other.vpl;
            emission_scale = other.emission_scale;
-           tl = other.tl;
-           br = other.br;
+           min_bounds = other.min_bounds;
+           max_bounds = other.max_bounds;
            cone_ray1 = other.cone_ray1;
            cone_ray2 = other.cone_ray2;
        }
@@ -57,7 +57,7 @@ struct LightTreeNode{
     std::unique_ptr<LightTreeNode> left, right;
     VPL vpl;
     float emission_scale;
-    Point tl, br;
+    Point min_bounds, max_bounds;
     Vector3 cone_ray1, cone_ray2;
 };
 
@@ -66,17 +66,18 @@ public:
     LightTree();
     LightTree(const std::vector<VPL>& vpls);
     LightTree(const LightTree& other);
-    LightTree(const LightTree&& other);
+    LightTree(LightTree&& other);
     LightTree& operator = (const LightTree& other);
     LightTree& operator = (LightTree&& other);
     ~LightTree();
 
     void setVPLs(const std::vector<VPL>& vpls);
-    std::vector<VPL> getClusteringForPoint(Intersection its);
+    std::vector<VPL> getClusteringForPoint(Intersection its, std::uint32_t max_lights, float error_threshold);
 
 private:
     std::vector<VPL> point_vpls_, directional_vpls_, oriented_vpls_;
     std::unique_ptr<LightTreeNode> point_tree_root_, directional_tree_root_, oriented_tree_root_;
+    float min_dist_;
 };
 
 MTS_NAMESPACE_END
