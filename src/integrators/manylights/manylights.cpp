@@ -4,18 +4,18 @@
 #include <mitsuba/core/qmc.h>
 #include <mitsuba/core/scopeguard.h>
 
-
 #include <vector>
 #include <algorithm>
 #include <mutex>
-
 #include <iostream>
+
+#include "lighttree.h"
 
 MTS_NAMESPACE_BEGIN
 
 const double PI = 3.14159265359;
 
-enum CLUSTERING_STRATEGY{NONE};
+enum CLUSTERING_STRATEGY{NONE, LIGHTCUTS};
 
 float calculateMinDistance(const Scene *scene, const std::vector<VPL>& vpls, float clamping){
 	float acc_near = 0.f;
@@ -223,8 +223,23 @@ public:
 		Integrator(props),
 		max_depth_(props.getInteger("maxDepth", 5)),
 		clamping_(props.getFloat("clamping", 0.1f)),
-		clustering_strategy_(NONE){
+		clustering_strategy_(NONE), 
+		light_tree_(nullptr),
+		lightcuts_error_threshold_(props.getFloat("lightcutsThreshold", 0.02f)),
+		max_lightcut_size_(props.getFloat("maxlights", 20)){
 		
+		int strategy = props.getInteger("clusteringStrategy", 0);
+
+		switch (strategy) {
+			case 0:
+				clustering_strategy_ = NONE;
+				break;
+			case 1:
+				clustering_strategy_ = LIGHTCUTS;
+				break;
+			default:
+				break;
+		}
 	}
 
 	//generation of the point lights is done the same way as the vpl integrator for now, will need to extend this in the future
@@ -248,6 +263,11 @@ public:
 		}
 
 		min_dist_ = calculateMinDistance(scene, vpls_, clamping_);
+
+		if (clustering_strategy_ == LIGHTCUTS) {
+			light_tree_ = std::make_unique<LightTree>(vpls_, min_dist_);
+		}
+		
 
 		Log(EInfo, "Generated %i virtual point lights", vpls_.size());
 
@@ -311,6 +331,14 @@ public:
 					if(its.isEmitter()){
 						output_image_->setPixel(curr_pixel, its.Le(-ray.d));
 						continue;
+					}
+
+					std::vector<VPL> vpls;
+					if (clustering_strategy_ == NONE) {
+						vpls = vpls_;
+					}
+					else if (clustering_strategy_ == LIGHTCUTS){
+						vpls = light_tree_->getClusteringForPoint(its, max_lightcut_size_, lightcuts_error_threshold_);
 					}
 					
 					for (std::uint32_t i = 0; i < vpls_.size(); ++i) {
@@ -386,6 +414,9 @@ private:
 	bool cancel_;
 	float clamping_, min_dist_;
 	CLUSTERING_STRATEGY clustering_strategy_;
+	std::unique_ptr<LightTree> light_tree_;
+	float lightcuts_error_threshold_;
+	int max_lightcut_size_;
 };
 
 MTS_IMPLEMENT_CLASS(ManyLightsIntegrator, false, Integrator)

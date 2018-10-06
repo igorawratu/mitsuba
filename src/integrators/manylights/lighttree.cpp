@@ -1,14 +1,13 @@
 #include "lighttree.h"
 
+#include <mitsuba/core/plugin.h>
+
 #include <tuple>
 #include <queue>
 #include <functional>
+#include <array>
 
 MTS_NAMESPACE_BEGIN
-
-LightTree::LightTree() : point_tree_root_(nullptr), directional_tree_root_(nullptr), oriented_tree_root_(nullptr), min_dist_(0.f){
-
-}
 
 std::unique_ptr<LightTreeNode> createLightTree(const std::vector<VPL>& vpls, EVPLType vpl_type) {
 	if(vpls.size() == 0 || vpls[0].type != vpl_type){
@@ -19,7 +18,7 @@ std::unique_ptr<LightTreeNode> createLightTree(const std::vector<VPL>& vpls, EVP
 	std::uint8_t current_level = 0;
 	
 	for(int i = 0; i < vpls.size(); ++i){
-		nodes[current_level].emplace_back(new LightTreeNode());
+		nodes[current_level].push_back(std::make_unique<LightTreeNode>());
 
 		if(vpl_type != EDirectionalEmitterVPL){
 			nodes[current_level][i]->min_bounds = vpls[i].its.p;
@@ -52,7 +51,7 @@ std::unique_ptr<LightTreeNode> createLightTree(const std::vector<VPL>& vpls, EVP
 			break;
 		}
 
-		std::priority_queue<SimEntry, std::vector<SimEntry>, decltype(comparator)> similarity_matrix;
+		std::priority_queue<SimEntry, std::vector<SimEntry>, decltype(comparator)> similarity_matrix(comparator);
 
 		for(int i = 0; i < nodes[current_level].size(); ++i){
 			for(int j = i + 1; j < nodes[current_level].size(); ++j){
@@ -69,7 +68,7 @@ std::unique_ptr<LightTreeNode> createLightTree(const std::vector<VPL>& vpls, EVP
 			}
 		}
 
-		std::uint32_t nodes_left = nodes[current_level].size();
+		size_t nodes_left = nodes[current_level].size();
 		std::uint8_t next_level = (current_level + 1) % 2;
 
 		while(nodes_left > 0){
@@ -190,45 +189,47 @@ float calculateClusterContribution(Point shading_point_position, Vector3f shadin
 			geometric = 1.f / d;
 			break;
 		case ESurfaceVPL:
-			d = std::max(min_dist, boxUDF(shading_point_position, 
-										light_tree_node->min_bounds, light_tree_node->max_bounds));
-			
-			//rotation required to transform space so that normal is pointing torwards unit z
-			Vector3f unit_z = Vector3f(0.f, 0.f, 1.f);
-			float angle = acos(dot(unit_z, shading_point_normal));
-			Vector3f axis = cross(unit_z, shading_point_normal);
-			Transform rotation = Transform::rotate(axis, angle);
-			
-			//since we are rotating, the min and max points no longer specify the actual min and max, thus we need
-			//the full box
-			Point bounding_points[8];
-			bounding_points[0] = light_tree_node->min_bounds;
-			bounding_points[1] = Point(light_tree_node->min_bounds[0], light_tree_node->min_bounds[1], light_tree_node->max_bounds[2]);
-			bounding_points[2] = Point(light_tree_node->min_bounds[0], light_tree_node->max_bounds[1], light_tree_node->min_bounds[2]);
-			bounding_points[3] = Point(light_tree_node->max_bounds[0], light_tree_node->min_bounds[1], light_tree_node->min_bounds[2]);
-			bounding_points[4] = Point(light_tree_node->min_bounds[0], light_tree_node->max_bounds[1], light_tree_node->max_bounds[2]);
-			bounding_points[5] = Point(light_tree_node->max_bounds[0], light_tree_node->min_bounds[1], light_tree_node->max_bounds[2]);
-			bounding_points[6] = Point(light_tree_node->max_bounds[0], light_tree_node->max_bounds[1], light_tree_node->min_bounds[2]);
-			bounding_points[7] = light_tree_node->max_bounds;
+			{
+				d = std::max(min_dist, boxUDF(shading_point_position,
+					light_tree_node->min_bounds, light_tree_node->max_bounds));
 
-			float max_x = std::numeric_limits<float>::min(), max_y = std::numeric_limits<float>::min(),
-				max_z = std::numeric_limits<float>::min();
+				//rotation required to transform space so that normal is pointing torwards unit z
+				Vector3f unit_z = Vector3f(0.f, 0.f, 1.f);
+				float angle = acos(dot(unit_z, shading_point_normal));
+				Vector3f axis = cross(unit_z, shading_point_normal);
+				Transform rotation = Transform::rotate(axis, angle);
 
-			float min_x = std::numeric_limits<float>::max(), min_y = std::numeric_limits<float>::max();
+				//since we are rotating, the min and max points no longer specify the actual min and max, thus we need
+				//the full box
+				Point bounding_points[8];
+				bounding_points[0] = light_tree_node->min_bounds;
+				bounding_points[1] = Point(light_tree_node->min_bounds[0], light_tree_node->min_bounds[1], light_tree_node->max_bounds[2]);
+				bounding_points[2] = Point(light_tree_node->min_bounds[0], light_tree_node->max_bounds[1], light_tree_node->min_bounds[2]);
+				bounding_points[3] = Point(light_tree_node->max_bounds[0], light_tree_node->min_bounds[1], light_tree_node->min_bounds[2]);
+				bounding_points[4] = Point(light_tree_node->min_bounds[0], light_tree_node->max_bounds[1], light_tree_node->max_bounds[2]);
+				bounding_points[5] = Point(light_tree_node->max_bounds[0], light_tree_node->min_bounds[1], light_tree_node->max_bounds[2]);
+				bounding_points[6] = Point(light_tree_node->max_bounds[0], light_tree_node->max_bounds[1], light_tree_node->min_bounds[2]);
+				bounding_points[7] = light_tree_node->max_bounds;
 
-			for(int i = 0; i < 8; ++i){
-				bounding_points[i] = rotation.transformAffine(bounding_points[i]);
-				max_x = std::max(bounding_points[i][0], max_x);
-				min_x = std::min(bounding_points[i][0], min_x);
-				max_y = std::max(bounding_points[i][1], max_y);
-				min_y = std::min(bounding_points[i][1], min_y);
-				max_z = std::max(bounding_points[i][2], max_z);	
+				float max_x = std::numeric_limits<float>::min(), max_y = std::numeric_limits<float>::min(),
+					max_z = std::numeric_limits<float>::min();
+
+				float min_x = std::numeric_limits<float>::max(), min_y = std::numeric_limits<float>::max();
+
+				for (int i = 0; i < 8; ++i) {
+					bounding_points[i] = rotation.transformAffine(bounding_points[i]);
+					max_x = std::max(bounding_points[i][0], max_x);
+					min_x = std::min(bounding_points[i][0], min_x);
+					max_y = std::max(bounding_points[i][1], max_y);
+					min_y = std::min(bounding_points[i][1], min_y);
+					max_z = std::max(bounding_points[i][2], max_z);
+				}
+
+				float cosine_term = max_z / (max_z >= 0 ? sqrt(min_x * min_x + min_y * min_y + max_z * max_z) :
+					sqrt(max_x*min_x + max_y * max_y + max_z * max_z));
+
+				geometric = cosine_term / d;
 			}
-
-			float cosine_term = max_z / (max_z >= 0 ? sqrt(min_x * min_x + min_y * min_y + max_z * max_z) : 
-				sqrt(max_x*min_x + max_y*max_y + max_z * max_z));
-
-			geometric = cosine_term / d;
 
 			break;
 		case EDirectionalEmitterVPL:
@@ -244,7 +245,11 @@ float calculateClusterContribution(Point shading_point_position, Vector3f shadin
 	return geometric * material * light_tree_node->vpl.P.getLuminance() * light_tree_node->emission_scale;
 }
 
-LightTree::LightTree(const std::vector<VPL>& vpls) {
+LightTree::LightTree() : point_tree_root_(nullptr), directional_tree_root_(nullptr), oriented_tree_root_(nullptr), min_dist_(0.f) {
+
+}
+
+LightTree::LightTree(const std::vector<VPL>& vpls, float min_dist) : min_dist_(min_dist) {
 	for (std::uint32_t i = 0; i < vpls.size(); ++i) {
 		switch (vpls[i].type) {
 			case EPointEmitterVPL:
@@ -336,9 +341,12 @@ void LightTree::setVPLs(const std::vector<VPL>& vpls) {
 	directional_tree_root_ = createLightTree(directional_vpls_, EDirectionalEmitterVPL);
 }
 
+void LightTree::setMinDist(float min_dist) {
+	min_dist_ = min_dist;
+}
 
 
-std::vector<VPL> LightTree::getClusteringForPoint(Intersection its, std::uint32_t max_lights, float error_threshold) {
+std::vector<VPL> LightTree::getClusteringForPoint(const Intersection& its, std::uint32_t max_lights, float error_threshold) {
 	std::vector<VPL> lights;
 
 	Vector3f n(its.geoFrame.n[0], its.geoFrame.n[1], its.geoFrame.n[2]);
@@ -358,7 +366,7 @@ std::vector<VPL> LightTree::getClusteringForPoint(Intersection its, std::uint32_
 		return std::get<1>(l) > std::get<1>(r);
 	};
 
-	std::priority_queue<ClusterAndScore, std::vector<ClusterAndScore>, decltype(comparator)> pqueue;
+	std::priority_queue<ClusterAndScore, std::vector<ClusterAndScore>, decltype(comparator)> pqueue(comparator);
 
 	if(point_tree_root_ != nullptr){
 		pqueue.push(std::make_tuple(point_tree_root_.get(), point_tree_radiance));

@@ -64,7 +64,7 @@ struct LightTreeNode{
 class LightTree{
 public:
     LightTree();
-    LightTree(const std::vector<VPL>& vpls);
+    LightTree(const std::vector<VPL>& vpls, float min_dist);
     LightTree(const LightTree& other);
     LightTree(LightTree&& other);
     LightTree& operator = (const LightTree& other);
@@ -72,7 +72,8 @@ public:
     ~LightTree();
 
     void setVPLs(const std::vector<VPL>& vpls);
-    std::vector<VPL> getClusteringForPoint(Intersection its, std::uint32_t max_lights, float error_threshold);
+    std::vector<VPL> getClusteringForPoint(const Intersection& its, std::uint32_t max_lights, float error_threshold);
+	void setMinDist(float min_dist);
 
 private:
     std::vector<VPL> point_vpls_, directional_vpls_, oriented_vpls_;
