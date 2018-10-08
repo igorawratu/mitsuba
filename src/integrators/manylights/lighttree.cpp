@@ -205,9 +205,9 @@ float calculateClusterContribution(Point shading_point_position, Vector3f shadin
 		Vector3f box_half_dims = (box_max - box_min) / 2;
 		
 		Point result;
-		result[0] = std::max(0., fabs(p[0] - box_center[0]) - box_half_dims.x);
-		result[1] = std::max(0., fabs(p[1] - box_center[1]) - box_half_dims.y);
-		result[2] = std::max(0., fabs(p[2] - box_center[2]) - box_half_dims.z);
+		result[0] = std::max(0., (double)fabs(p[0] - box_center[0]) - (double)box_half_dims.x);
+		result[1] = std::max(0., (double)fabs(p[1] - box_center[1]) - (double)box_half_dims.y);
+		result[2] = std::max(0., (double)fabs(p[2] - box_center[2]) - (double)box_half_dims.z);
 
 		return distance(result, Point(0.f));
 	};
@@ -228,7 +228,15 @@ float calculateClusterContribution(Point shading_point_position, Vector3f shadin
 				Vector3f unit_z = Vector3f(0.f, 0.f, 1.f);
 				float angle = acos(dot(unit_z, shading_point_normal));
 				Vector3f axis = cross(unit_z, shading_point_normal);
+				if (axis.length() < 0.1f) {
+					axis = Vector3f(1.f, 0.f, 0.f);
+				}
+
 				Transform rotation = Transform::rotate(axis, angle);
+
+				
+
+				//std::cout << axis.x << " " << axis.y << " " << axis.z << " " << shading_point_normal.x << " " << shading_point_normal.y << " " << shading_point_normal.z << std::endl;
 
 				//since we are rotating, the min and max points no longer specify the actual min and max, thus we need
 				//the full box
@@ -248,7 +256,7 @@ float calculateClusterContribution(Point shading_point_position, Vector3f shadin
 				float min_x = std::numeric_limits<float>::max(), min_y = std::numeric_limits<float>::max();
 
 				for (int i = 0; i < 8; ++i) {
-					bounding_points[i] = rotation.transformAffine(bounding_points[i]);
+					//bounding_points[i] = rotation.transformAffine(bounding_points[i]);
 					max_x = std::max(bounding_points[i][0], max_x);
 					min_x = std::min(bounding_points[i][0], min_x);
 					max_y = std::max(bounding_points[i][1], max_y);
@@ -259,7 +267,7 @@ float calculateClusterContribution(Point shading_point_position, Vector3f shadin
 				float cosine_term = max_z / (max_z >= 0 ? sqrt(min_x * min_x + min_y * min_y + max_z * max_z) :
 					sqrt(max_x*min_x + max_y * max_y + max_z * max_z));
 
-				geometric = cosine_term / d;
+				geometric = 1.f / d;
 			}
 
 			break;
@@ -401,20 +409,24 @@ std::vector<VPL> LightTree::getClusteringForPoint(const Intersection& its, std::
 	};
 
 	std::priority_queue<ClusterAndScore, std::vector<ClusterAndScore>, decltype(comparator)> pqueue(comparator);
-
+	std::map<LightTreeNode*, int> traversed;
+	int counter = 0;
 	if(point_tree_root_ != nullptr){
-		pqueue.push(std::make_tuple(point_tree_root_.get(), point_tree_radiance));
+		//pqueue.push(std::make_tuple(point_tree_root_.get(), point_tree_radiance));
+		//traversed[point_tree_root_.get()] = counter++;
 	}
 
 	if(oriented_tree_root_ != nullptr){
 		pqueue.push(std::make_tuple(oriented_tree_root_.get(), oriented_tree_radiance));
+		traversed[oriented_tree_root_.get()] = counter++;
 	}
 
 	if(directional_tree_root_ != nullptr){
 		pqueue.push(std::make_tuple(directional_tree_root_.get(), directional_tree_radiance));
+		traversed[directional_tree_root_.get()] = counter++;
 	}
-	std::map<LightTreeNode*, int> traversed;
-	while(/*(pqueue.size() + */lights.size()/*)*/ < max_lights && pqueue.size() > 0){
+	
+	while(/*(pqueue.size() + lights.size()/*) < max_lights && */pqueue.size() > 0){
 		auto entry = pqueue.top();
 		
 		//if the worst node is below threshold, then all nodes must be
@@ -423,11 +435,11 @@ std::vector<VPL> LightTree::getClusteringForPoint(const Intersection& its, std::
 		}*/
 
 		LightTreeNode* node = std::get<0>(entry);
-		if(traversed.find(node) != traversed.end()){
+		/*if(traversed.find(node) != traversed.end()){
 			std::cout << pqueue.size() << " " << lights.size() << std::endl;
 			exit(0);
 		}
-		else traversed[node] = 1;
+		else */
 		
 		if(node->left == nullptr && node->right == nullptr){
 			//emission scale is 1 for leaf nodes so no need to fix intensity
@@ -439,16 +451,21 @@ std::vector<VPL> LightTree::getClusteringForPoint(const Intersection& its, std::
 				exit(0);
 			}
 
-			float l_radiance = calculateClusterContribution(its.p, n, node->left.get(), node->left->vpl.type, min_dist_);
-			float r_radiance = calculateClusterContribution(its.p, n, node->right.get(), node->right->vpl.type, min_dist_);
+			if (traversed.find(node->left.get()) == traversed.end()) {
+				float rad = calculateClusterContribution(its.p, n, node->left.get(), node->left->vpl.type, min_dist_);
+				pqueue.push(std::make_tuple(node->left.get(), 1.0f));
+				traversed[node->left.get()] = counter++;
+			}
 
-			pqueue.push(std::make_tuple(node->left.get(), l_radiance));
-			pqueue.push(std::make_tuple(node->right.get(), r_radiance));
+			if (traversed.find(node->right.get()) == traversed.end()) {
+				float rad = calculateClusterContribution(its.p, n, node->right.get(), node->right->vpl.type, min_dist_);
+				pqueue.push(std::make_tuple(node->right.get(), 1.0f));
+				traversed[node->right.get()] = counter++;
+			}
 		}
 
-		//std::cout << lights.size() << " " << pqueue.size() << std::endl;
-
 		pqueue.pop();
+		//std::cout << pqueue.size() << std::endl;
 	}
 
 	while(pqueue.size() > 0 && lights.size() < max_lights){
