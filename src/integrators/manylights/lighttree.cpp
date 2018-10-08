@@ -6,6 +6,7 @@
 #include <queue>
 #include <functional>
 #include <array>
+#include <map>
 
 MTS_NAMESPACE_BEGIN
 
@@ -17,9 +18,9 @@ std::unique_ptr<LightTreeNode> createLightTree(const std::vector<VPL>& vpls, EVP
 	std::array<std::vector<std::unique_ptr<LightTreeNode>>, 2> nodes;
 	std::uint8_t current_level = 0;
 	
-	for(int i = 0; i < vpls.size(); ++i){
-		nodes[current_level].push_back(std::make_unique<LightTreeNode>());
-
+	for(size_t i = 0; i < vpls.size(); ++i){
+		nodes[current_level].emplace_back(new LightTreeNode());
+		
 		if(vpl_type != EDirectionalEmitterVPL){
 			nodes[current_level][i]->min_bounds = vpls[i].its.p;
 			nodes[current_level][i]->max_bounds = vpls[i].its.p;
@@ -37,7 +38,7 @@ std::unique_ptr<LightTreeNode> createLightTree(const std::vector<VPL>& vpls, EVP
 	typedef std::tuple<float, std::uint32_t, std::uint32_t> SimEntry;
 
 	auto comparator = [](SimEntry l, SimEntry r){
-		return std::get<0>(l) < std::get<0>(r);
+		return std::get<0>(l) > std::get<0>(r);
 	};
 
 	Properties props("halton");
@@ -53,15 +54,44 @@ std::unique_ptr<LightTreeNode> createLightTree(const std::vector<VPL>& vpls, EVP
 
 		std::priority_queue<SimEntry, std::vector<SimEntry>, decltype(comparator)> similarity_matrix(comparator);
 
-		for(int i = 0; i < nodes[current_level].size(); ++i){
-			for(int j = i + 1; j < nodes[current_level].size(); ++j){
+		for(size_t i = 0; i < nodes[current_level].size(); ++i){
+			for(size_t j = i + 1; j < nodes[current_level].size(); ++j){
 				float d = 0.f;
+
 				if(vpl_type != EDirectionalEmitterVPL){
-					d += (nodes[current_level][i]->max_bounds - nodes[current_level][i]->min_bounds).length();
+					Point min(std::max(nodes[current_level][i]->min_bounds[0], nodes[current_level][j]->min_bounds[0]), 
+						std::max(nodes[current_level][i]->min_bounds[1], nodes[current_level][j]->min_bounds[1]), 
+						std::max(nodes[current_level][i]->min_bounds[2], nodes[current_level][j]->min_bounds[2]));
+					Point max(std::min(nodes[current_level][i]->max_bounds[0], nodes[current_level][j]->max_bounds[0]), 
+						std::min(nodes[current_level][i]->max_bounds[1], nodes[current_level][j]->max_bounds[1]), 
+						std::min(nodes[current_level][i]->max_bounds[2], nodes[current_level][j]->max_bounds[2]));
+					
+					d += (max - min).length();
 				}
 				
 				if(vpl_type != EPointEmitterVPL){
-					d += (1.f - dot(nodes[current_level][i]->cone_ray1, nodes[current_level][i]->cone_ray2));
+					Vector3 ray1, ray2;
+
+					ray1 = nodes[current_level][i]->cone_ray1;
+					ray2 = nodes[current_level][i]->cone_ray2;
+					
+					float dp1 = dot(ray1, ray2);
+					float dp2 = dot(ray1, nodes[current_level][j]->cone_ray1);
+					float dp3 = dot(ray1, nodes[current_level][j]->cone_ray2);
+
+					if(dp2 > dp1 || dp3 > dp1){
+						ray2 = dp2 > dp3 ? nodes[current_level][j]->cone_ray1 : nodes[current_level][j]->cone_ray2;
+					}
+
+					dp1 = dot(ray1, ray2);
+					dp2 = dot(ray2, nodes[current_level][j]->cone_ray1);
+					dp3 = dot(ray2, nodes[current_level][j]->cone_ray2);
+
+					if (dp2 > dp1 || dp3 > dp1) {
+						ray1 = dp2 > dp3 ? nodes[current_level][j]->cone_ray1 : nodes[current_level][j]->cone_ray2;
+					}
+
+					d += (1.f - dot(ray1, ray2));
 				}
 
 				similarity_matrix.push(std::make_tuple(d, i, j));
@@ -70,7 +100,7 @@ std::unique_ptr<LightTreeNode> createLightTree(const std::vector<VPL>& vpls, EVP
 
 		size_t nodes_left = nodes[current_level].size();
 		std::uint8_t next_level = (current_level + 1) % 2;
-
+	
 		while(nodes_left > 0){
 			if (nodes_left == 1) {
 				for (std::uint32_t i = 0; i < nodes[current_level].size(); ++i) {
@@ -155,6 +185,7 @@ std::unique_ptr<LightTreeNode> createLightTree(const std::vector<VPL>& vpls, EVP
 			}
 		}
 
+		nodes[current_level].clear();
 		current_level = next_level;
 	}
 
@@ -174,9 +205,9 @@ float calculateClusterContribution(Point shading_point_position, Vector3f shadin
 		Vector3f box_half_dims = (box_max - box_min) / 2;
 		
 		Point result;
-		result[0] = std::max(0.f, fabs(p[0] - box_center[0]) - box_half_dims.x);
-		result[1] = std::max(0.f, fabs(p[1] - box_center[1]) - box_half_dims.y);
-		result[2] = std::max(0.f, fabs(p[2] - box_center[2]) - box_half_dims.z);
+		result[0] = std::max(0., fabs(p[0] - box_center[0]) - box_half_dims.x);
+		result[1] = std::max(0., fabs(p[1] - box_center[1]) - box_half_dims.y);
+		result[2] = std::max(0., fabs(p[2] - box_center[2]) - box_half_dims.z);
 
 		return distance(result, Point(0.f));
 	};
@@ -272,9 +303,9 @@ LightTree::LightTree(const std::vector<VPL>& vpls, float min_dist) : min_dist_(m
 }
 
 LightTree::LightTree(const LightTree& other) : point_vpls_(other.point_vpls_), directional_vpls_(other.directional_vpls_),
-	oriented_vpls_(other.oriented_vpls_), point_tree_root_(std::make_unique<LightTreeNode>(*other.point_tree_root_)), 
-	directional_tree_root_(std::make_unique<LightTreeNode>(*other.directional_tree_root_)),
-	oriented_tree_root_(std::make_unique<LightTreeNode>(*other.oriented_tree_root_)), min_dist_(other.min_dist_){
+	oriented_vpls_(other.oriented_vpls_), point_tree_root_(new LightTreeNode(*other.point_tree_root_)), 
+	directional_tree_root_(new LightTreeNode(*other.directional_tree_root_)),
+	oriented_tree_root_(new LightTreeNode(*other.oriented_tree_root_)), min_dist_(other.min_dist_){
 }
 
 LightTree::LightTree(LightTree&& other) : point_vpls_(other.point_vpls_), directional_vpls_(other.directional_vpls_),
@@ -289,9 +320,9 @@ LightTree& LightTree::operator = (const LightTree& other) {
 		point_vpls_ = other.point_vpls_;
 		directional_vpls_ = other.directional_vpls_;
 		oriented_vpls_ = other.oriented_vpls_;
-		point_tree_root_ = std::make_unique<LightTreeNode>(*other.point_tree_root_);
-		directional_tree_root_ = std::make_unique<LightTreeNode>(*other.directional_tree_root_);
-		oriented_tree_root_ = std::make_unique<LightTreeNode>(*other.oriented_tree_root_);
+		point_tree_root_ = std::unique_ptr<LightTreeNode>(new LightTreeNode(*other.point_tree_root_));
+		directional_tree_root_ = std::unique_ptr<LightTreeNode>(new LightTreeNode(*other.directional_tree_root_));
+		oriented_tree_root_ = std::unique_ptr<LightTreeNode>(new LightTreeNode(*other.oriented_tree_root_));
 		min_dist_ = other.min_dist_;
 	}
 
@@ -346,7 +377,10 @@ void LightTree::setMinDist(float min_dist) {
 }
 
 
+
 std::vector<VPL> LightTree::getClusteringForPoint(const Intersection& its, std::uint32_t max_lights, float error_threshold) {
+	//std::lock_guard<std::mutex> lock(mutex_);
+
 	std::vector<VPL> lights;
 
 	Vector3f n(its.geoFrame.n[0], its.geoFrame.n[1], its.geoFrame.n[2]);
@@ -361,9 +395,9 @@ std::vector<VPL> LightTree::getClusteringForPoint(const Intersection& its, std::
 	float total_estimated_radiance = point_tree_radiance + oriented_tree_radiance + directional_tree_radiance;
 
 	typedef std::tuple<LightTreeNode*, float> ClusterAndScore;
-
+	//largest first, but front of the queue is last out
 	auto comparator = [](ClusterAndScore l, ClusterAndScore r){
-		return std::get<1>(l) > std::get<1>(r);
+		return std::get<1>(l) < std::get<1>(r);
 	};
 
 	std::priority_queue<ClusterAndScore, std::vector<ClusterAndScore>, decltype(comparator)> pqueue(comparator);
@@ -379,16 +413,22 @@ std::vector<VPL> LightTree::getClusteringForPoint(const Intersection& its, std::
 	if(directional_tree_root_ != nullptr){
 		pqueue.push(std::make_tuple(directional_tree_root_.get(), directional_tree_radiance));
 	}
-
-	while((pqueue.size() + lights.size()) < max_lights && pqueue.size() > 0){
+	std::map<LightTreeNode*, int> traversed;
+	while(/*(pqueue.size() + */lights.size()/*)*/ < max_lights && pqueue.size() > 0){
 		auto entry = pqueue.top();
 		
 		//if the worst node is below threshold, then all nodes must be
-		if(std::get<1>(entry) / total_estimated_radiance < error_threshold){
+		/*if(std::get<1>(entry) / total_estimated_radiance < error_threshold){
 			break;
-		}
+		}*/
 
 		LightTreeNode* node = std::get<0>(entry);
+		if(traversed.find(node) != traversed.end()){
+			std::cout << pqueue.size() << " " << lights.size() << std::endl;
+			exit(0);
+		}
+		else traversed[node] = 1;
+		
 		if(node->left == nullptr && node->right == nullptr){
 			//emission scale is 1 for leaf nodes so no need to fix intensity
 			lights.push_back(node->vpl);
@@ -399,17 +439,19 @@ std::vector<VPL> LightTree::getClusteringForPoint(const Intersection& its, std::
 				exit(0);
 			}
 
-			float l_radiance = calculateClusterContribution(its.p, n, node->left.get(), EPointEmitterVPL, min_dist_);
-			float r_radiance = calculateClusterContribution(its.p, n, node->right.get(), EPointEmitterVPL, min_dist_);
+			float l_radiance = calculateClusterContribution(its.p, n, node->left.get(), node->left->vpl.type, min_dist_);
+			float r_radiance = calculateClusterContribution(its.p, n, node->right.get(), node->right->vpl.type, min_dist_);
 
 			pqueue.push(std::make_tuple(node->left.get(), l_radiance));
 			pqueue.push(std::make_tuple(node->right.get(), r_radiance));
 		}
 
+		//std::cout << lights.size() << " " << pqueue.size() << std::endl;
+
 		pqueue.pop();
 	}
 
-	while(pqueue.size() > 0){
+	while(pqueue.size() > 0 && lights.size() < max_lights){
 		auto entry = pqueue.top();
 		lights.push_back(std::get<0>(entry)->vpl);
 		lights.back().P *= std::get<0>(entry)->emission_scale;

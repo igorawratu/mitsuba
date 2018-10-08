@@ -226,7 +226,7 @@ public:
 		clustering_strategy_(NONE), 
 		light_tree_(nullptr),
 		lightcuts_error_threshold_(props.getFloat("lightcutsThreshold", 0.02f)),
-		max_lightcut_size_(props.getFloat("maxlights", 20)){
+		max_lightcut_size_(props.getInteger("maxLights", 20)){
 		
 		int strategy = props.getInteger("clusteringStrategy", 0);
 
@@ -265,7 +265,7 @@ public:
 		min_dist_ = calculateMinDistance(scene, vpls_, clamping_);
 
 		if (clustering_strategy_ == LIGHTCUTS) {
-			light_tree_ = std::make_unique<LightTree>(vpls_, min_dist_);
+			light_tree_ = std::unique_ptr<LightTree>(new LightTree(vpls_, min_dist_));
 		}
 		
 
@@ -306,7 +306,7 @@ public:
 				}
 			}
 
-			#pragma omp parallel for
+			//#pragma omp parallel for
 			for (std::int32_t x = 0; x < output_image_->getSize().x; ++x) {
 				Ray ray;
 
@@ -340,10 +340,10 @@ public:
 					else if (clustering_strategy_ == LIGHTCUTS){
 						vpls = light_tree_->getClusteringForPoint(its, max_lightcut_size_, lightcuts_error_threshold_);
 					}
-					
-					for (std::uint32_t i = 0; i < vpls_.size(); ++i) {
+ 
+					for (std::uint32_t i = 0; i < vpls.size(); ++i) {
 						Point ray_origin = its.p;
-						Ray shadow_ray(ray_origin, normalize(vpls_[i].its.p - ray_origin), ray.time);
+						Ray shadow_ray(ray_origin, normalize(vpls[i].its.p - ray_origin), ray.time);
 
 						Float t;
 						ConstShapePtr shape;
@@ -351,29 +351,29 @@ public:
 						Point2 uv;
 
 						if(scene->rayIntersect(shadow_ray, t, shape, norm, uv)){
-							if(abs((ray_origin - vpls_[i].its.p).length() - t) > 0.1f ){
+							if(abs((ray_origin - vpls[i].its.p).length() - t) > 0.1f ){
 								continue;
 							}
 						}
 
 						BSDFSamplingRecord bsdf_sample_record(its, sampler, ERadiance);
-						bsdf_sample_record.wi = its.toLocal(normalize(vpls_[i].its.p - its.p));
+						bsdf_sample_record.wi = its.toLocal(normalize(vpls[i].its.p - its.p));
 						bsdf_sample_record.wo = its.toLocal(n);
 
 						albedo = its.getBSDF()->eval(bsdf_sample_record);
 
 						//only dealing with emitter and surface VPLs curently.
-						if (vpls_[i].type != EPointEmitterVPL && vpls_[i].type != ESurfaceVPL){
+						if (vpls[i].type != EPointEmitterVPL && vpls[i].type != ESurfaceVPL){
 							continue;
 						}
 
-						float d = std::max((its.p - vpls_[i].its.p).length(), min_dist_);
+						float d = std::max((its.p - vpls[i].its.p).length(), min_dist_);
 						float attenuation = 1.f / (d * d);
 
-						float n_dot_ldir = std::max(0.f, dot(normalize(n), normalize(vpls_[i].its.p - its.p)));
-						float ln_dot_ldir = std::max(0.f, dot(normalize(vpls_[i].its.shFrame.n), normalize(its.p - vpls_[i].its.p)));
+						float n_dot_ldir = std::max(0.f, dot(normalize(n), normalize(vpls[i].its.p - its.p)));
+						float ln_dot_ldir = std::max(0.f, dot(normalize(vpls[i].its.shFrame.n), normalize(its.p - vpls[i].its.p)));
 
-						accumulator += (vpls_[i].P * ln_dot_ldir * attenuation * n_dot_ldir * albedo) / PI;
+						accumulator += (vpls[i].P * ln_dot_ldir * attenuation * n_dot_ldir * albedo) / PI;
 					}
 				}
 
