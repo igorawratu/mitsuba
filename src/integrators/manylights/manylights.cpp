@@ -129,7 +129,7 @@ size_t generateVPLs(const Scene *scene, size_t offset, size_t count, int max_dep
 		//samples an emitter, adds it to the vpl vector, and then extracts a point and direction sample to be used later for additional
 		//vpl generation
 		if (!emitter->isEnvironmentEmitter() && emitter->needsDirectionSample()) {
-			VPL vpl(EPointEmitterVPL, weight);
+			VPL vpl(ESurfaceVPL, weight);
 			vpl.its.p = point_sample.p;
 			vpl.its.time = time;
 			vpl.its.shFrame = point_sample.n.isZero() ? standard_frame : Frame(point_sample.n);
@@ -306,7 +306,7 @@ public:
 				}
 			}
 
-			//#pragma omp parallel for
+			#pragma omp parallel for
 			for (std::int32_t x = 0; x < output_image_->getSize().x; ++x) {
 				Ray ray;
 
@@ -373,7 +373,10 @@ public:
 						float n_dot_ldir = std::max(0.f, dot(normalize(n), normalize(vpls[i].its.p - its.p)));
 						float ln_dot_ldir = std::max(0.f, dot(normalize(vpls[i].its.shFrame.n), normalize(its.p - vpls[i].its.p)));
 
-						accumulator += (vpls[i].P * ln_dot_ldir * attenuation * n_dot_ldir * albedo) / PI;
+						/*if((its.p - vpls[i].its.p).length() < 10.f){
+							accumulator += Spectrum(100.f);
+						}
+						else */accumulator += (vpls[i].P * ln_dot_ldir * attenuation * n_dot_ldir * albedo) / PI;
 					}
 				}
 

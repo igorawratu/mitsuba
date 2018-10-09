@@ -75,7 +75,7 @@ public:
     LightTree& operator = (LightTree&& other);
     ~LightTree();
 
-    void setVPLs(const std::vector<VPL>& vpls);
+    void setVPLs(const std::vector<VPL>& vpls, float min_dist);
     std::vector<VPL> getClusteringForPoint(const Intersection& its, std::uint32_t max_lights, float error_threshold);
 	void setMinDist(float min_dist);
 
