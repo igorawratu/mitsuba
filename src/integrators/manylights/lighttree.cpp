@@ -90,7 +90,7 @@ std::unique_ptr<LightTreeNode> createLightTree(const std::vector<VPL>& vpls, EVP
 						ray1 = dp2 > dp3 ? nodes[current_level][j]->cone_ray1 : nodes[current_level][j]->cone_ray2;
 					}
 
-					d += (1.f - dot(ray1, ray2)) * min_dist * 2.f;
+					//d += (1.f - dot(ray1, ray2)) * min_dist * 2.f;
 				}
 
 				similarity_matrix.push(std::make_tuple(d, i, j));
