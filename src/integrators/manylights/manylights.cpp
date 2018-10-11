@@ -351,7 +351,7 @@ public:
 						Point2 uv;
 
 						if(scene->rayIntersect(shadow_ray, t, shape, norm, uv)){
-							if(abs((ray_origin - vpls[i].its.p).length() - t) > 0.1f ){
+							if(abs((ray_origin - vpls[i].its.p).length() - t) > 0.0001f ){
 								continue;
 							}
 						}
