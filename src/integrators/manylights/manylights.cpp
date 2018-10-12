@@ -10,12 +10,16 @@
 #include <iostream>
 
 #include "lighttree.h"
+#include "rowcolumnsampling.h"
 
 MTS_NAMESPACE_BEGIN
 
 const double PI = 3.14159265359;
 
-enum CLUSTERING_STRATEGY{NONE, LIGHTCUTS};
+enum CLUSTERING_STRATEGY{
+		NONE = 0, LIGHTCUTS, ROWCOLSAMPLING,
+		CLUSTER_STRATEGY_MIN = NONE, CLUSTER_STRATEGY_MAX = ROWCOLSAMPLING 
+	};
 
 float calculateMinDistance(const Scene *scene, const std::vector<VPL>& vpls, float clamping){
 	float acc_near = 0.f;
@@ -225,21 +229,14 @@ public:
 		clamping_(props.getFloat("clamping", 0.1f)),
 		clustering_strategy_(NONE), 
 		light_tree_(nullptr),
+		row_col_clusterer_(nullptr),
 		lightcuts_error_threshold_(props.getFloat("lightcutsThreshold", 0.02f)),
-		max_lightcut_size_(props.getInteger("maxLights", 20)){
+		num_clusters_(props.getInteger("numClusters", 20)),
+		rows_(props.getInteger("rows", 100)){
 		
 		int strategy = props.getInteger("clusteringStrategy", 0);
-
-		switch (strategy) {
-			case 0:
-				clustering_strategy_ = NONE;
-				break;
-			case 1:
-				clustering_strategy_ = LIGHTCUTS;
-				break;
-			default:
-				break;
-		}
+		clustering_strategy_ = strategy < CLUSTER_STRATEGY_MIN || strategy > CLUSTER_STRATEGY_MAX ? 
+			NONE : (CLUSTERING_STRATEGY)strategy;
 	}
 
 	//generation of the point lights is done the same way as the vpl integrator for now, will need to extend this in the future
@@ -267,7 +264,11 @@ public:
 		if (clustering_strategy_ == LIGHTCUTS) {
 			light_tree_ = std::unique_ptr<LightTree>(new LightTree(vpls_, min_dist_));
 		}
-		
+		else if(clustering_strategy_ == ROWCOLSAMPLING){
+			row_col_clusterer_ = std::unique_ptr<RowColumnSampling>(
+				new RowColumnSampling(vpls_, rows_, num_clusters_, 
+				std::make_tuple(scene->getFilm()->getSize().x, scene->getFilm()->getSize().y), scene, min_dist_));
+		}
 
 		Log(EInfo, "Generated %i virtual point lights", vpls_.size());
 
@@ -338,7 +339,10 @@ public:
 						vpls = vpls_;
 					}
 					else if (clustering_strategy_ == LIGHTCUTS){
-						vpls = light_tree_->getClusteringForPoint(its, max_lightcut_size_, lightcuts_error_threshold_);
+						vpls = light_tree_->getClusteringForPoint(its, num_clusters_, lightcuts_error_threshold_);
+					}
+					else if(clustering_strategy_ == ROWCOLSAMPLING){
+						vpls = row_col_clusterer_->getClusteringForPoint();
 					}
  
 					for (std::uint32_t i = 0; i < vpls.size(); ++i) {
@@ -418,8 +422,9 @@ private:
 	float clamping_, min_dist_;
 	CLUSTERING_STRATEGY clustering_strategy_;
 	std::unique_ptr<LightTree> light_tree_;
+	std::unique_ptr<RowColumnSampling> row_col_clusterer_;
 	float lightcuts_error_threshold_;
-	int max_lightcut_size_;
+	int num_clusters_, rows_;
 };
 
 MTS_IMPLEMENT_CLASS(ManyLightsIntegrator, false, Integrator)

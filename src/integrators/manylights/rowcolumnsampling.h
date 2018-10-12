@@ -7,19 +7,21 @@
 #include <vector>
 #include <tuple>
 
+MTS_NAMESPACE_BEGIN
+
 class RowColumnSampling{
 public:
     RowColumnSampling() = delete;
-    RowColumnSampling(const std::vector<VPL>& vpls, std::uint32_t num_clusters, std::uint32_t rows, std::uint32_t cols,
-        std::tuple<std::uint32_t, std::uint32_t> resolution, Scene* scene, float min_dist);
+    RowColumnSampling(const std::vector<VPL>& vpls, std::uint32_t rows, std::uint32_t cols,
+        std::tuple<std::uint32_t, std::uint32_t> resolution, const Scene* scene, float min_dist);
     RowColumnSampling(const RowColumnSampling& other);
     RowColumnSampling(RowColumnSampling&& other);
     RowColumnSampling& operator = (const RowColumnSampling& other);
     RowColumnSampling& operator = (RowColumnSampling&& other);
     ~RowColumnSampling();
 
-    void updateClustering(const std::vector<VPL>& vpls, std::uint32_t num_clusters, std::uint32_t rows, std::uint32_t cols,
-        std::tuple<std::uint32_t, std::uint32_t> resolution, Scene* scene, float min_dist);
+    void updateClustering(const std::vector<VPL>& vpls, std::uint32_t rows, std::uint32_t cols,
+        std::tuple<std::uint32_t, std::uint32_t> resolution, const Scene* scene, float min_dist);
 
     std::vector<VPL> getClusteringForPoint();
 
@@ -27,5 +29,7 @@ private:
     std::vector<VPL> clustering_;
     float min_dist_;
 };
+
+MTS_NAMESPACE_END
 
 #endif
