@@ -22,7 +22,7 @@ std::vector<std::pair<std::uint32_t, std::uint32_t>> subsampleRows(std::uint32_t
 
     std::priority_queue<FactorPair, std::vector<FactorPair>, decltype(comparator)> factors(comparator);
 
-    for(int i = 0; i < (int)(sqrt((float)rows) + 1.f); ++i){
+    for(int i = 1; i < (int)(sqrt((float)rows) + 1.f); ++i){
         if(rows % i == 0){
             factors.push(std::make_pair(i, rows / i));
         }
@@ -155,9 +155,6 @@ std::vector<VPL> calculateClustering(std::vector<VPL> vpls, std::vector<float> c
         std::uint32_t>>, decltype(comparator)> DistancePQueue;
 
     std::vector<std::vector<VPL>> clusters;
-    //this is necessary because we can't put the actual priority queues with custom comparators in a vector
-    //we want to remove from due to copying assignment for lambdas being deleted
-    std::vector<DistancePQueue> actual_priority_queues;
     std::vector<std::pair<float, DistancePQueue*>> distance_sqr_from_clusters;
 
     auto seed = std::chrono::high_resolution_clock::now().time_since_epoch().count();
@@ -173,10 +170,14 @@ std::vector<VPL> calculateClustering(std::vector<VPL> vpls, std::vector<float> c
     vpls.erase(vpls.begin() + pick_idx);
     contributions.erase(contributions.begin() + pick_idx);
 
+    //this is necessary because we can't put the actual priority queues with custom comparators in a vector
+    //we want to remove from due to copying assignment for lambdas being deleted
+    //NB!!!! this vector must never be changed after creation so pointers remain the same
+    std::vector<DistancePQueue> actual_priority_queues(vpls.size(), DistancePQueue(comparator));
+
     for(size_t i = 0; i < vpls.size(); ++i){
         float dsqr = (clusters.back()[0].its.p - vpls[i].its.p).lengthSquared();
-        actual_priority_queues.emplace_back(comparator);
-        distance_sqr_from_clusters.emplace_back(0.f, &actual_priority_queues.back());
+        distance_sqr_from_clusters.emplace_back(0.f, &actual_priority_queues[i]);
         distance_sqr_from_clusters.back().first = dsqr;
         distance_sqr_from_clusters.back().second->push(std::make_pair(dsqr, 0));
     }
@@ -312,8 +313,10 @@ std::vector<VPL> calculateClustering(std::vector<VPL> vpls, std::vector<float> c
         split_queue.pop();
 
         float total_contrib = 0.f;
+        float total_lum = 0.f;
         for(size_t i = 0; i < cluster.first.size(); ++i){
             total_contrib += cluster.first[i].emitterScale;
+            total_lum += cluster.first[i].P.getLuminance();
         }
 
         auto gen_representative = std::bind(std::uniform_real_distribution<float>(0.f, total_contrib), rng);
@@ -331,7 +334,7 @@ std::vector<VPL> calculateClustering(std::vector<VPL> vpls, std::vector<float> c
 
         output_clusters.push_back(cluster.first[representative_idx]);
         output_clusters.back().emitterScale = 1.f;
-        output_clusters.back().P = output_clusters.back().P / output_clusters.back().P.getLuminance() * total_contrib;
+        output_clusters.back().P = output_clusters.back().P / output_clusters.back().P.getLuminance() * total_lum;
     }
 
     return output_clusters;
