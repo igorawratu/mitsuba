@@ -12,6 +12,7 @@ public:
     ~ManyLightsRenderer();
 
     void Render();
+    void BindOutputbuffer(void* buffer);
 
 private:
     Clusterer clusterer_;
