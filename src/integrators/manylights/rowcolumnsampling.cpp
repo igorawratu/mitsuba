@@ -134,7 +134,9 @@ std::vector<float> calculateLightContributions(const std::vector<VPL>& vpls,
     return contributions;
 }
 
-std::vector<VPL> calculateClustering(std::vector<VPL> vpls, std::vector<float> contributions, std::uint32_t num_clusters){
+std::vector<VPL> calculateClustering(std::vector<VPL> vpls, std::vector<float> contributions, 
+    std::uint32_t num_clusters, float min_dist){
+
     std::vector<VPL> output_clusters;
 
     if(num_clusters == 0){
@@ -176,7 +178,8 @@ std::vector<VPL> calculateClustering(std::vector<VPL> vpls, std::vector<float> c
     std::vector<DistancePQueue> actual_priority_queues(vpls.size(), DistancePQueue(comparator));
 
     for(size_t i = 0; i < vpls.size(); ++i){
-        float dsqr = (clusters.back()[0].its.p - vpls[i].its.p).lengthSquared();
+        float dsqr = (clusters.back()[0].its.p - vpls[i].its.p).lengthSquared() + 
+            dot(clusters.back()[0].its.shFrame.n, vpls[i].its.shFrame.n) * min_dist;
         distance_sqr_from_clusters.emplace_back(0.f, &actual_priority_queues[i]);
         distance_sqr_from_clusters.back().first = dsqr;
         distance_sqr_from_clusters.back().second->push(std::make_pair(dsqr, 0));
@@ -208,7 +211,8 @@ std::vector<VPL> calculateClustering(std::vector<VPL> vpls, std::vector<float> c
         distance_sqr_from_clusters.erase(distance_sqr_from_clusters.begin() + pick_idx);
 
         for(size_t i = 0; i < distance_sqr_from_clusters.size(); ++i){
-            float dsqr = (clusters.back()[0].its.p - vpls[i].its.p).lengthSquared();
+            float dsqr = (clusters.back()[0].its.p - vpls[i].its.p).lengthSquared() + 
+                dot(clusters.back()[0].its.shFrame.n, vpls[i].its.shFrame.n) * min_dist;
             distance_sqr_from_clusters[i].first += dsqr;
             distance_sqr_from_clusters[i].second->push(std::make_pair(dsqr, clusters.size() - 1));
         }
@@ -266,13 +270,18 @@ std::vector<VPL> calculateClustering(std::vector<VPL> vpls, std::vector<float> c
         split_queue.pop();
 
         Vector3f random_line(gen(), gen(), gen());
+        Vector3f random_line2(gen(), gen(), gen());
 
         //important to discard vectors with a larger norm than 1 as otherwise there will be higher densities
         //in the corners
-        while(random_line.length() > 1.f || random_line.length() == 0.f){
+        while(sqrt(random_line.lengthSquared() + random_line2.lengthSquared()) > 1.f || 
+            sqrt(random_line.lengthSquared() + random_line2.lengthSquared()) == 0.f){
             random_line.x = gen();
             random_line.y = gen();
             random_line.z = gen();
+            random_line2.x = gen();
+            random_line2.y = gen();
+            random_line2.z = gen();
         }
 
         std::vector<std::pair<VPL, float>> ordered_projections;
@@ -280,7 +289,8 @@ std::vector<VPL> calculateClustering(std::vector<VPL> vpls, std::vector<float> c
         //project points in cluster to 1D
         for(size_t i = 0; i < largest_cluster.first.size(); ++i){
             Vector3f vectorized_p(largest_cluster.first[i].its.p[0],largest_cluster.first[i].its.p[1], largest_cluster.first[i].its.p[2]);
-            float projection_dist = dot(random_line, vectorized_p) / dot(random_line, random_line);
+            float projection_dist = (dot(random_line, vectorized_p) + dot(largest_cluster.first[i].its.geoFrame.n, random_line2)) /
+                (dot(random_line, random_line) + dot(random_line2, random_line2));
             ordered_projections.push_back(std::make_pair(largest_cluster.first[i], projection_dist));
         }
 
@@ -345,7 +355,7 @@ RowColumnSampling::RowColumnSampling(const std::vector<VPL>& vpls, std::uint32_t
 
     auto indices = subsampleRows(rows, resolution);
     auto contributions = calculateLightContributions(vpls, indices, scene, min_dist_);
-    clustering_ = calculateClustering(vpls, contributions, cols);
+    clustering_ = calculateClustering(vpls, contributions, cols, min_dist);
 }
 
 RowColumnSampling::RowColumnSampling(const RowColumnSampling& other) : 
@@ -385,7 +395,7 @@ void RowColumnSampling::updateClustering(const std::vector<VPL>& vpls, std::uint
     min_dist_ = min_dist;
     auto indices = subsampleRows(rows, resolution);
     auto contributions = calculateLightContributions(vpls, indices, scene, min_dist_);
-    clustering_ = calculateClustering(vpls, contributions, cols);
+    clustering_ = calculateClustering(vpls, contributions, cols, min_dist);
 }
 
 std::vector<VPL> RowColumnSampling::getClusteringForPoint(){
