@@ -4,9 +4,9 @@
 template <class Clusterer, class Renderer>
 class ManyLightsRenderer{
 public:
-    ManyLightsRenderer();
-    ManyLightsRenderer(const ManyLightsRenderer& other);
-    ManyLightsRenderer(ManyLightsRenderer&& other);
+    ManyLightsRenderer() : clusterer_(), renderer_(){}
+    ManyLightsRenderer(const ManyLightsRenderer& other) : clusterer_(other.clusterer_), renderer_(other.renderer_){}
+    ManyLightsRenderer(ManyLightsRenderer&& other) : clusterer_(std::move(other.clusterer_)), renderer_(std::move(other.renderer_)){}
     ManyLightsRenderer& operator = (const ManyLightsRenderer& other);
     ManyLightsRenderer& operator = (ManyLightsRenderer&& other);
     ~ManyLightsRenderer();
