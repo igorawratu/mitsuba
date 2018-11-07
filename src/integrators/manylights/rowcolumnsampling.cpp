@@ -47,13 +47,14 @@ std::vector<std::pair<std::uint32_t, std::uint32_t>> subsampleRows(std::uint32_t
             std::uint32_t x_start = j * bucket_width;
             std::uint32_t y_start = i * bucket_height;
 
-            auto gen_y = std::bind(std::uniform_int_distribution<std::uint32_t>(0, 
-                        std::min(bucket_height, std::get<1>(resolution) - y_start) - 1), rng);
-            auto gen_x = std::bind(std::uniform_int_distribution<std::uint32_t>(0, 
-                        std::min(bucket_width, std::get<0>(resolution) - x_start) - 1), rng);
+            std::uniform_int_distribution<std::uint32_t> gen_y(0, 
+                std::min(bucket_height, std::get<1>(resolution) - y_start) - 1);
 
-            int x = gen_x() + x_start;
-            int y = gen_y() + y_start;
+            std::uniform_int_distribution<std::uint32_t> gen_x(0, 
+                std::min(bucket_width, std::get<0>(resolution) - x_start) - 1);
+
+            int x = gen_x(rng) + x_start;
+            int y = gen_y(rng) + y_start;
 
             row_indices.push_back(std::make_pair(x, y));
         }
@@ -163,9 +164,9 @@ std::vector<VPL> calculateClustering(std::vector<VPL> vpls, std::vector<float> c
     std::mt19937 rng(seed);
 
     //cluster by sampling
-    auto first_pick = std::bind(std::uniform_int_distribution<std::uint32_t>(0, vpls.size() - 1), rng);
+    std::uniform_int_distribution<std::uint32_t> first_pick(0, vpls.size() - 1);
 
-    std::uint32_t pick_idx = first_pick();
+    std::uint32_t pick_idx = first_pick(rng);
     clusters.emplace_back(1, vpls[pick_idx]);
     clusters.back()[0].emitterScale = contributions[pick_idx];
 
@@ -191,8 +192,8 @@ std::vector<VPL> calculateClustering(std::vector<VPL> vpls, std::vector<float> c
             total_dist += distance_sqr_from_clusters[i].first;
         }
 
-        auto gen_pick = std::bind(std::uniform_real_distribution<float>(0.f, total_dist), rng);
-        float pick = gen_pick();
+        std::uniform_real_distribution<float> gen_pick(0.f, total_dist);
+        float pick = gen_pick(rng);
         pick_idx = distance_sqr_from_clusters.size() - 1;
 
         for(size_t i = 0; i < distance_sqr_from_clusters.size(); ++i){
@@ -253,7 +254,7 @@ std::vector<VPL> calculateClustering(std::vector<VPL> vpls, std::vector<float> c
         split_queue.push(std::make_pair(std::move(clusters[i]), total_contrib));
     }
 
-    auto gen = std::bind(std::uniform_real_distribution<float>(0, 1.f), rng);
+    std::uniform_real_distribution<float> gen(0, 1.f);
 
     auto sort_comparator = [](const std::pair<VPL, float>& l, const std::pair<VPL, float>& r){
         return l.second < r.second;
@@ -269,19 +270,19 @@ std::vector<VPL> calculateClustering(std::vector<VPL> vpls, std::vector<float> c
 
         split_queue.pop();
 
-        Vector3f random_line(gen(), gen(), gen());
-        Vector3f random_line2(gen(), gen(), gen());
+        Vector3f random_line(gen(rng), gen(rng), gen(rng));
+        Vector3f random_line2(gen(rng), gen(rng), gen(rng));
 
         //important to discard vectors with a larger norm than 1 as otherwise there will be higher densities
         //in the corners
         while(sqrt(random_line.lengthSquared() + random_line2.lengthSquared()) > 1.f || 
             sqrt(random_line.lengthSquared() + random_line2.lengthSquared()) == 0.f){
-            random_line.x = gen();
-            random_line.y = gen();
-            random_line.z = gen();
-            random_line2.x = gen();
-            random_line2.y = gen();
-            random_line2.z = gen();
+            random_line.x = gen(rng);
+            random_line.y = gen(rng);
+            random_line.z = gen(rng);
+            random_line2.x = gen(rng);
+            random_line2.y = gen(rng);
+            random_line2.z = gen(rng);
         }
 
         std::vector<std::pair<VPL, float>> ordered_projections;
@@ -329,8 +330,8 @@ std::vector<VPL> calculateClustering(std::vector<VPL> vpls, std::vector<float> c
             total_lum += cluster.first[i].P.getLuminance();
         }
 
-        auto gen_representative = std::bind(std::uniform_real_distribution<float>(0.f, total_contrib), rng);
-        float representative = gen_representative();
+        std::uniform_real_distribution<float> gen_representative(0.f, total_contrib);
+        float representative = gen_representative(rng);
 
         std::uint32_t representative_idx = cluster.first.size() - 1;
 

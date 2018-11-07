@@ -11,14 +11,15 @@
 
 #include "lighttree.h"
 #include "rowcolumnsampling.h"
+#include "matrixreconstruction.h"
 
 MTS_NAMESPACE_BEGIN
 
 const double PI = 3.14159265359;
 
 enum CLUSTERING_STRATEGY{
-		NONE = 0, LIGHTCUTS, ROWCOLSAMPLING,
-		CLUSTER_STRATEGY_MIN = NONE, CLUSTER_STRATEGY_MAX = ROWCOLSAMPLING 
+		NONE = 0, LIGHTCUTS, ROWCOLSAMPLING, MATRIXRECONSTRUCTION,
+		CLUSTER_STRATEGY_MIN = NONE, CLUSTER_STRATEGY_MAX = MATRIXRECONSTRUCTION 
 	};
 
 float calculateMinDistance(const Scene *scene, const std::vector<VPL>& vpls, float clamping){
@@ -230,6 +231,7 @@ public:
 		clustering_strategy_(NONE), 
 		light_tree_(nullptr),
 		row_col_clusterer_(nullptr),
+		matrix_reconstruction_renderer_(nullptr),
 		lightcuts_error_threshold_(props.getFloat("lightcutsThreshold", 0.02f)),
 		num_clusters_(props.getInteger("numClusters", 20)),
 		rows_(props.getInteger("rows", 100)){
@@ -269,6 +271,9 @@ public:
 				new RowColumnSampling(vpls_, rows_, num_clusters_, 
 				std::make_tuple(scene->getFilm()->getSize().x, scene->getFilm()->getSize().y), scene, min_dist_));
 		}
+		else if(clustering_strategy_ == MATRIXRECONSTRUCTION){
+			matrix_reconstruction_renderer_ = std::unique_ptr<MatrixReconstructionRenderer>(new MatrixReconstructionRenderer());
+		}
 
 		Log(EInfo, "Generated %i virtual point lights", vpls_.size());
 
@@ -293,6 +298,12 @@ public:
 		}
 
 		std::uint8_t *image_buffer = output_image_->getUInt8Data();
+
+		if(clustering_strategy_ == MATRIXRECONSTRUCTION){
+			cancel_ = matrix_reconstruction_renderer_->Render(scene, vpls_, std::make_pair(10, 10), vpls_.size() / 10, min_dist_, image_buffer);
+			film->setBitmap(output_image_);
+			return !cancel_;
+		}
 
 		Properties props("independent");
 		Sampler *sampler = static_cast<Sampler*>(PluginManager::getInstance()->createObject(MTS_CLASS(Sampler), props));
@@ -423,6 +434,7 @@ private:
 	CLUSTERING_STRATEGY clustering_strategy_;
 	std::unique_ptr<LightTree> light_tree_;
 	std::unique_ptr<RowColumnSampling> row_col_clusterer_;
+	std::unique_ptr<MatrixReconstructionRenderer> matrix_reconstruction_renderer_;
 	float lightcuts_error_threshold_;
 	int num_clusters_, rows_;
 };

@@ -18,9 +18,17 @@ public:
     MatrixReconstructionRenderer& operator = (MatrixReconstructionRenderer&& other);
     ~MatrixReconstructionRenderer();
 
-    void Render(Scene* scene, const std::vector<VPL>& vpls, 
-        const std::pair<std::uint32_t, std::uint32_t>& bucket_size, const std::uint32_t& light_samples, float min_dist);
-}
+    bool Render(Scene* scene, const std::vector<VPL>& vpls, 
+        const std::pair<std::uint32_t, std::uint32_t>& bucket_size, const std::uint32_t& light_samples, 
+        float min_dist, std::uint8_t* output_image);
+
+    void setCancel(bool cancel){
+        cancel_ = cancel;
+    }
+
+private:
+    bool cancel_;
+};
 
 MTS_NAMESPACE_END
 
