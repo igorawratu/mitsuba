@@ -300,7 +300,8 @@ public:
 		std::uint8_t *image_buffer = output_image_->getUInt8Data();
 
 		if(clustering_strategy_ == MATRIXRECONSTRUCTION){
-			cancel_ = matrix_reconstruction_renderer_->Render(scene, vpls_, std::make_pair(10, 10), vpls_.size() / 10, min_dist_, image_buffer);
+			cancel_ = matrix_reconstruction_renderer_->Render(scene, vpls_, std::make_pair(3, 3), 
+				vpls_.size() / 5, min_dist_, image_buffer, 1.2, 0.01, 0.005, 100);
 			film->setBitmap(output_image_);
 			return !cancel_;
 		}

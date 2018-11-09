@@ -161,9 +161,55 @@ void copyMatrixToBuffer(std::uint8_t* output_image, Eigen::MatrixXf& light_matri
     }
 }
 
+void svt(Eigen::MatrixXf& reconstructed_matrix, const Eigen::MatrixXf& lighting_matrix, float step_size, 
+    float tolerance, float tau, std::uint32_t max_iterations, 
+    const std::vector<std::pair<std::uint32_t, std::uint32_t>>& sampled_indices){
+
+    std::uint32_t k0 = tau / (step_size * lighting_matrix.norm()) + 1.5f; //extra .5 for rounding in case of float error
+    Eigen::MatrixXf y = step_size * (float)k0 * lighting_matrix;
+
+    for(std::uint32_t i = 0; i < max_iterations; ++i){
+        std::cout << "Computing svd for iteration " << i << std::endl;
+        auto svd = y.bdcSvd(Eigen::ComputeFullU | Eigen::ComputeFullV);
+
+        std::cout << "Reconstructing matrix for iteration " << i << std::endl;
+        auto singular_values = svd.singularValues();
+        Eigen::MatrixXf diagonal_singular = Eigen::MatrixXf::Zero(svd.matrixU().rows(), svd.matrixV().rows());
+
+        float trace = 0.f;
+        for(std::uint32_t j = 0; j < singular_values.rows(); ++j){
+            diagonal_singular(j, j) = std::max(0.f, singular_values(j, 0) - tau);
+            trace += diagonal_singular(j, j);
+        }
+
+        reconstructed_matrix = svd.matrixU() * diagonal_singular * svd.matrixV().conjugate();
+
+        auto mat = reconstructed_matrix - lighting_matrix;
+        
+        std::cout << reconstructed_matrix.norm() << " " << trace << std::endl;
+        float ratio = mat.norm() / lighting_matrix.norm();
+        std::cout << ratio << std::endl;
+        if(ratio < tolerance){
+            break;
+        }
+
+        /*for(std::uint32_t j = 0; j < sampled_indices.size(); ++j){
+            for(int k = 0; k < 3; ++k){
+                std::uint32_t row = sampled_indices[j].first * 3 + k;
+                std::uint32_t col = sampled_indices[j].second;
+
+                float step = lighting_matrix(row, col) - reconstructed_matrix(row, col);
+                y(row, col) += step_size * step;
+            }
+        }*/
+
+        y += step_size * (lighting_matrix - reconstructed_matrix);
+    }
+}
+
 bool MatrixReconstructionRenderer::Render(Scene* scene, const std::vector<VPL>& vpls,
     const std::pair<std::uint32_t, std::uint32_t>& bucket_size, const std::uint32_t& light_samples, float min_dist,
-    std::uint8_t* output_image){
+    std::uint8_t* output_image, float step_size_factor, float tolerance, float tau, std::uint32_t max_iterations){
 
     if(scene == nullptr || vpls.size() == 0 || output_image == nullptr){
         return true;
@@ -184,9 +230,14 @@ bool MatrixReconstructionRenderer::Render(Scene* scene, const std::vector<VPL>& 
     auto indices_to_compute = generateComputableIndices(bucket_size, size, vpls.size(), light_samples);
     calculateSparseSamples(scene, vpls, lighting_matrix, indices_to_compute, size, min_dist);
     
-    //nuclear norm minimization here
+    Eigen::MatrixXf reconstructed_matrix;
 
-    copyMatrixToBuffer(output_image, lighting_matrix, size);
+    float step_size = step_size_factor * (float)(indices_to_compute.size() * 3) / 
+        (float)(lighting_matrix.rows() * lighting_matrix.cols());
+
+    svt(reconstructed_matrix, lighting_matrix, step_size, tolerance, tau, max_iterations, indices_to_compute);
+
+    copyMatrixToBuffer(output_image, reconstructed_matrix, size);
 
     return cancel_;
 }

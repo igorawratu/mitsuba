@@ -20,7 +20,8 @@ public:
 
     bool Render(Scene* scene, const std::vector<VPL>& vpls, 
         const std::pair<std::uint32_t, std::uint32_t>& bucket_size, const std::uint32_t& light_samples, 
-        float min_dist, std::uint8_t* output_image);
+        float min_dist, std::uint8_t* output_image, float step_size_factor, float tolerance, float tau,
+        std::uint32_t max_iterations);
 
     void setCancel(bool cancel){
         cancel_ = cancel;
