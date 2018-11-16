@@ -4,6 +4,8 @@
 #include <chrono>
 #include <algorithm>
 #include <set>
+#include <fstream>
+#include <string>
 
 MTS_NAMESPACE_BEGIN
 
@@ -161,6 +163,27 @@ void copyMatrixToBuffer(std::uint8_t* output_image, Eigen::MatrixXf& light_matri
     }
 }
 
+void printToFile(const std::vector<float>& vals, std::string filename, std::ios_base::openmode mode, bool new_line, 
+    std::streamsize precision = 0){
+
+    std::ofstream output_file;
+    output_file.open(filename, mode);
+
+    if(precision > 0){
+        output_file.precision(precision);
+    }
+
+    for(std::uint32_t i = 0; i < vals.size(); ++i){
+        output_file << vals[i] << " ";
+        if(new_line) 
+            output_file << std::endl;
+    }
+
+    if(!new_line) output_file << std::endl;
+
+    output_file.close();
+}
+
 void svt(Eigen::MatrixXf& reconstructed_matrix, const Eigen::MatrixXf& lighting_matrix, float step_size, 
     float tolerance, float tau, std::uint32_t max_iterations, 
     const std::vector<std::pair<std::uint32_t, std::uint32_t>>& sampled_indices){
@@ -168,43 +191,66 @@ void svt(Eigen::MatrixXf& reconstructed_matrix, const Eigen::MatrixXf& lighting_
     std::uint32_t k0 = tau / (step_size * lighting_matrix.norm()) + 1.5f; //extra .5 for rounding in case of float error
     Eigen::MatrixXf y = step_size * (float)k0 * lighting_matrix;
 
+    std::vector<float> error;
+    std::vector<float> trace;
+
     for(std::uint32_t i = 0; i < max_iterations; ++i){
         std::cout << "Computing svd for iteration " << i << std::endl;
-        auto svd = y.bdcSvd(Eigen::ComputeFullU | Eigen::ComputeFullV);
+        auto svd = y.jacobiSvd(Eigen::ComputeFullU | Eigen::ComputeFullV);
 
         std::cout << "Reconstructing matrix for iteration " << i << std::endl;
         auto singular_values = svd.singularValues();
         Eigen::MatrixXf diagonal_singular = Eigen::MatrixXf::Zero(svd.matrixU().rows(), svd.matrixV().rows());
-
-        float trace = 0.f;
+        
         for(std::uint32_t j = 0; j < singular_values.rows(); ++j){
             diagonal_singular(j, j) = std::max(0.f, singular_values(j, 0) - tau);
-            trace += diagonal_singular(j, j);
         }
 
-        reconstructed_matrix = svd.matrixU() * diagonal_singular * svd.matrixV().conjugate();
+        reconstructed_matrix = svd.matrixU() * diagonal_singular * svd.matrixV().transpose();
 
-        auto mat = reconstructed_matrix - lighting_matrix;
+        auto reconsvd = reconstructed_matrix.jacobiSvd();
+        auto sv = reconsvd.singularValues();
         
-        std::cout << reconstructed_matrix.norm() << " " << trace << std::endl;
-        float ratio = mat.norm() / lighting_matrix.norm();
+        float tn = 0.f;
+        for(std::uint32_t j = 0; j < sv.rows(); ++j){
+            tn += sv(j, 0);
+        }
+        trace.push_back(tn);
+
+        float numer_total_dist = 0.f;
+
+        for(std::uint32_t j = 0; j < sampled_indices.size(); ++j){
+            for(std::uint32_t k = 0; k < 3; ++k){
+                std::uint32_t row = sampled_indices[j].first * 3 + k;
+                std::uint32_t col = sampled_indices[j].second;
+
+                float d = reconstructed_matrix(row, col) - lighting_matrix(row, col);
+                numer_total_dist += d * d;
+            }
+        }
+
+        float ratio = sqrt(numer_total_dist) / lighting_matrix.norm();
+
+        error.push_back(ratio);
+
         std::cout << ratio << std::endl;
         if(ratio < tolerance){
             break;
         }
 
-        /*for(std::uint32_t j = 0; j < sampled_indices.size(); ++j){
-            for(int k = 0; k < 3; ++k){
+        for(std::uint32_t j = 0; j < sampled_indices.size(); ++j){
+            for(std::uint32_t k = 0; k < 3; ++k){
                 std::uint32_t row = sampled_indices[j].first * 3 + k;
                 std::uint32_t col = sampled_indices[j].second;
 
                 float step = lighting_matrix(row, col) - reconstructed_matrix(row, col);
                 y(row, col) += step_size * step;
             }
-        }*/
-
-        y += step_size * (lighting_matrix - reconstructed_matrix);
+        }
     }
+
+    printToFile(trace, "trace.txt", std::ios::out, true);
+    printToFile(error, "error.txt", std::ios::out, true);
 }
 
 bool MatrixReconstructionRenderer::Render(Scene* scene, const std::vector<VPL>& vpls,
@@ -229,15 +275,72 @@ bool MatrixReconstructionRenderer::Render(Scene* scene, const std::vector<VPL>& 
 
     auto indices_to_compute = generateComputableIndices(bucket_size, size, vpls.size(), light_samples);
     calculateSparseSamples(scene, vpls, lighting_matrix, indices_to_compute, size, min_dist);
+
+    auto svd = lighting_matrix.jacobiSvd(Eigen::ComputeFullU | Eigen::ComputeFullV);
+    auto singular_values = svd.singularValues();
+    Eigen::MatrixXf diagonal_singular = Eigen::MatrixXf::Zero(svd.matrixU().rows(), svd.matrixV().rows());
+
+    std::vector<float> sv_to_write;
+
+    for(std::uint32_t j = 0; j < singular_values.rows(); ++j){
+        diagonal_singular(j, j) = singular_values(j, 0);
+        sv_to_write.push_back(singular_values(j, 0));
+    }
+
+    printToFile(sv_to_write, "originalsv.txt", std::ios::out, true);
+
+    lighting_matrix = svd.matrixU() * diagonal_singular * svd.matrixV().transpose();
     
     Eigen::MatrixXf reconstructed_matrix;
 
-    float step_size = step_size_factor * (float)(indices_to_compute.size() * 3) / 
-        (float)(lighting_matrix.rows() * lighting_matrix.cols());
+    float step_size = 0.2;//step_size_factor * (float)(lighting_matrix.rows() * lighting_matrix.cols()) / 
+        //(float)(indices_to_compute.size() * 3); 
 
     svt(reconstructed_matrix, lighting_matrix, step_size, tolerance, tau, max_iterations, indices_to_compute);
 
+    svd = reconstructed_matrix.jacobiSvd();
+    auto rsv = svd.singularValues();
+    sv_to_write.clear();
+
+    for(std::uint32_t j = 0; j < rsv.rows(); ++j){
+        sv_to_write.push_back(rsv(j, 0));
+    }
+
+    printToFile(sv_to_write, "reconstructedsv.txt", std::ios::out, true);
+
     copyMatrixToBuffer(output_image, reconstructed_matrix, size);
+    
+    printToFile(std::vector<float>(), "initial_matrix.txt", std::ios::out, true);
+    printToFile(std::vector<float>(), "reconstructed_matrix.txt", std::ios::out, true);
+    printToFile(std::vector<float>(), "full_matrix.txt", std::ios::out, true);
+
+    Eigen::MatrixXf full_matrix = Eigen::MatrixXf::Zero(size.x * size.y * 3, vpls.size());
+    auto full_indices = generateComputableIndices(std::make_pair(1, 1), size, vpls.size(), vpls.size());
+    calculateSparseSamples(scene, vpls, full_matrix, full_indices, size, min_dist);
+
+    svd = full_matrix.jacobiSvd();
+    auto fsv = svd.singularValues();
+    sv_to_write.clear();
+
+    for(std::uint32_t j = 0; j < fsv.rows(); ++j){
+        sv_to_write.push_back(fsv(j, 0));
+    }
+
+    printToFile(sv_to_write, "fullsv.txt", std::ios::out, true);
+
+    std::vector<float> init_row(lighting_matrix.cols());
+    std::vector<float> recon_row(lighting_matrix.cols());
+    std::vector<float> full_row(lighting_matrix.cols());
+    for(std::uint32_t i = 0; i < lighting_matrix.rows(); ++i){
+        for(std::uint32_t j = 0; j < lighting_matrix.cols(); ++j){
+            init_row[j] = lighting_matrix(i, j);
+            recon_row[j] = reconstructed_matrix(i, j);
+            full_row[j] = full_matrix(i, j);
+        }
+        printToFile(init_row, "initial_matrix.txt", std::ios::out | std::ios::app, false, 2);
+        printToFile(recon_row, "reconstructed_matrix.txt", std::ios::out | std::ios::app, false, 2);
+        printToFile(full_row, "full_matrix.txt", std::ios::out | std::ios::app, false, 2);
+    }
 
     return cancel_;
 }
