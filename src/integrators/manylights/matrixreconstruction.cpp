@@ -293,7 +293,7 @@ bool MatrixReconstructionRenderer::Render(Scene* scene, const std::vector<VPL>& 
     
     Eigen::MatrixXf reconstructed_matrix;
 
-    float step_size = 0.2;//step_size_factor * (float)(lighting_matrix.rows() * lighting_matrix.cols()) / 
+    float step_size = 1.5f;//step_size_factor * (float)(lighting_matrix.rows() * lighting_matrix.cols()) / 
         //(float)(indices_to_compute.size() * 3); 
 
     svt(reconstructed_matrix, lighting_matrix, step_size, tolerance, tau, max_iterations, indices_to_compute);
