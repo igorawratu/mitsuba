@@ -13,6 +13,8 @@
 #include "rowcolumnsampling.h"
 #include "matrixreconstruction.h"
 
+#include "manylightsrenderer.h"
+
 MTS_NAMESPACE_BEGIN
 
 const double PI = 3.14159265359;

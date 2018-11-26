@@ -1,7 +1,42 @@
 #ifndef MANYLIGHTSRENDERER_H_
 #define MANYLIGHTSRENDERER_H_
 
-//some thought needs to go into how to generalize the clusterer-renderer duo to be generic
-//preferably with templates and not class hierarchies
+#include <tuple>
+
+#include <mitsuba/render/vpl.h>
+#include <mitsuba/render/shape.h>
+
+MTS_NAMESPACE_BEGIN
+
+template<typename... Ts> struct fake_dependency: public std::false_type {};
+
+template<typename... Ts>
+class ManyLightsRenderer{
+    ManyLightsRenderer(){
+        static_assert(fake_dependency<Ts...>::value, "Many lights renderer specialization must be in the form of <ClustererType, std::tuple<ClusterInitParams...>, RendererType, std::tuple<RendererInitParams...>>");
+    }
+};
+
+template<typename ClustererType, typename... ClusterInitParams, typename RendererType, typename... RendererInitParams> 
+class ManyLightsRenderer<ClustererType, std::tuple<ClusterInitParams...>, RendererType, std::tuple<RendererInitParams...>>{
+public:  
+    ManyLightsRenderer(ClusterInitParams... cluster_init_params, RendererInitParams... renderer_init_params) : 
+        clusterer_(cluster_init_params...), renderer_(renderer_init_params...){
+    }
+
+    void render(Scene* scene){
+        renderer_.render(clusterer_, scene);
+    }
+
+    void setCancel(bool cancel_){
+        renderer_.setCancel(cancel_);
+    }
+
+private:
+    ClustererType clusterer_;
+    RendererType renderer_;
+};
+
+MTS_NAMESPACE_END
 
 #endif
