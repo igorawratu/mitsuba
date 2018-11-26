@@ -11,23 +11,27 @@ MTS_NAMESPACE_BEGIN
 
 class MatrixReconstructionRenderer{
 public:
-    MatrixReconstructionRenderer();
+    MatrixReconstructionRenderer() = delete;
+    MatrixReconstructionRenderer(std::pair<std::uint32_t, std::uint32_t> bucket_size, std::uint32_t light_samples, 
+        float min_dist, float step_size_factor, float tolerance, float tau, std::uint32_t max_iterations);
     MatrixReconstructionRenderer(const MatrixReconstructionRenderer& other);
     MatrixReconstructionRenderer(MatrixReconstructionRenderer&& other);
     MatrixReconstructionRenderer& operator = (const MatrixReconstructionRenderer& other);
     MatrixReconstructionRenderer& operator = (MatrixReconstructionRenderer&& other);
     ~MatrixReconstructionRenderer();
 
-    bool Render(Scene* scene, const std::vector<VPL>& vpls, 
-        const std::pair<std::uint32_t, std::uint32_t>& bucket_size, const std::uint32_t& light_samples, 
-        float min_dist, std::uint8_t* output_image, float step_size_factor, float tolerance, float tau,
-        std::uint32_t max_iterations);
+    bool Render(const std::vector<VPL>& vpls, Scene* scene);
 
     void setCancel(bool cancel){
         cancel_ = cancel;
     }
 
 private:
+    std::pair<std::uint32_t, std::uint32_t> bucket_size_;
+    std::uint32_t light_samples_;
+    float min_dist_, step_size_factor_, tolerance_, tau_;
+    std::uint32_t max_iterations_;
+    
     bool cancel_;
 };
 

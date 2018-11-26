@@ -9,20 +9,32 @@
 
 MTS_NAMESPACE_BEGIN
 
-MatrixReconstructionRenderer::MatrixReconstructionRenderer() : cancel_(false){
+MatrixReconstructionRenderer::MatrixReconstructionRenderer(std::pair<std::uint32_t, std::uint32_t> bucket_size,
+    std::uint32_t light_samples, float min_dist, float step_size_factor, float tolerance, float tau, 
+    std::uint32_t max_iterations) : bucket_size_(bucket_size), light_samples_(light_samples), min_dist_(min_dist),
+    step_size_factor_(step_size_factor), tolerance_(tolerance), tau_(tau), max_iterations_(max_iterations), cancel_(false){
+}
+
+MatrixReconstructionRenderer::MatrixReconstructionRenderer(const MatrixReconstructionRenderer& other) : bucket_size_(other.bucket_size_), 
+    light_samples_(other.light_samples_), min_dist_(other.min_dist_), step_size_factor_(other.step_size_factor_), tolerance_(other.tolerance_), 
+    tau_(other.tau_), max_iterations_(other.max_iterations_), cancel_(other.cancel_){
 
 }
 
-MatrixReconstructionRenderer::MatrixReconstructionRenderer(const MatrixReconstructionRenderer& other) : cancel_(other.cancel_){
-
-}
-
-MatrixReconstructionRenderer::MatrixReconstructionRenderer(MatrixReconstructionRenderer&& other) : cancel_(other.cancel_){
-
+MatrixReconstructionRenderer::MatrixReconstructionRenderer(MatrixReconstructionRenderer&& other) : bucket_size_(other.bucket_size_), 
+    light_samples_(other.light_samples_), min_dist_(other.min_dist_), step_size_factor_(other.step_size_factor_), tolerance_(other.tolerance_), 
+    tau_(other.tau_), max_iterations_(other.max_iterations_), cancel_(other.cancel_){
 }
 
 MatrixReconstructionRenderer& MatrixReconstructionRenderer::operator = (const MatrixReconstructionRenderer& other){
     if(this != &other){
+        bucket_size_ = other.bucket_size_; 
+        light_samples_ = other.light_samples_;
+        min_dist_ = other.min_dist_;
+        step_size_factor_ = other.step_size_factor_;
+        tolerance_ = other.tolerance_; 
+        tau_ = other.tau_;
+        max_iterations_ = other.max_iterations_;
         cancel_ = other.cancel_;
     }
     return *this;
@@ -30,6 +42,13 @@ MatrixReconstructionRenderer& MatrixReconstructionRenderer::operator = (const Ma
 
 MatrixReconstructionRenderer& MatrixReconstructionRenderer::operator = (MatrixReconstructionRenderer&& other){
     if(this != &other){
+        bucket_size_ = other.bucket_size_; 
+        light_samples_ = other.light_samples_;
+        min_dist_ = other.min_dist_;
+        step_size_factor_ = other.step_size_factor_;
+        tolerance_ = other.tolerance_; 
+        tau_ = other.tau_;
+        max_iterations_ = other.max_iterations_;
         cancel_ = other.cancel_;
     }
     return *this;
@@ -253,11 +272,9 @@ void svt(Eigen::MatrixXf& reconstructed_matrix, const Eigen::MatrixXf& lighting_
     printToFile(error, "error.txt", std::ios::out, true);
 }
 
-bool MatrixReconstructionRenderer::Render(Scene* scene, const std::vector<VPL>& vpls,
-    const std::pair<std::uint32_t, std::uint32_t>& bucket_size, const std::uint32_t& light_samples, float min_dist,
-    std::uint8_t* output_image, float step_size_factor, float tolerance, float tau, std::uint32_t max_iterations){
+bool MatrixReconstructionRenderer::Render(const std::vector<VPL>& vpls, Scene* scene){
 
-    if(scene == nullptr || vpls.size() == 0 || output_image == nullptr){
+    if(scene == nullptr || vpls.size() == 0){
         return true;
     }
 
@@ -271,10 +288,13 @@ bool MatrixReconstructionRenderer::Render(Scene* scene, const std::vector<VPL>& 
         return true;
     }
 
+    ref<Bitmap> output_bitmap = new Bitmap(Bitmap::ERGB, Bitmap::EUInt8, size);
+    std::uint8_t* output_image = output_bitmap->getUInt8Data();
+
     Eigen::MatrixXf lighting_matrix = Eigen::MatrixXf::Zero(size.x * size.y * 3, vpls.size());
 
-    auto indices_to_compute = generateComputableIndices(bucket_size, size, vpls.size(), light_samples);
-    calculateSparseSamples(scene, vpls, lighting_matrix, indices_to_compute, size, min_dist);
+    auto indices_to_compute = generateComputableIndices(bucket_size_, size, vpls.size(), light_samples_);
+    calculateSparseSamples(scene, vpls, lighting_matrix, indices_to_compute, size, min_dist_);
 
     auto svd = lighting_matrix.jacobiSvd(Eigen::ComputeFullU | Eigen::ComputeFullV);
     auto singular_values = svd.singularValues();
@@ -296,7 +316,7 @@ bool MatrixReconstructionRenderer::Render(Scene* scene, const std::vector<VPL>& 
     float step_size = 1.5f;//step_size_factor * (float)(lighting_matrix.rows() * lighting_matrix.cols()) / 
         //(float)(indices_to_compute.size() * 3); 
 
-    svt(reconstructed_matrix, lighting_matrix, step_size, tolerance, tau, max_iterations, indices_to_compute);
+    svt(reconstructed_matrix, lighting_matrix, step_size, tolerance_, tau_, max_iterations_, indices_to_compute);
 
     svd = reconstructed_matrix.jacobiSvd();
     auto rsv = svd.singularValues();
@@ -316,7 +336,7 @@ bool MatrixReconstructionRenderer::Render(Scene* scene, const std::vector<VPL>& 
 
     Eigen::MatrixXf full_matrix = Eigen::MatrixXf::Zero(size.x * size.y * 3, vpls.size());
     auto full_indices = generateComputableIndices(std::make_pair(1, 1), size, vpls.size(), vpls.size());
-    calculateSparseSamples(scene, vpls, full_matrix, full_indices, size, min_dist);
+    calculateSparseSamples(scene, vpls, full_matrix, full_indices, size, min_dist_);
 
     svd = full_matrix.jacobiSvd();
     auto fsv = svd.singularValues();

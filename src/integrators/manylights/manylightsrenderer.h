@@ -8,6 +8,8 @@
 
 MTS_NAMESPACE_BEGIN
 
+//needs this otherwise the static_assert evaluates immediately rather than when the incorrect templated class is
+//actually instantiated
 template<typename... Ts> struct fake_dependency: public std::false_type {};
 
 template<typename... Ts>
