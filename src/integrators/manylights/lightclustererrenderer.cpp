@@ -2,11 +2,12 @@
 
 #include <mitsuba/core/plugin.h>
 #include "definitions.h"
+#include <iostream>
 
 MTS_NAMESPACE_BEGIN
 
 LightClustererRenderer::LightClustererRenderer(std::unique_ptr<ManyLightsClusterer> clusterer, float min_dist) : min_dist_(min_dist),
-    clusterer_(std::move(clusterer_)), cancel_(false){
+    clusterer_(std::move(clusterer)), cancel_(false){
 }
 
 LightClustererRenderer::LightClustererRenderer(LightClustererRenderer&& other) : clusterer_(std::move(other.clusterer_)),
@@ -26,6 +27,7 @@ LightClustererRenderer::~LightClustererRenderer(){
 }
 
 bool LightClustererRenderer::render(Scene* scene){
+    std::cout << "hello" << std::endl;
     {
         std::lock_guard<std::mutex> lock(cancel_lock_);
         cancel_ = false;
