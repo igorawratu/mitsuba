@@ -7,9 +7,11 @@
 #include <vector>
 #include <tuple>
 
+#include "manylightsbase.h"
+
 MTS_NAMESPACE_BEGIN
 
-class RowColumnSampling{
+class RowColumnSampling : public ManyLightsClusterer{
 public:
     RowColumnSampling() = delete;
     RowColumnSampling(const std::vector<VPL>& vpls, std::uint32_t rows, std::uint32_t cols,
@@ -20,10 +22,7 @@ public:
     RowColumnSampling& operator = (RowColumnSampling&& other);
     ~RowColumnSampling();
 
-    void updateClustering(const std::vector<VPL>& vpls, std::uint32_t rows, std::uint32_t cols,
-        std::tuple<std::uint32_t, std::uint32_t> resolution, const Scene* scene, float min_dist);
-
-    std::vector<VPL> getClusteringForPoint();
+    std::vector<VPL> getClusteringForPoint(const Intersection& its);
 
 private:
     std::vector<VPL> clustering_;

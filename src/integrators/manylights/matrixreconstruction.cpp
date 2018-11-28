@@ -6,42 +6,26 @@
 #include <set>
 #include <fstream>
 #include <string>
+#include "definitions.h"
+#include <utility>
+#include <eigen3/Eigen/Dense>
 
 MTS_NAMESPACE_BEGIN
 
-MatrixReconstructionRenderer::MatrixReconstructionRenderer(std::pair<std::uint32_t, std::uint32_t> bucket_size,
+MatrixReconstructionRenderer::MatrixReconstructionRenderer(std::unique_ptr<ManyLightsClusterer> clusterer, std::pair<std::uint32_t, std::uint32_t> bucket_size,
     std::uint32_t light_samples, float min_dist, float step_size_factor, float tolerance, float tau, 
-    std::uint32_t max_iterations) : bucket_size_(bucket_size), light_samples_(light_samples), min_dist_(min_dist),
+    std::uint32_t max_iterations) : clusterer_(std::move(clusterer)), bucket_size_(bucket_size), light_samples_(light_samples), min_dist_(min_dist),
     step_size_factor_(step_size_factor), tolerance_(tolerance), tau_(tau), max_iterations_(max_iterations), cancel_(false){
 }
 
-MatrixReconstructionRenderer::MatrixReconstructionRenderer(const MatrixReconstructionRenderer& other) : bucket_size_(other.bucket_size_), 
-    light_samples_(other.light_samples_), min_dist_(other.min_dist_), step_size_factor_(other.step_size_factor_), tolerance_(other.tolerance_), 
-    tau_(other.tau_), max_iterations_(other.max_iterations_), cancel_(other.cancel_){
-
-}
-
-MatrixReconstructionRenderer::MatrixReconstructionRenderer(MatrixReconstructionRenderer&& other) : bucket_size_(other.bucket_size_), 
-    light_samples_(other.light_samples_), min_dist_(other.min_dist_), step_size_factor_(other.step_size_factor_), tolerance_(other.tolerance_), 
-    tau_(other.tau_), max_iterations_(other.max_iterations_), cancel_(other.cancel_){
-}
-
-MatrixReconstructionRenderer& MatrixReconstructionRenderer::operator = (const MatrixReconstructionRenderer& other){
-    if(this != &other){
-        bucket_size_ = other.bucket_size_; 
-        light_samples_ = other.light_samples_;
-        min_dist_ = other.min_dist_;
-        step_size_factor_ = other.step_size_factor_;
-        tolerance_ = other.tolerance_; 
-        tau_ = other.tau_;
-        max_iterations_ = other.max_iterations_;
-        cancel_ = other.cancel_;
-    }
-    return *this;
+MatrixReconstructionRenderer::MatrixReconstructionRenderer(MatrixReconstructionRenderer&& other) : clusterer_(std::move(other.clusterer_)), 
+    bucket_size_(other.bucket_size_), light_samples_(other.light_samples_), min_dist_(other.min_dist_), 
+    step_size_factor_(other.step_size_factor_), tolerance_(other.tolerance_), tau_(other.tau_), max_iterations_(other.max_iterations_), cancel_(other.cancel_){
 }
 
 MatrixReconstructionRenderer& MatrixReconstructionRenderer::operator = (MatrixReconstructionRenderer&& other){
     if(this != &other){
+        clusterer_ = std::move(other.clusterer_);
         bucket_size_ = other.bucket_size_; 
         light_samples_ = other.light_samples_;
         min_dist_ = other.min_dist_;
@@ -58,8 +42,9 @@ MatrixReconstructionRenderer::~MatrixReconstructionRenderer(){
 
 }
 
-std::vector<std::pair<std::uint32_t, std::uint32_t>> generateComputableIndices(const std::pair<std::uint32_t, std::uint32_t>& bucket_size, 
-    const Vector2i& image_size, std::uint32_t num_lights, std::uint32_t light_samples){
+std::vector<std::pair<std::uint32_t, std::uint32_t>> generateComputableIndices(
+    const std::pair<std::uint32_t, std::uint32_t>& bucket_size, const Vector2i& image_size, std::uint32_t num_lights, 
+    std::uint32_t light_samples){
 
     std::uint32_t x_buckets = image_size.x / bucket_size.first + image_size.x % (bucket_size.first > 0 ? 1 : 0);
     std::uint32_t y_buckets = image_size.y / bucket_size.second + image_size.y % (bucket_size.second > 0 ? 1 : 0);
@@ -97,8 +82,6 @@ std::vector<std::pair<std::uint32_t, std::uint32_t>> generateComputableIndices(c
 
     return indices_to_compute;
 }
-
-const double PI = 3.14159265359;
 
 void calculateSparseSamples(Scene* scene, const std::vector<VPL>& vpls, Eigen::MatrixXf& matrix,
     const std::vector<std::pair<std::uint32_t, std::uint32_t>>& indices, const Vector2i& size, float min_dist){
@@ -272,13 +255,18 @@ void svt(Eigen::MatrixXf& reconstructed_matrix, const Eigen::MatrixXf& lighting_
     printToFile(error, "error.txt", std::ios::out, true);
 }
 
-bool MatrixReconstructionRenderer::Render(const std::vector<VPL>& vpls, Scene* scene){
+bool MatrixReconstructionRenderer::render(Scene* scene){
+    Intersection its;
+    auto vpls = clusterer_->getClusteringForPoint(its);
 
     if(scene == nullptr || vpls.size() == 0){
         return true;
     }
 
-    cancel_ = false;
+    {
+        std::lock_guard<std::mutex> lock(cancel_lock_);
+        cancel_ = false;
+    }
 
     ref<Sensor> sensor = scene->getSensor();
 	ref<Film> film = sensor->getFilm();

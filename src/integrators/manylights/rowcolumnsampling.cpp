@@ -390,16 +390,7 @@ RowColumnSampling::~RowColumnSampling(){
 
 }
 
-void RowColumnSampling::updateClustering(const std::vector<VPL>& vpls, std::uint32_t rows, std::uint32_t cols, 
-    std::tuple<std::uint32_t, std::uint32_t> resolution, const Scene* scene, float min_dist){
-    
-    min_dist_ = min_dist;
-    auto indices = subsampleRows(rows, resolution);
-    auto contributions = calculateLightContributions(vpls, indices, scene, min_dist_);
-    clustering_ = calculateClustering(vpls, contributions, cols, min_dist);
-}
-
-std::vector<VPL> RowColumnSampling::getClusteringForPoint(){
+std::vector<VPL> RowColumnSampling::getClusteringForPoint(const Intersection& its){
     return clustering_;
 }
 

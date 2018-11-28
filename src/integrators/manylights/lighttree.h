@@ -7,6 +7,8 @@
 #include <mitsuba/render/vpl.h>
 #include <mitsuba/render/shape.h>
 
+#include "manylightsbase.h"
+
 MTS_NAMESPACE_BEGIN
 
 struct LightTreeNode{
@@ -65,24 +67,24 @@ struct LightTreeNode{
     Vector3 cone_ray1, cone_ray2;
 };
 
-class LightTree{
+class LightTree : public ManyLightsClusterer{
 public:
     LightTree();
-    LightTree(const std::vector<VPL>& vpls, float min_dist);
+    LightTree(const std::vector<VPL>& vpls, float min_dist, std::uint32_t max_lights, float error_threshold);
     LightTree(const LightTree& other);
     LightTree(LightTree&& other);
     LightTree& operator = (const LightTree& other);
     LightTree& operator = (LightTree&& other);
     ~LightTree();
 
-    void setVPLs(const std::vector<VPL>& vpls, float min_dist);
-    std::vector<VPL> getClusteringForPoint(const Intersection& its, std::uint32_t max_lights, float error_threshold);
-	void setMinDist(float min_dist);
+    std::vector<VPL> getClusteringForPoint(const Intersection& its);
 
 private:
     std::vector<VPL> point_vpls_, directional_vpls_, oriented_vpls_;
     std::unique_ptr<LightTreeNode> point_tree_root_, directional_tree_root_, oriented_tree_root_;
     float min_dist_;
+    std::uint32_t max_lights_;
+    float error_threshold_;
     std::mutex mutex_;
 };
 

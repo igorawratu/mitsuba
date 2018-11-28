@@ -12,12 +12,13 @@
 #include "lighttree.h"
 #include "rowcolumnsampling.h"
 #include "matrixreconstruction.h"
+#include "lightclustererrenderer.h"
+#include "manylightsbase.h"
+#include "passthroughclusterer.h"
 
-#include "manylightsrenderer.h"
+#include "definitions.h"
 
 MTS_NAMESPACE_BEGIN
-
-const double PI = 3.14159265359;
 
 enum CLUSTERING_STRATEGY{
 		NONE = 0, LIGHTCUTS, ROWCOLSAMPLING, MATRIXRECONSTRUCTION,
@@ -229,15 +230,10 @@ public:
 	ManyLightsIntegrator(const Properties &props) : 
 		Integrator(props),
 		max_depth_(props.getInteger("maxDepth", 5)),
+		properties_(props),
 		clamping_(props.getFloat("clamping", 0.1f)),
 		clustering_strategy_(NONE), 
-		light_tree_(nullptr),
-		row_col_clusterer_(nullptr),
-		matrix_reconstruction_renderer_(nullptr),
-		lightcuts_error_threshold_(props.getFloat("lightcutsThreshold", 0.02f)),
-		num_clusters_(props.getInteger("numClusters", 20)),
-		rows_(props.getInteger("rows", 100)){
-		
+		renderer_(nullptr){
 		int strategy = props.getInteger("clusteringStrategy", 0);
 		clustering_strategy_ = strategy < CLUSTER_STRATEGY_MIN || strategy > CLUSTER_STRATEGY_MAX ? 
 			NONE : (CLUSTERING_STRATEGY)strategy;
@@ -265,17 +261,7 @@ public:
 
 		min_dist_ = calculateMinDistance(scene, vpls_, clamping_);
 
-		if (clustering_strategy_ == LIGHTCUTS) {
-			light_tree_ = std::unique_ptr<LightTree>(new LightTree(vpls_, min_dist_));
-		}
-		else if(clustering_strategy_ == ROWCOLSAMPLING){
-			row_col_clusterer_ = std::unique_ptr<RowColumnSampling>(
-				new RowColumnSampling(vpls_, rows_, num_clusters_, 
-				std::make_tuple(scene->getFilm()->getSize().x, scene->getFilm()->getSize().y), scene, min_dist_));
-		}
-		else if(clustering_strategy_ == MATRIXRECONSTRUCTION){
-			matrix_reconstruction_renderer_ = std::unique_ptr<MatrixReconstructionRenderer>(new MatrixReconstructionRenderer());
-		}
+		renderer_ = initializeRendererByStrategy(scene, properties_, clustering_strategy_);
 
 		Log(EInfo, "Generated %i virtual point lights", vpls_.size());
 
@@ -283,163 +269,77 @@ public:
 	}
 
 	void cancel() {
-		std::lock_guard<std::mutex> lock(cancel_lock_);
-		cancel_ = true;
+		if(renderer_ != nullptr){
+			renderer_->setCancel(true);
+		}
 	}
 
 	bool render(Scene *scene, RenderQueue *queue, const RenderJob *job, int sceneResID, int sensorResID, int samplerResID) {
-		{
-			std::lock_guard<std::mutex> lock(cancel_lock_);
-			cancel_ = false;
+		if(renderer_ != nullptr){
+			return renderer_->render(scene);
 		}
 
-		ref<Sensor> sensor = scene->getSensor();
-		ref<Film> film = sensor->getFilm();
-		if (output_image_ == nullptr || output_image_->getSize() != film->getSize()) {
-			output_image_ = createBitmap(film->getSize());
-		}
-
-		std::uint8_t *image_buffer = output_image_->getUInt8Data();
-
-		if(clustering_strategy_ == MATRIXRECONSTRUCTION){
-			cancel_ = matrix_reconstruction_renderer_->Render(scene, vpls_, std::make_pair(2, 1), 
-				vpls_.size() / 2, min_dist_, image_buffer, 1.2, 0.0001, 5, 1000);
-			film->setBitmap(output_image_);
-			return !cancel_;
-		}
-
-		Properties props("independent");
-		Sampler *sampler = static_cast<Sampler*>(PluginManager::getInstance()->createObject(MTS_CLASS(Sampler), props));
-		sampler->configure();
-		sampler->generate(Point2i(0));
-
-		for (std::int32_t y = 0; y < output_image_->getSize().y; ++y) {
-			{
-				std::lock_guard<std::mutex> lock(cancel_lock_);
-				if (cancel_) {
-					break;
-				}
-			}
-
-			#pragma omp parallel for
-			for (std::int32_t x = 0; x < output_image_->getSize().x; ++x) {
-				Ray ray;
-
-				Point2 sample_position(x + 0.5f, y + 0.5f);
-				
-				//disregarding aperture and time sampling for now, as we are only dealing with a single sample per pixel
-				Point2 aperture_sample(0.5f, 0.5f);
-				Float time_sample(0.5f);
-
-				sensor->sampleRay(ray, sample_position, aperture_sample, time_sample);
-
-				Intersection its;
-
-				Point2i curr_pixel(x, y);
-				Spectrum accumulator(0.f);
-
-				if (scene->rayIntersect(ray, its)) {
-					Normal n = its.geoFrame.n;
-
-					Spectrum albedo(0.f);
-
-					if(its.isEmitter()){
-						output_image_->setPixel(curr_pixel, its.Le(-ray.d));
-						continue;
-					}
-
-					std::vector<VPL> vpls;
-					if (clustering_strategy_ == NONE) {
-						vpls = vpls_;
-					}
-					else if (clustering_strategy_ == LIGHTCUTS){
-						vpls = light_tree_->getClusteringForPoint(its, num_clusters_, lightcuts_error_threshold_);
-					}
-					else if(clustering_strategy_ == ROWCOLSAMPLING){
-						vpls = row_col_clusterer_->getClusteringForPoint();
-					}
- 
-					for (std::uint32_t i = 0; i < vpls.size(); ++i) {
-						Point ray_origin = its.p;
-						Ray shadow_ray(ray_origin, normalize(vpls[i].its.p - ray_origin), ray.time);
-
-						Float t;
-						ConstShapePtr shape;
-						Normal norm;
-						Point2 uv;
-
-						if(scene->rayIntersect(shadow_ray, t, shape, norm, uv)){
-							if(abs((ray_origin - vpls[i].its.p).length() - t) > 0.0001f ){
-								continue;
-							}
-						}
-
-						BSDFSamplingRecord bsdf_sample_record(its, sampler, ERadiance);
-						bsdf_sample_record.wi = its.toLocal(normalize(vpls[i].its.p - its.p));
-						bsdf_sample_record.wo = its.toLocal(n);
-
-						albedo = its.getBSDF()->eval(bsdf_sample_record);
-
-						//only dealing with emitter and surface VPLs curently.
-						if (vpls[i].type != EPointEmitterVPL && vpls[i].type != ESurfaceVPL){
-							continue;
-						}
-
-						float d = std::max((its.p - vpls[i].its.p).length(), min_dist_);
-						float attenuation = 1.f / (d * d);
-
-						float n_dot_ldir = std::max(0.f, dot(normalize(n), normalize(vpls[i].its.p - its.p)));
-						float ln_dot_ldir = std::max(0.f, dot(normalize(vpls[i].its.shFrame.n), normalize(its.p - vpls[i].its.p)));
-
-						/*if((its.p - vpls[i].its.p).length() < 10.f){
-							accumulator += Spectrum(100.f);
-						}
-						else */accumulator += (vpls[i].P * ln_dot_ldir * attenuation * n_dot_ldir * albedo) / PI;
-					}
-				}
-
-				float r, g, b;
-				accumulator.toSRGB(r, g, b);
-
-				//can set the buffer directly since we have direct control over the format of the image
-				std::uint32_t offset = (x + y * output_image_->getSize().x) * output_image_->getBytesPerPixel();
-				
-				image_buffer[offset] = std::min(1.f, r) * 255 + 0.5f;
-				image_buffer[offset + 1] = std::min(1.f, g) * 255 + 0.5f;
-				image_buffer[offset + 2] = std::min(1.f, b) * 255 + 0.5f;
-			}
-		}
-
-		film->setBitmap(output_image_);
-
-		return !cancel_;
+		return false;
 	}
 
 	MTS_DECLARE_CLASS()
 
 private:
-	ref<Bitmap> createBitmap(const Vector2i& dimensions) {
-		if(dimensions.x <= 0 || dimensions.y <= 0){
-			return nullptr;
+	std::unique_ptr<ManyLightsRenderer> initializeRendererByStrategy(const Scene* scene, const Properties& props, CLUSTERING_STRATEGY strategy){
+		switch(strategy){
+			case NONE:
+			{
+				std::unique_ptr<ManyLightsClusterer> clusterer(new PassthroughClusterer(vpls_));
+				return std::unique_ptr<ManyLightsRenderer>(new LightClustererRenderer(std::move(clusterer), min_dist_));
+			}
+			case LIGHTCUTS:
+			{
+				int max_lights = props.getInteger("numClusters", 64);
+				float error_threshold = props.getFloat("error_threshold", 0.02);
+				std::unique_ptr<ManyLightsClusterer> clusterer(new LightTree(vpls_, min_dist_, max_lights, error_threshold));
+				return std::unique_ptr<ManyLightsRenderer>(new LightClustererRenderer(std::move(clusterer), min_dist_));
+			}
+			case ROWCOLSAMPLING:
+			{
+				int rows = props.getInteger("rows", 300);
+				int cols = props.getInteger("numClusters", 64);
+
+				std::unique_ptr<ManyLightsClusterer> clusterer(new RowColumnSampling(vpls_, rows, cols, std::make_tuple(scene->getFilm()->getSize().x, scene->getFilm()->getSize().y),
+					scene, min_dist_));
+
+				return std::unique_ptr<ManyLightsRenderer>(new LightClustererRenderer(std::move(clusterer), min_dist_));
+			}
+			case MATRIXRECONSTRUCTION:
+			{
+				std::uint32_t bucket_width = props.getInteger("bucketWidth", 2);
+				std::uint32_t bucket_height = props.getInteger("bucketHeight", 1);
+				float samples_per_bucket = props.getFloat("samplesPerBucket", 0.5);
+				int light_samples = samples_per_bucket * vpls_.size();
+				float step_size_factor = props.getFloat("stepSizeFactor", 1.5);
+				float tolerance = props.getFloat("tolerance", 0.0001);
+				float tau = props.getFloat("tau", 5);
+				int max_iterations = props.getInteger("maxIterations", 1000);
+
+				std::unique_ptr<ManyLightsClusterer> clusterer(new PassthroughClusterer(vpls_));
+				return std::unique_ptr<ManyLightsRenderer>(new MatrixReconstructionRenderer(std::move(clusterer), 
+					std::make_pair(bucket_width, bucket_height), light_samples, min_dist_, step_size_factor, 
+					tolerance, tau, max_iterations));
+			}
+			default:
+				return nullptr;
 		}
-		
-		//make 8bit channels for now, can change it in the future
-		return new Bitmap(Bitmap::ERGB, Bitmap::EUInt8, dimensions);
 	}
 
 private:
 	ref<Bitmap> output_image_;
 	std::vector<VPL> vpls_;
 	std::uint32_t max_depth_;
-	std::mutex cancel_lock_;
-	bool cancel_;
-	float clamping_, min_dist_;
+
+	Properties properties_;
+	float clamping_;
 	CLUSTERING_STRATEGY clustering_strategy_;
-	std::unique_ptr<LightTree> light_tree_;
-	std::unique_ptr<RowColumnSampling> row_col_clusterer_;
-	std::unique_ptr<MatrixReconstructionRenderer> matrix_reconstruction_renderer_;
-	float lightcuts_error_threshold_;
-	int num_clusters_, rows_;
+	std::unique_ptr<ManyLightsRenderer> renderer_;
+	float min_dist_;
 };
 
 MTS_IMPLEMENT_CLASS(ManyLightsIntegrator, false, Integrator)

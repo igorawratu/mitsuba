@@ -288,7 +288,8 @@ LightTree::LightTree() : point_tree_root_(nullptr), directional_tree_root_(nullp
 
 }
 
-LightTree::LightTree(const std::vector<VPL>& vpls, float min_dist) : min_dist_(min_dist) {
+LightTree::LightTree(const std::vector<VPL>& vpls, float min_dist, std::uint32_t max_lights, float error_threshold) : 
+	min_dist_(min_dist), max_lights_(max_lights), error_threshold_(error_threshold) {
 	for (std::uint32_t i = 0; i < vpls.size(); ++i) {
 		switch (vpls[i].type) {
 			case EPointEmitterVPL:
@@ -354,41 +355,7 @@ LightTree& LightTree::operator = (LightTree&& other) {
 LightTree::~LightTree() {
 }
 
-void LightTree::setVPLs(const std::vector<VPL>& vpls, float min_dist) {
-	point_vpls_.clear();
-	oriented_vpls_.clear();
-	directional_vpls_.clear();
-
-	for (std::uint32_t i = 0; i < vpls.size(); ++i) {
-		switch (vpls[i].type) {
-			case EPointEmitterVPL:
-				point_vpls_.push_back(vpls[i]);
-				break;
-			case ESurfaceVPL:
-				oriented_vpls_.push_back(vpls[i]);
-				break;
-			case EDirectionalEmitterVPL:
-				directional_vpls_.push_back(vpls[i]);
-				break;
-			default:
-				continue;
-		}
-	}
-
-	min_dist_ = min_dist;
-
-	point_tree_root_ = createLightTree(point_vpls_, EPointEmitterVPL, min_dist);
-	oriented_tree_root_ = createLightTree(oriented_vpls_, ESurfaceVPL, min_dist);
-	directional_tree_root_ = createLightTree(directional_vpls_, EDirectionalEmitterVPL, min_dist);
-}
-
-void LightTree::setMinDist(float min_dist) {
-	min_dist_ = min_dist;
-}
-
-
-
-std::vector<VPL> LightTree::getClusteringForPoint(const Intersection& its, std::uint32_t max_lights, float error_threshold) {
+std::vector<VPL> LightTree::getClusteringForPoint(const Intersection& its) {
 	//std::lock_guard<std::mutex> lock(mutex_);
 
 	std::vector<VPL> lights;
@@ -426,11 +393,11 @@ std::vector<VPL> LightTree::getClusteringForPoint(const Intersection& its, std::
 		traversed[directional_tree_root_.get()] = counter++;
 	}
 	
-	while((pqueue.size() + lights.size()) < max_lights && pqueue.size() > 0){
+	while((pqueue.size() + lights.size()) < max_lights_ && pqueue.size() > 0){
 		auto entry = pqueue.top();
 		
 		//if the worst node is below threshold, then all nodes must be
-		if(std::get<1>(entry) / total_estimated_radiance < error_threshold){
+		if(std::get<1>(entry) / total_estimated_radiance < error_threshold_){
 			break;
 		}
 
@@ -462,7 +429,7 @@ std::vector<VPL> LightTree::getClusteringForPoint(const Intersection& its, std::
 		pqueue.pop();
 	}
 
-	while(pqueue.size() > 0 && lights.size() < max_lights){
+	while(pqueue.size() > 0 && lights.size() < max_lights_){
 		auto entry = pqueue.top();
 		lights.push_back(std::get<0>(entry)->vpl);
 		lights.back().P *= std::get<0>(entry)->emission_scale;
