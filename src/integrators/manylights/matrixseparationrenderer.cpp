@@ -3,17 +3,25 @@
 #include <vector>
 #include <limits>
 #include <utility>
+#include <memory>
+
+#include <mitsuba/core/plugin.h>
+
+#include "definitions.h"
 
 MTS_NAMESPACE_BEGIN
 
 struct RowSample{
-    RowSample(Vector3f p, Vector3f n, std::uint32_t x, std::uint32_t y, std::uint32_t cols) : position(p), normal(n),
-        image_x(x), image_y(y), col_samples(cols){
+    RowSample(const Point3f& p, const Normal& n, std::uint32_t x, std::uint32_t y, std::uint32_t cols, bool in_scene, Intersection intersection) : 
+        position(p), normal(n), image_x(x), image_y(y), col_samples(cols), intersected_scene(in_scene), its(intersection){
     }
 
-    Vector3f position, normal;
+    Point3f position;
+    Normal normal;
     std::uint32_t image_x, image_y;
     std::vector<Spectrum> col_samples;
+    bool intersected_scene;
+    Intersection its;
 };
 
 struct KDTNode{
@@ -97,18 +105,105 @@ struct KDTNode{
                 break;
         }
 
-        left = std::make_unique<KDTNode>();
-        right = std::make_unique<KDTNode>();
+        left = std::unique_ptr<KDTNode>(new KDTNode());
+        right = std::unique_ptr<KDTNode>(new KDTNode());
 
         std::copy(samples.begin(), samples.begin() + samples.size() / 2, left->samples.begin());
         std::copy(samples.begin() + samples.size() / 2, samples.end(), right->samples.begin());
     }
 };
 
+void splitKDTree(KDTNode* node, std::uint32_t size_threshold, float min_dist){
+    if(node == nullptr || node->samples.size() < size_threshold){
+        return;
+    }
+
+    if(node->left == nullptr && node->right == nullptr){
+        node->Split(min_dist);
+    }
+    
+    splitKDTree(node->left.get(), size_threshold, min_dist);
+    splitKDTree(node->right.get(), size_threshold, min_dist);
+}
+
+std::unique_ptr<KDTNode> constructKDTree(Scene* scene, const std::vector<VPL>& vpls, 
+    std::uint32_t size_threshold, float min_dist){
+
+    auto kdt_root = std::unique_ptr<KDTNode>(new KDTNode());
+
+    ref<Sensor> sensor = scene->getSensor();
+    ref<Film> film = sensor->getFilm();
+
+    Properties props("independent");
+    Sampler *sampler = static_cast<Sampler*>(PluginManager::getInstance()->createObject(MTS_CLASS(Sampler), props));
+    sampler->configure();
+    sampler->generate(Point2i(0));
+
+    for (std::int32_t y = 0; y < film->getSize().y; ++y) {
+        for (std::int32_t x = 0; x < film->getSize().x; ++x) {
+            Ray ray;
+
+            Point2 sample_position(x + 0.5f, y + 0.5f);
+
+            Point2 aperture_sample(0.5f, 0.5f);
+            Float time_sample(0.5f);
+
+            sensor->sampleRay(ray, sample_position, aperture_sample, time_sample);
+
+            Intersection its;
+
+            bool intersected = scene->rayIntersect(ray, its);
+            kdt_root->samples.emplace_back(its.p, its.geoFrame.n, x, y, vpls.size(), intersected, its);
+
+            auto& curr_sample = kdt_root->samples.back();
+
+            if(!intersected){
+                std::fill(curr_sample.col_samples.begin(), 
+                    curr_sample.col_samples.end(), Spectrum(0.f));
+            }
+
+            if(its.isEmitter()){
+                std::fill(curr_sample.col_samples.begin(), 
+                    curr_sample.col_samples.end(), its.Le(-ray.d));
+                continue;
+            }
+
+            Normal n = its.geoFrame.n;
+
+            for (std::uint32_t i = 0; i < vpls.size(); ++i) {
+                Spectrum albedo(0.f);
+
+                BSDFSamplingRecord bsdf_sample_record(its, sampler, ERadiance);
+                    bsdf_sample_record.wi = its.toLocal(normalize(vpls[i].its.p - its.p));
+                    bsdf_sample_record.wo = its.toLocal(n);
+
+                albedo = its.getBSDF()->eval(bsdf_sample_record);
+
+                //only dealing with emitter and surface VPLs curently.
+                if (vpls[i].type != EPointEmitterVPL && vpls[i].type != ESurfaceVPL){
+                    continue;
+                }
+
+                float d = std::max((its.p - vpls[i].its.p).length(), min_dist);
+                float attenuation = 1.f / (d * d);
+
+                float n_dot_ldir = std::max(0.f, dot(normalize(n), normalize(vpls[i].its.p - its.p)));
+                float ln_dot_ldir = std::max(0.f, dot(normalize(vpls[i].its.shFrame.n), normalize(its.p - vpls[i].its.p)));
+
+                curr_sample.col_samples[i] = (vpls[i].P * ln_dot_ldir * attenuation * n_dot_ldir * albedo) / PI;
+            }
+        }
+    }
+
+    splitKDTree(kdt_root.get(), size_threshold, min_dist);
+
+    return kdt_root;
+}
+
 
 
 bool MatrixSeparationRenderer::Render(Scene* scene){
-
+    return false;
 }
 
 MTS_NAMESPACE_END

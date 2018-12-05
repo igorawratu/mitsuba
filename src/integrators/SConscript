@@ -19,7 +19,11 @@ plugins += env.SharedLibrary('irrcache', ['misc/irrcache.cpp', 'misc/irrcache_pr
 plugins += env.SharedLibrary('multichannel', ['misc/multichannel.cpp'])
 plugins += env.SharedLibrary('field', ['misc/field.cpp'])
 plugins += env.SharedLibrary('motion', ['misc/motion.cpp'])
-plugins += env.SharedLibrary('manylights', ['manylights/manylights.cpp', 'manylights/lighttree.cpp', 'manylights/rowcolumnsampling.cpp', 'manylights/matrixreconstruction.cpp', 'manylights/lightclustererrenderer.cpp'])
+plugins += env.SharedLibrary('manylights', ['manylights/manylights.cpp', 'manylights/lighttree.cpp', 'manylights/rowcolumnsampling.cpp', 'manylights/matrixreconstruction.cpp', 'manylights/lightclustererrenderer.cpp', 'manylights/matrixseparationrenderer.cpp'])
+
+env.Append()
+env.Append()
+env.Append()
 
 # Bidirectional techniques
 bidirEnv = env.Clone()
