@@ -4,6 +4,7 @@
 #include <limits>
 #include <utility>
 #include <memory>
+#include <random>
 
 #include <mitsuba/core/plugin.h>
 
@@ -11,15 +12,18 @@
 
 MTS_NAMESPACE_BEGIN
 
+enum VISIBILITY{VISIBLE, NOT_VISIBLE, P_VISIBLE, P_NOT_VISIBLE, UNKNOWN};
+
 struct RowSample{
     RowSample(const Point3f& p, const Normal& n, std::uint32_t x, std::uint32_t y, std::uint32_t cols, bool in_scene, Intersection intersection) : 
-        position(p), normal(n), image_x(x), image_y(y), col_samples(cols), intersected_scene(in_scene), its(intersection){
+        position(p), normal(n), image_x(x), image_y(y), col_samples(cols, Spectrum(0.f)), visibility(cols, UNKNOWN), intersected_scene(in_scene), its(intersection){
     }
 
     Point3f position;
     Normal normal;
     std::uint32_t image_x, image_y;
     std::vector<Spectrum> col_samples;
+    std::vector<VISIBILITY> visibility;
     bool intersected_scene;
     Intersection its;
 };
@@ -158,8 +162,7 @@ std::unique_ptr<KDTNode> constructKDTree(Scene* scene, const std::vector<VPL>& v
             auto& curr_sample = kdt_root->samples.back();
 
             if(!intersected){
-                std::fill(curr_sample.col_samples.begin(), 
-                    curr_sample.col_samples.end(), Spectrum(0.f));
+                continue;
             }
 
             if(its.isEmitter()){
@@ -200,7 +203,94 @@ std::unique_ptr<KDTNode> constructKDTree(Scene* scene, const std::vector<VPL>& v
     return kdt_root;
 }
 
+std::set<std::uint32_t> sampleAndPredictVisibility(KDTNode* slice, float sample_percentage, std::mt19937& rng, Scene* scene,
+    const std::vector<VPL>& vpls, const std::set<std::uint32_t>& active_columns, float error_threshold){
 
+    std::set<std::uint32_t> new_active_cols;
+
+    std::uint32_t num_samples = sample_percentage * slice->samples.size();
+    std::vector<std::vector<VISIBILITY>> new_predictions(active_columns.size());
+
+    for(auto iter = active_columns.begin(); iter != active_columns.end(); iter++){
+        std::vector<std::uint32_t> unsampled;
+        for(std::uint32_t i = 0; i < slice->samples.size(); ++i){
+            auto& curr_samples = slice->samples[i];
+            if(curr_samples.visibility[*iter] != VISIBLE && curr_samples.visibility[*iter] != NOT_VISIBLE){
+                unsampled.push_back(i);
+            }
+        }
+
+        std::vector<std::vector<VISIBILITY>> predictions;
+        
+        //PERFORM PREDICTIONS HERE!!!!111!1!11!!one!eleven
+
+        std::vector<std::uint32_t> to_sample;
+        
+        if(num_samples < unsampled.size()){
+            while(to_sample.size() < num_samples){
+                std::uniform_int_distribution<std::uint32_t> gen(0, unsampled.size() - 1);
+                auto pos = gen(rng);
+                to_sample.push_back(unsampled[pos]);
+                unsampled[pos] = unsampled.back();
+                unsampled.pop_back();
+            }
+        }
+        else{
+            to_sample = unsampled;
+        }
+
+        std::vector<VISIBILITY> samples(to_sample.size());
+
+        for(std::uint32_t i = 0; i < to_sample.size(); ++i){
+            Point ray_origin = slice->samples[to_sample[i]].position;
+            Ray shadow_ray(ray_origin, normalize(vpls[i].its.p - ray_origin), 0.f);
+
+            Float t;
+            ConstShapePtr shape;
+            Normal norm;
+            Point2 uv;
+
+            samples[i] = VISIBLE;
+
+            if(scene->rayIntersect(shadow_ray, t, shape, norm, uv)){
+                if(abs((ray_origin - vpls[i].its.p).length() - t) > 0.0001f ){
+                    samples[i] = NOT_VISIBLE;
+                }
+            }
+        }
+
+        std::uint32_t smallest_idx = 0;
+        std::uint32_t smallest_error = std::numeric_limits<std::uint32_t>::max();
+
+        for(std::uint32_t i = 0; i < predictions.size(); ++i){
+            std::uint32_t curr_error = 0;
+            for(std::uint32_t j = 0; j < to_sample.size(); ++j){
+                if((samples[j] == VISIBLE && predictions[i][to_sample[j]] != P_VISIBLE) || 
+                    (samples[j] == NOT_VISIBLE && predictions[i][to_sample[j]] != P_NOT_VISIBLE)){
+                    curr_error++;
+                }
+
+                predictions[i][to_sample[j]] = samples[j];
+            }
+
+            if(curr_error < smallest_error){
+                smallest_idx = i;
+                smallest_error = curr_error;
+            }
+        }
+
+        for(std::uint32_t i = 0; i < slice->samples.size(); ++i){
+            slice->samples[i].visibility[*iter] = predictions[smallest_idx][i];
+        }
+
+        float normalized_error = (float)smallest_error / slice->samples.size();
+        if(normalized_error > error_threshold){
+            new_active_cols.insert(*iter);
+        }
+    }
+
+    return new_active_cols;
+}
 
 bool MatrixSeparationRenderer::Render(Scene* scene){
     return false;
