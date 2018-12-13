@@ -225,6 +225,62 @@ std::unique_ptr<KDTNode> constructKDTree(Scene* scene, const std::vector<VPL>& v
     return kdt_root;
 }
 
+std::vector<VISIBILITY> knnPredictor(KDTNode* slice, std::uint32_t neighbours, std::uint32_t col){
+    
+}
+
+std::vector<VISIBILITY> linearPredictor(KDTNode* slice, std::uint32_t col, std::mt19937& rng){
+    assert(slice != nullptr && slice->samples.size() > 0);
+
+    Eigen::MatrixXf q(slice->samples.size(), 4);
+
+    std::uint32_t num_sampled_values = 0;
+    for(std::uint32_t i = 0; i < slice->samples.size(); ++i){
+        if(slice->samples[i].visibility[col] == VISIBLE || slice->samples[i].visibility[col] == NOT_VISIBLE){
+            num_sampled_values++;
+        }
+        q(i, 0) = slice->samples[i].position.x;
+        q(i, 1) = slice->samples[i].position.y;
+        q(i, 2) = slice->samples[i].position.z;
+        q(i, 3) = 1;
+    }
+
+    Eigen::MatrixXf x(num_sampled_values, 4);
+    Eigen::MatrixXf y(num_sampled_values, 1);
+
+    for(std::uint32_t i = 0; i < num_sampled_values; ++i){
+        x(i, 0) = slice->samples[i].position.x;
+        x(i, 1) = slice->samples[i].position.y;
+        x(i, 2) = slice->samples[i].position.z;
+        x(i, 3) = 1;
+
+        y(i, 0) = slice->samples[i].visibility[col] == VISIBLE ? 1 : -1;
+    }
+
+    Eigen::MatrixXf w = (x.transpose() * x).inverse() * x * y;
+    Eigen::MatrixXf fq = q * w;
+
+    std::vector<VISIBILITY> output(slice->samples[0].visibility.size());
+
+    std::uniform_real_distribution<float> gen(0.f, 1.f);
+
+    for(std::uint32_t i = 0; i < slice->samples.size(); ++i){
+        if(slice->samples[i].visibility[col] == VISIBLE || slice->samples[i].visibility[col] == NOT_VISIBLE){
+            output[i] = slice->samples[i].visibility[col];
+        }
+        else{
+            float pv0 = std::min(1.f, std::max(0.f, 0.5f - fq(i, 0)));
+            output[i] = gen(rng) < pv0 ? NOT_VISIBLE : VISIBLE;
+        }
+    }
+
+    return output;
+}
+
+std::vector<VISIBILITY> naiveBayes(KDTNode* slice, const std::set<std::uint32_t>& nearby_cols, std::uint32_t col){
+    
+}
+
 std::set<std::uint32_t> sampleAndPredictVisibility(KDTNode* slice, float sample_percentage, std::mt19937& rng, Scene* scene,
     const std::vector<VPL>& vpls, const std::set<std::uint32_t>& active_columns, float error_threshold){
 
@@ -363,17 +419,16 @@ void shrink(Eigen::MatrixXf& mat, float amount){
 std::tuple<Eigen::MatrixXf, Eigen::MatrixXf> separate(const Eigen::MatrixXf& mat, const Eigen::MatrixXf& two_q,
     const std::uint32_t max_iterations, float beta, const std::set<std::pair<std::uint32_t, std::uint32_t>>& sampled){
     float c = two_q.rows() * two_q.cols();
-    
-    std::uint32_t rank_estimate;
 
+    std::uint32_t rank_estimate = mat.bdcSvd().nonzeroSingularValues();;
     Eigen::MatrixXf identity = Eigen::MatrixXf::Identity(two_q.rows(), two_q.cols());
     Eigen::MatrixXf inv_two_q = two_q.cwiseInverse();
     Eigen::MatrixXf x;
-    Eigen::MatrixXf y;
-    Eigen::MatrixXf z;
-    Eigen::MatrixXf h;
-    Eigen::MatrixXf lambda;
-    Eigen::MatrixXf pi;
+    Eigen::MatrixXf y(rank_estimate, mat.cols());
+    Eigen::MatrixXf z(mat.rows(), mat.cols());
+    Eigen::MatrixXf h(mat.rows(), mat.cols());
+    Eigen::MatrixXf lambda(mat.rows(), mat.cols());
+    Eigen::MatrixXf pi(mat.rows(), mat.cols());
 
     Eigen::MatrixXf b;
 
