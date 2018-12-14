@@ -11,14 +11,16 @@ MTS_NAMESPACE_BEGIN
 
 class MatrixSeparationRenderer : public ManyLightsRenderer{
 public:
-    MatrixSeparationRenderer(std::uint32_t slice_size, float min_dist);
-    MatrixSeparationRenderer(const MatrixSeparationRenderer& other);
+    MatrixSeparationRenderer(std::unique_ptr<ManyLightsClusterer> clusterer, 
+        float min_dist, float sample_percentage, float error_threshold, float reincorporation_density_threshold,
+        std::uint32_t slice_size, std::uint32_t max_prediction_iterations, std::uint32_t max_separation_iterations);
+    MatrixSeparationRenderer(const MatrixSeparationRenderer& other) = delete;
     MatrixSeparationRenderer(MatrixSeparationRenderer&& other);
-    MatrixSeparationRenderer& operator = (const MatrixSeparationRenderer& other);
+    MatrixSeparationRenderer& operator = (const MatrixSeparationRenderer& other) = delete;
     MatrixSeparationRenderer& operator = (MatrixSeparationRenderer&& other);
     ~MatrixSeparationRenderer();
 
-    bool Render(Scene* scene);
+    bool render(Scene* scene);
 
     void setCancel(bool cancel){
         std::lock_guard<std::mutex> lock(cancel_lock_);
@@ -27,8 +29,9 @@ public:
     }
 
 private:
-    std::uint32_t slice_size_;
-    float min_dist_;
+    std::unique_ptr<ManyLightsClusterer> clusterer_;
+    float min_dist_, sample_percentage_, error_threshold_, reincorporation_density_threshold_;
+    std::uint32_t slice_size_, max_prediction_iterations_, max_separation_iterations_;
     bool cancel_;
     std::mutex cancel_lock_;
 };

@@ -15,14 +15,15 @@
 #include "lightclustererrenderer.h"
 #include "manylightsbase.h"
 #include "passthroughclusterer.h"
+#include "matrixseparationrenderer.h"
 
 #include "definitions.h"
 
 MTS_NAMESPACE_BEGIN
 
 enum CLUSTERING_STRATEGY{
-		NONE = 0, LIGHTCUTS, ROWCOLSAMPLING, MATRIXRECONSTRUCTION,
-		CLUSTER_STRATEGY_MIN = NONE, CLUSTER_STRATEGY_MAX = MATRIXRECONSTRUCTION 
+		NONE = 0, LIGHTCUTS, ROWCOLSAMPLING, MATRIXRECONSTRUCTION, MATRIXSEPARATION,
+		CLUSTER_STRATEGY_MIN = NONE, CLUSTER_STRATEGY_MAX = MATRIXSEPARATION 
 	};
 
 float calculateMinDistance(const Scene *scene, const std::vector<VPL>& vpls, float clamping){
@@ -324,6 +325,20 @@ private:
 				return std::unique_ptr<ManyLightsRenderer>(new MatrixReconstructionRenderer(std::move(clusterer), 
 					std::make_pair(bucket_width, bucket_height), light_samples, min_dist_, step_size_factor, 
 					tolerance, tau, max_iterations));
+			}
+			case MATRIXSEPARATION:
+			{
+				float sample_percentage = props.getFloat("sample_perc", 0.05);
+				float error_threshold = props.getFloat("prediction_error_thresh", 0.1);
+				float reincorporation_density_threshold = props.getFloat("density_thresh", 0.2);
+        		std::uint32_t slice_size = props.getInteger("slice_size", 1024);
+				std::uint32_t max_prediction_iterations = props.getInteger("prediction_iter", 10);
+				std::uint32_t max_separation_iterations = props.getInteger("separation_iter", 20);
+
+				std::unique_ptr<ManyLightsClusterer> clusterer(new PassthroughClusterer(vpls_));
+				return std::unique_ptr<MatrixSeparationRenderer>(new MatrixSeparationRenderer(std::move(clusterer), 
+					min_dist_, sample_percentage, error_threshold, reincorporation_density_threshold, slice_size, 
+					max_prediction_iterations, max_separation_iterations));
 			}
 			default:
 				return nullptr;

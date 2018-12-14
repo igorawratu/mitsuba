@@ -339,6 +339,7 @@ bool MatrixReconstructionRenderer::render(Scene* scene){
     std::vector<float> init_row(lighting_matrix.cols());
     std::vector<float> recon_row(lighting_matrix.cols());
     std::vector<float> full_row(lighting_matrix.cols());
+
     for(std::uint32_t i = 0; i < lighting_matrix.rows(); ++i){
         for(std::uint32_t j = 0; j < lighting_matrix.cols(); ++j){
             init_row[j] = lighting_matrix(i, j);
@@ -349,6 +350,8 @@ bool MatrixReconstructionRenderer::render(Scene* scene){
         printToFile(recon_row, "reconstructed_matrix.txt", std::ios::out | std::ios::app, false, 2);
         printToFile(full_row, "full_matrix.txt", std::ios::out | std::ios::app, false, 2);
     }
+
+    film->setBitmap(output_bitmap);
 
     return cancel_;
 }
