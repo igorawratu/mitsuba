@@ -350,8 +350,148 @@ std::vector<VISIBILITY> linearPredictor(KDTNode* slice, std::uint32_t col, std::
     return output;
 }
 
-std::vector<VISIBILITY> naiveBayes(KDTNode* slice, const std::set<std::uint32_t>& nearby_cols, std::uint32_t col){
+std::vector<VISIBILITY> naiveBayes(KDTNode* slice, std::uint32_t col, std::uint32_t neighbours, 
+    const std::vector<VPL>& vpls, std::mt19937& rng){
+
+    assert(slice != nullptr && slice->samples.size() > 0 && slice->samples[0].visibility.size() > 0 && 
+        vpls.size() > col);
     
+    std::uint32_t num_neighbours = std::min(neighbours, (std::uint32_t)vpls.size() - 1);
+    std::vector<VISIBILITY> output(slice->samples.size());
+    if(num_neighbours == 0){
+        for(std::uint32_t i = 0; i < slice->samples.size(); ++i){
+            output[i] = P_VISIBLE;
+        }
+
+        return output;
+    }
+
+    FLANNPointCloud<FLANNPoint> point_set;
+    for(std::uint32_t i = 0; i < vpls.size(); ++i){
+        if(i == col){
+            continue;
+        }
+
+        FLANNPoint p;
+        p.position = vpls[i].its.p;
+        p.idx = i;
+
+        point_set.pts.push_back(p);
+    }
+
+    KDTree kdt(3, point_set, nanoflann::KDTreeSingleIndexAdaptorParams(10));
+    kdt.buildIndex();
+
+    std::uniform_real_distribution<float> gen(0.f, 1.f);
+    nanoflann::KNNResultSet<float> result_set(num_neighbours);
+    std::unique_ptr<size_t[]> indices(new size_t[num_neighbours]);
+    std::unique_ptr<float[]> distances(new float[num_neighbours]);
+
+    result_set.init(indices.get(), distances.get());
+
+    float query_pt[3] = {vpls[col].its.p.x, vpls[col].its.p.y, vpls[col].its.p.z};
+    kdt.findNeighbors(result_set, query_pt, nanoflann::SearchParams(10));
+
+    float tot_vis = 0.f;
+    float n_vis = 0.f;
+    
+    for(std::uint32_t i = 0; i < slice->samples.size(); ++i){
+        for(std::uint32_t j = 0; j < num_neighbours; ++j){
+            VISIBILITY v = slice->samples[i].visibility[point_set.pts[indices[j]].idx];
+            if(v == P_VISIBLE || v == VISIBLE){
+                tot_vis += 1.f;
+                n_vis += 1.f;
+            }
+            else if(v == UNKNOWN){
+                tot_vis += 0.5f;
+                n_vis += 0.5f;
+            }
+        }
+
+        VISIBILITY v = slice->samples[i].visibility[col];
+        if(v == P_VISIBLE || v == VISIBLE){
+            tot_vis += 1.f;
+        }
+        else if(v == UNKNOWN){
+            tot_vis += 0.5f;
+        }
+    }
+
+    float p_v = tot_vis / (float)(slice->samples.size() * num_neighbours + 1);
+    float pnj_v = n_vis / tot_vis;
+    float p_i = 1.f / slice->samples.size();
+    float p_nj = (float)num_neighbours / (num_neighbours + 1);
+
+    for(std::uint32_t i = 0; i < slice->samples.size(); ++i){
+        float tot_iv = 0.f;
+        for(std::uint32_t j = 0; j < num_neighbours; ++j){
+            VISIBILITY v = slice->samples[i].visibility[point_set.pts[indices[j]].idx];
+            if(v == P_VISIBLE || v == VISIBLE){
+                tot_iv += 1.f;
+            }
+            else if(v == UNKNOWN){
+                tot_iv += 0.5f;
+            }
+        }
+
+        VISIBILITY v = slice->samples[i].visibility[col];
+        if(v == P_VISIBLE || v == VISIBLE){
+            tot_iv += 1.f;
+        }
+        else if(v == UNKNOWN){
+            tot_iv += 0.5f;
+        }
+
+        float pi_v = tot_iv / tot_vis;
+        float pv_ij = (pi_v * pnj_v * p_v) / (p_i * p_nj);
+
+        output[i] = gen(rng) < pv_ij ? P_VISIBLE : P_NOT_VISIBLE;
+    }
+
+    return output;
+}
+
+void performInitialVisibilitySamples(KDTNode* slice, float sample_percentage, std::mt19937& rng, 
+    Scene* scene, const std::vector<VPL>& vpls){
+
+    assert(slice != nullptr);
+
+    std::uint32_t num_samples = sample_percentage * slice->samples.size();
+    
+    for(std::uint32_t i = 0; i < vpls.size(); ++i){
+        std::vector<std::uint32_t> sample_set(slice->samples.size());
+        for(std::uint32_t j = 0; j < slice->samples.size(); ++j){
+            sample_set[j] = j;
+        }
+
+        std::vector<std::uint32_t> to_sample;
+
+        while(to_sample.size() < num_samples){
+            std::uniform_int_distribution<std::uint32_t> gen(0, sample_set.size() - 1);
+            auto pos = gen(rng);
+            to_sample.push_back(sample_set[pos]);
+            sample_set[pos] = sample_set.back();
+            sample_set.pop_back();
+        }
+
+        for(std::uint32_t j = 0; j < to_sample.size(); ++j){
+            Point ray_origin = slice->samples[to_sample[j]].position;
+            Ray shadow_ray(ray_origin, normalize(vpls[i].its.p - ray_origin), 0.f);
+
+            Float t;
+            ConstShapePtr shape;
+            Normal norm;
+            Point2 uv;
+
+            slice->samples[to_sample[j]].visibility[i] = VISIBLE;
+
+            if(scene->rayIntersect(shadow_ray, t, shape, norm, uv)){
+                if(abs((ray_origin - vpls[i].its.p).length() - t) > 0.0001f ){
+                    slice->samples[to_sample[j]].visibility[i] = NOT_VISIBLE;
+                }
+            }
+        }
+    }
 }
 
 std::set<std::uint32_t> sampleAndPredictVisibility(KDTNode* slice, float sample_percentage, std::mt19937& rng, Scene* scene,
@@ -373,7 +513,9 @@ std::set<std::uint32_t> sampleAndPredictVisibility(KDTNode* slice, float sample_
 
         std::vector<std::vector<VISIBILITY>> predictions;
         
-        //perform preditions here
+        predictions.push_back(knnPredictor(slice, 3, *iter, rng));
+        predictions.push_back(linearPredictor(slice, *iter, rng));
+        predictions.push_back(naiveBayes(slice, *iter, 3, vpls, rng));
 
         std::vector<std::uint32_t> to_sample;
         
@@ -394,7 +536,7 @@ std::set<std::uint32_t> sampleAndPredictVisibility(KDTNode* slice, float sample_
 
         for(std::uint32_t i = 0; i < to_sample.size(); ++i){
             Point ray_origin = slice->samples[to_sample[i]].position;
-            Ray shadow_ray(ray_origin, normalize(vpls[i].its.p - ray_origin), 0.f);
+            Ray shadow_ray(ray_origin, normalize(vpls[*iter].its.p - ray_origin), 0.f);
 
             Float t;
             ConstShapePtr shape;
@@ -404,7 +546,7 @@ std::set<std::uint32_t> sampleAndPredictVisibility(KDTNode* slice, float sample_
             samples[i] = VISIBLE;
 
             if(scene->rayIntersect(shadow_ray, t, shape, norm, uv)){
-                if(abs((ray_origin - vpls[i].its.p).length() - t) > 0.0001f ){
+                if(abs((ray_origin - vpls[*iter].its.p).length() - t) > 0.0001f ){
                     samples[i] = NOT_VISIBLE;
                 }
             }
