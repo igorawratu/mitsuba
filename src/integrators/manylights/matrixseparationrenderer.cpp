@@ -13,6 +13,7 @@
 #include <eigen3/Eigen/Dense>
 
 #include "definitions.h"
+#include "nanoflann.hpp"
 
 MTS_NAMESPACE_BEGIN
 
@@ -225,10 +226,82 @@ std::unique_ptr<KDTNode> constructKDTree(Scene* scene, const std::vector<VPL>& v
     return kdt_root;
 }
 
-std::vector<VISIBILITY> knnPredictor(KDTNode* slice, std::uint32_t neighbours, std::uint32_t col){
-    
-}
+struct FLANNPoint
+{
+    Point position;
+    std::uint32_t idx;
 
+    inline float get_pt(const size_t dim) const
+	{
+		if (dim == 0) return position.x;
+		else if (dim == 1) return position.y;
+		else return position.z;
+	}
+};
+
+typedef nanoflann::KDTreeSingleIndexAdaptor<nanoflann::L2_Simple_Adaptor<float, FLANNPointCloud<FLANNPoint>>, 
+    FLANNPointCloud<FLANNPoint>, 3> KDTree;
+
+std::vector<VISIBILITY> knnPredictor(KDTNode* slice, std::uint32_t neighbours, std::uint32_t col, std::mt19937& rng){
+    assert(slice != nullptr && neighbours > 0 && slice->samples.size() > 0
+        && col < slice->samples[0].visibility.size());
+
+    FLANNPointCloud<FLANNPoint> point_set;
+    for(std::uint32_t i = 0; i < slice->samples.size(); ++i){
+        if(slice->samples[i].visibility[col] == VISIBLE || slice->samples[i].visibility[col] == NOT_VISIBLE){
+            FLANNPoint p;
+            p.position = slice->samples[i].position;
+            p.idx = i;
+
+            point_set.pts.push_back(p);
+        }
+    }
+
+    KDTree kdt(3, point_set, nanoflann::KDTreeSingleIndexAdaptorParams(10));
+    kdt.buildIndex();
+
+    std::uint32_t num_neighbours = std::min(neighbours, (std::uint32_t)point_set.pts.size());
+    std::vector<VISIBILITY> output(slice->samples.size());
+
+    if(num_neighbours == 0){
+        for(std::uint32_t i = 0; i < slice->samples.size(); ++i){
+            output[i] = P_VISIBLE;
+        }
+
+        return output;
+    }
+
+    std::uniform_real_distribution<float> gen(0.f, 1.f);
+    nanoflann::KNNResultSet<float> result_set(num_neighbours);
+    std::unique_ptr<size_t[]> indices(new size_t[num_neighbours]);
+    std::unique_ptr<float[]> distances(new float[num_neighbours]);
+
+    result_set.init(indices.get(), distances.get());
+
+    for(std::uint32_t i = 0; i < slice->samples.size(); ++i){
+        if(slice->samples[i].visibility[col] == VISIBLE || slice->samples[i].visibility[col] == NOT_VISIBLE){
+            output[i] = slice->samples[i].visibility[col];
+        }
+        else{
+            float query_pt[3] = 
+                {slice->samples[i].position.x, slice->samples[i].position.y, slice->samples[i].position.z};
+            kdt.findNeighbors(result_set, query_pt, nanoflann::SearchParams(10));
+
+            std::uint32_t num_visible = 0;
+            for(std::uint32_t j = 0; j < num_neighbours; ++j){
+                std::uint32_t sample_index = point_set.pts[indices[j]].idx;
+                if(slice->samples[sample_index].visibility[col] == VISIBLE){
+                    num_visible++;
+                }
+            }
+
+            float p_v = (float)num_visible / num_neighbours;
+            output[i] = gen(rng) < p_v ? P_VISIBLE : P_NOT_VISIBLE;
+        }
+    }
+
+    return output;
+}
 std::vector<VISIBILITY> linearPredictor(KDTNode* slice, std::uint32_t col, std::mt19937& rng){
     assert(slice != nullptr && slice->samples.size() > 0);
 
