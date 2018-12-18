@@ -8,6 +8,7 @@
 #include <tuple>
 #include <cmath>
 #include <chrono>
+#include <iostream>
 
 #include <mitsuba/core/plugin.h>
 
@@ -50,18 +51,18 @@ struct KDTNode{
 
         for(size_t i = 0; i < samples.size(); ++i){
             min_pos.x = std::min(samples[i].position.x, min_pos.x);
-            min_pos.x = std::min(samples[i].position.x, min_pos.x);
-            min_pos.x = std::min(samples[i].position.x, min_pos.x);
-            max_pos.x = std::min(samples[i].position.x, max_pos.x);
-            max_pos.x = std::min(samples[i].position.x, max_pos.x);
-            max_pos.x = std::min(samples[i].position.x, max_pos.x);
+            min_pos.y = std::min(samples[i].position.y, min_pos.y);
+            min_pos.z = std::min(samples[i].position.z, min_pos.z);
+            max_pos.x = std::max(samples[i].position.x, max_pos.x);
+            max_pos.y = std::max(samples[i].position.y, max_pos.y);
+            max_pos.z = std::max(samples[i].position.z, max_pos.z);
 
             min_normal.x = std::min(samples[i].normal.x, min_normal.x);
-            min_normal.x = std::min(samples[i].normal.x, min_normal.x);
-            min_normal.x = std::min(samples[i].normal.x, min_normal.x);
-            max_normal.x = std::min(samples[i].normal.x, max_normal.x);
-            max_normal.x = std::min(samples[i].normal.x, max_normal.x);
-            max_normal.x = std::min(samples[i].normal.x, max_normal.x);
+            min_normal.y = std::min(samples[i].normal.y, min_normal.y);
+            min_normal.z = std::min(samples[i].normal.z, min_normal.z);
+            max_normal.x = std::max(samples[i].normal.x, max_normal.x);
+            max_normal.y = std::max(samples[i].normal.y, max_normal.y);
+            max_normal.z = std::max(samples[i].normal.z, max_normal.z);
         }
 
         std::array<std::pair<std::uint8_t, float>, 6> ranges;
@@ -118,8 +119,10 @@ struct KDTNode{
         left = std::unique_ptr<KDTNode>(new KDTNode());
         right = std::unique_ptr<KDTNode>(new KDTNode());
 
-        std::copy(samples.begin(), samples.begin() + samples.size() / 2, left->samples.begin());
-        std::copy(samples.begin() + samples.size() / 2, samples.end(), right->samples.begin());
+        left->samples.insert(left->samples.end(), samples.begin(), samples.begin() + samples.size() / 2);
+        right->samples.insert(right->samples.end(), samples.begin() + samples.size() / 2, samples.end());
+
+        samples.clear();
     }
 };
 
@@ -129,11 +132,10 @@ void splitKDTree(KDTNode* node, std::uint32_t size_threshold, float min_dist){
     }
 
     if(node->left == nullptr && node->right == nullptr){
-        node->Split(min_dist);
+        node->Split(min_dist / 10.f);
+        splitKDTree(node->left.get(), size_threshold, min_dist);
+        splitKDTree(node->right.get(), size_threshold, min_dist);
     }
-    
-    splitKDTree(node->left.get(), size_threshold, min_dist);
-    splitKDTree(node->right.get(), size_threshold, min_dist);
 }
 
 void getSlices(KDTNode* curr, std::vector<KDTNode*>& slices){
@@ -316,7 +318,7 @@ std::vector<VISIBILITY> knnPredictor(KDTNode* slice, std::uint32_t neighbours, s
 
     return output;
 }
-std::vector<VISIBILITY> linearPredictor(KDTNode* slice, std::uint32_t col, std::mt19937& rng){
+std::vector<VISIBILITY> linearPredictor(KDTNode* slice, std::uint32_t col, float min_dist, std::mt19937& rng){
     assert(slice != nullptr && slice->samples.size() > 0);
 
     Eigen::MatrixXf q(slice->samples.size(), 4);
@@ -326,9 +328,9 @@ std::vector<VISIBILITY> linearPredictor(KDTNode* slice, std::uint32_t col, std::
         if(slice->samples[i].visibility[col] == VISIBLE || slice->samples[i].visibility[col] == NOT_VISIBLE){
             num_sampled_values++;
         }
-        q(i, 0) = slice->samples[i].position.x;
-        q(i, 1) = slice->samples[i].position.y;
-        q(i, 2) = slice->samples[i].position.z;
+        q(i, 0) = slice->samples[i].position.x / (min_dist * 10.f);
+        q(i, 1) = slice->samples[i].position.y / (min_dist * 10.f);
+        q(i, 2) = slice->samples[i].position.z / (min_dist * 10.f);
         q(i, 3) = 1;
     }
 
@@ -336,28 +338,35 @@ std::vector<VISIBILITY> linearPredictor(KDTNode* slice, std::uint32_t col, std::
     Eigen::MatrixXf y(num_sampled_values, 1);
 
     for(std::uint32_t i = 0; i < num_sampled_values; ++i){
-        x(i, 0) = slice->samples[i].position.x;
-        x(i, 1) = slice->samples[i].position.y;
-        x(i, 2) = slice->samples[i].position.z;
+        x(i, 0) = slice->samples[i].position.x / (min_dist * 10.f);
+        x(i, 1) = slice->samples[i].position.y / (min_dist * 10.f);
+        x(i, 2) = slice->samples[i].position.z / (min_dist * 10.f);
         x(i, 3) = 1;
 
         y(i, 0) = slice->samples[i].visibility[col] == VISIBLE ? 1 : -1;
     }
 
-    Eigen::MatrixXf w = (x.transpose() * x).inverse() * x * y;
+    Eigen::MatrixXf xxt = x.transpose() * x;
+    Eigen::MatrixXf w = (x.transpose() * x).inverse() * x.transpose() * y;
+    std::cout << xxt << std::endl;
+
+    int val;
+    std::cin >> val;
     Eigen::MatrixXf fq = q * w;
 
-    std::vector<VISIBILITY> output(slice->samples[0].visibility.size());
+    std::vector<VISIBILITY> output(slice->samples.size());
 
     std::uniform_real_distribution<float> gen(0.f, 1.f);
 
     for(std::uint32_t i = 0; i < slice->samples.size(); ++i){
         if(slice->samples[i].visibility[col] == VISIBLE || slice->samples[i].visibility[col] == NOT_VISIBLE){
             output[i] = slice->samples[i].visibility[col];
+            std::cout << (slice->samples[i].visibility[col] == VISIBLE) << " " << fq(i, 0) << std::endl;
         }
         else{
             float pv0 = std::min(1.f, std::max(0.f, 0.5f - fq(i, 0)));
-            output[i] = gen(rng) < pv0 ? NOT_VISIBLE : VISIBLE;
+            output[i] = gen(rng) < pv0 ? P_NOT_VISIBLE : P_VISIBLE;
+            output[i] = fq(i, 0) > 0 ? P_VISIBLE : P_NOT_VISIBLE;
         }
     }
 
@@ -444,7 +453,7 @@ std::vector<VISIBILITY> naiveBayes(KDTNode* slice, std::uint32_t col, std::uint3
                 tot_iv += 1.f;
             }
             else if(v == UNKNOWN){
-                tot_iv += 0.5f;
+                //tot_iv += 0.5f;
             }
         }
 
@@ -453,11 +462,13 @@ std::vector<VISIBILITY> naiveBayes(KDTNode* slice, std::uint32_t col, std::uint3
             tot_iv += 1.f;
         }
         else if(v == UNKNOWN){
-            tot_iv += 0.5f;
+            //tot_iv += 0.5f;
         }
 
         float pi_v = tot_iv / tot_vis;
         float pv_ij = (pi_v * pnj_v * p_v) / (p_i * p_nj);
+
+        //std::cout << pi_v << " " << p_v << " " << " " << pnj_v << " " << p_i << " " << p_nj << " " << pv_ij << std::endl;
 
         output[i] = gen(rng) < pv_ij ? P_VISIBLE : P_NOT_VISIBLE;
     }
@@ -509,7 +520,7 @@ void performInitialVisibilitySamples(KDTNode* slice, float sample_percentage, st
 }
 
 std::set<std::uint32_t> sampleAndPredictVisibility(KDTNode* slice, float sample_percentage, std::mt19937& rng, Scene* scene,
-    const std::vector<VPL>& vpls, const std::set<std::uint32_t>& active_columns, float error_threshold){
+    const std::vector<VPL>& vpls, const std::set<std::uint32_t>& active_columns, float error_threshold, float min_dist){
 
     std::set<std::uint32_t> new_active_cols;
 
@@ -527,9 +538,9 @@ std::set<std::uint32_t> sampleAndPredictVisibility(KDTNode* slice, float sample_
 
         std::vector<std::vector<VISIBILITY>> predictions;
         
-        predictions.push_back(knnPredictor(slice, 3, *iter, rng));
-        predictions.push_back(linearPredictor(slice, *iter, rng));
-        predictions.push_back(naiveBayes(slice, *iter, 3, vpls, rng));
+        //predictions.push_back(knnPredictor(slice, 3, *iter, rng));
+        predictions.push_back(linearPredictor(slice, *iter, min_dist, rng));
+        //predictions.push_back(naiveBayes(slice, *iter, 3, vpls, rng));
 
         std::vector<std::uint32_t> to_sample;
         
@@ -590,7 +601,7 @@ std::set<std::uint32_t> sampleAndPredictVisibility(KDTNode* slice, float sample_
             slice->samples[i].visibility[*iter] = predictions[smallest_idx][i];
         }
 
-        float normalized_error = (float)smallest_error / slice->samples.size();
+        float normalized_error = (float)smallest_error / to_sample.size();
         if(normalized_error > error_threshold){
             new_active_cols.insert(*iter);
         }
@@ -613,6 +624,9 @@ std::tuple<Eigen::MatrixXf, Eigen::MatrixXf> sliceToMatrices(KDTNode* node){
                 slice_mat(row, col * 3) = r;
                 slice_mat(row, col * 3 + 1) = g;
                 slice_mat(row, col * 3 + 2) = b;
+            }
+            else{
+                slice_mat(row, col * 3) = slice_mat(row, col * 3 + 1) = slice_mat(row, col * 3 + 2) = 0.f;
             }
             
             error_mat(row, col * 3) = 2.f / r;
@@ -656,11 +670,11 @@ std::tuple<Eigen::MatrixXf, Eigen::MatrixXf> separate(const Eigen::MatrixXf& mat
     Eigen::MatrixXf identity = Eigen::MatrixXf::Identity(two_q.rows(), two_q.cols());
     Eigen::MatrixXf inv_two_q = two_q.cwiseInverse();
     Eigen::MatrixXf x;
-    Eigen::MatrixXf y(rank_estimate, mat.cols());
-    Eigen::MatrixXf z(mat.rows(), mat.cols());
-    Eigen::MatrixXf h(mat.rows(), mat.cols());
-    Eigen::MatrixXf lambda(mat.rows(), mat.cols());
-    Eigen::MatrixXf pi(mat.rows(), mat.cols());
+    Eigen::MatrixXf y = Eigen::MatrixXf::Zero(rank_estimate, mat.cols());
+    Eigen::MatrixXf z = Eigen::MatrixXf::Zero(mat.rows(), mat.cols());
+    Eigen::MatrixXf h = Eigen::MatrixXf::Zero(mat.rows(), mat.cols());
+    Eigen::MatrixXf lambda = Eigen::MatrixXf::Zero(mat.rows(), mat.cols());
+    Eigen::MatrixXf pi = Eigen::MatrixXf::Zero(mat.rows(), mat.cols());
 
     Eigen::MatrixXf b;
 
@@ -780,11 +794,12 @@ void reincorporateDenseHighRank(Eigen::MatrixXf& low_rank, const Eigen::MatrixXf
 
 MatrixSeparationRenderer::MatrixSeparationRenderer(std::unique_ptr<ManyLightsClusterer> clusterer, 
         float min_dist, float sample_percentage, float error_threshold, float reincorporation_density_threshold,
-        std::uint32_t slice_size, std::uint32_t max_prediction_iterations, std::uint32_t max_separation_iterations) : 
+        std::uint32_t slice_size, std::uint32_t max_prediction_iterations, std::uint32_t max_separation_iterations,
+        std::uint32_t show_slices) : 
         clusterer_(std::move(clusterer)), min_dist_(min_dist), sample_percentage_(sample_percentage),
         error_threshold_(error_threshold), reincorporation_density_threshold_(reincorporation_density_threshold),
         slice_size_(slice_size), max_prediction_iterations_(max_prediction_iterations), 
-        max_separation_iterations_(max_separation_iterations), cancel_(false){
+        max_separation_iterations_(max_separation_iterations), show_slices_(show_slices > 0), cancel_(false){
 
 }
 
@@ -792,7 +807,7 @@ MatrixSeparationRenderer::MatrixSeparationRenderer(MatrixSeparationRenderer&& ot
         min_dist_(other.min_dist_), sample_percentage_(other.sample_percentage_), error_threshold_(other.error_threshold_),
         reincorporation_density_threshold_(other.reincorporation_density_threshold_), slice_size_(other.slice_size_),
         max_prediction_iterations_(other.max_prediction_iterations_),
-        max_separation_iterations_(other.max_separation_iterations_), cancel_(false){
+        max_separation_iterations_(other.max_separation_iterations_), show_slices_(other.show_slices_), cancel_(false){
     
 }
 
@@ -806,6 +821,7 @@ MatrixSeparationRenderer& MatrixSeparationRenderer::operator = (MatrixSeparation
         slice_size_ = other.slice_size_;
         max_prediction_iterations_ = other.max_prediction_iterations_;
         max_separation_iterations_ = other.max_separation_iterations_;
+        show_slices_ = other.show_slices_;
         cancel_ = false;
     }
     
@@ -820,15 +836,20 @@ bool MatrixSeparationRenderer::render(Scene* scene){
     Intersection its;
     std::vector<VPL> vpls = clusterer_->getClusteringForPoint(its);
     
+    std::cout << "constructing kd tree" << std::endl;
     auto root = constructKDTree(scene, vpls, slice_size_, min_dist_);
     std::vector<KDTNode*> slices;
 
+    std::cout << "getting slices" << std::endl;
     getSlices(root.get(), slices);
 
     auto seed = std::chrono::high_resolution_clock::now().time_since_epoch().count();
     std::mt19937 rng(seed);
 
     for(std::uint32_t i = 0; i < slices.size(); ++i){
+        std::cout << "slice " << i << " of " << slices.size() << std::endl;
+
+        std::cout << "initial visibility samples" << std::endl;
         performInitialVisibilitySamples(slices[i], sample_percentage_, rng, scene, vpls);
 
         std::set<std::uint32_t> active_cols;
@@ -838,9 +859,10 @@ bool MatrixSeparationRenderer::render(Scene* scene){
 
         std::uint32_t iter = 0;
 
+        std::cout << "predicting visibility samples" << std::endl;
         while(active_cols.size() > 0 && iter < max_prediction_iterations_){
             active_cols = sampleAndPredictVisibility(slices[i], sample_percentage_, rng, scene, vpls,  
-                active_cols, error_threshold_);
+                active_cols, error_threshold_, min_dist_);
             iter++;
         }
 
@@ -853,6 +875,8 @@ bool MatrixSeparationRenderer::render(Scene* scene){
             }
         }
 
+
+        /*std::cout << "separating" << std::endl;
         Eigen::MatrixXf d, two_q;
         std::tie(d, two_q) = sliceToMatrices(slices[i]);
         
@@ -861,12 +885,13 @@ bool MatrixSeparationRenderer::render(Scene* scene){
         Eigen::MatrixXf l, s;
         std::tie(l, s) = separate(d, two_q, max_separation_iterations_, beta, sampled);
 
+        std::cout << "reincorporating high rank info" << std::endl;
         auto gaussian_kernel = createGaussianKernel(7);
 
         reincorporateDenseHighRank(l, s, slices[i], 0.00001f, gaussian_kernel, reincorporation_density_threshold_, 
             scene, vpls, min_dist_);
 
-        matrixToSlice(slices[i], l);
+        matrixToSlice(slices[i], l);*/
     }
 
     ref<Sensor> sensor = scene->getSensor();
@@ -881,12 +906,35 @@ bool MatrixSeparationRenderer::render(Scene* scene){
     std::uint8_t* output_image = output_bitmap->getUInt8Data();
     memset(output_image, 0, output_bitmap->getBytesPerPixel() * size.x * size.y);
 
+    std::uint32_t fully_sampled = 0;
+    std::uint32_t total = 0;
+
     for(std::uint32_t i = 0; i < slices.size(); ++i){
+
+        int y = 255;
+        int u = rand() % 255;
+        int v = ((float)i / slices.size()) * 255.f;
+
+        int sb = 1.164 * (y - 16.f) + 2.018 * (u - 128.f);
+        int sg = 1.164 * (y - 16) - 0.813 * (v - 128) - 0.391 * (u - 128);
+        int sr = 1.164 * (y - 16) + 1.596 * (v - 128);
+
         for(std::uint32_t j = 0; j < slices[i]->samples.size(); ++j){
             Spectrum s(0.f);
 
             for(std::uint32_t k = 0; k < slices[i]->samples[j].col_samples.size(); ++k){
-                s += slices[i]->samples[j].col_samples[j];
+                if(slices[i]->samples[j].visibility[k] == NOT_VISIBLE || slices[i]->samples[j].visibility[k] == VISIBLE){
+                    fully_sampled++;
+                }
+                total++;
+
+                if(slices[i]->samples[j].visibility[k] == NOT_VISIBLE ||
+                    slices[i]->samples[j].visibility[k] == P_NOT_VISIBLE){
+                    continue;
+                }
+                //if(slices[i]->samples[j].visibility[k] == P_VISIBLE || slices[i]->samples[j].visibility[k] == VISIBLE){
+                    s += slices[i]->samples[j].col_samples[k];
+                //}
             }
 
             std::uint32_t offset = (slices[i]->samples[j].image_x + slices[i]->samples[j].image_y * 
@@ -894,14 +942,22 @@ bool MatrixSeparationRenderer::render(Scene* scene){
 
             float r, g, b;
             s.toSRGB(r, g, b);
-            
+
             output_image[offset] = std::min(1.f, r) * 255 + 0.5f;
             output_image[offset + 1] = std::min(1.f, g) * 255 + 0.5f;
             output_image[offset + 2] = std::min(1.f, b) * 255 + 0.5f;
+
+            if(show_slices_){
+                output_image[offset] = sr;
+                output_image[offset + 1] = sg;
+                output_image[offset + 2] = sb;
+            }
         }
     }
 
     film->setBitmap(output_bitmap);
+
+    std::cout << "Fully sampled: " << (float)fully_sampled / total << std::endl;
 
     return false;
 }
