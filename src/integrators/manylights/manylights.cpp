@@ -335,11 +335,12 @@ private:
 				std::uint32_t max_prediction_iterations = props.getInteger("prediction_iter", 10);
 				std::uint32_t max_separation_iterations = props.getInteger("separation_iter", 20);
 				std::uint32_t show_slices = props.getInteger("show_slices", 0);
+				std::uint32_t only_directsamples = props.getInteger("only_direct_samples", 0);
 
 				std::unique_ptr<ManyLightsClusterer> clusterer(new PassthroughClusterer(vpls_));
 				return std::unique_ptr<MatrixSeparationRenderer>(new MatrixSeparationRenderer(std::move(clusterer), 
 					min_dist_, sample_percentage, error_threshold, reincorporation_density_threshold, slice_size, 
-					max_prediction_iterations, max_separation_iterations, show_slices));
+					max_prediction_iterations, max_separation_iterations, show_slices, only_directsamples));
 			}
 			default:
 				return nullptr;

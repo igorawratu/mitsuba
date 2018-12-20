@@ -14,7 +14,7 @@ public:
     MatrixSeparationRenderer(std::unique_ptr<ManyLightsClusterer> clusterer, 
         float min_dist, float sample_percentage, float error_threshold, float reincorporation_density_threshold,
         std::uint32_t slice_size, std::uint32_t max_prediction_iterations, std::uint32_t max_separation_iterations,
-        std::uint32_t show_slices);
+        std::uint32_t show_slices, std::uint32_t only_directsamples);
     MatrixSeparationRenderer(const MatrixSeparationRenderer& other) = delete;
     MatrixSeparationRenderer(MatrixSeparationRenderer&& other);
     MatrixSeparationRenderer& operator = (const MatrixSeparationRenderer& other) = delete;
@@ -33,7 +33,7 @@ private:
     std::unique_ptr<ManyLightsClusterer> clusterer_;
     float min_dist_, sample_percentage_, error_threshold_, reincorporation_density_threshold_;
     std::uint32_t slice_size_, max_prediction_iterations_, max_separation_iterations_;
-    bool show_slices_;
+    bool show_slices_, show_only_directsamples_;
     bool cancel_;
     std::mutex cancel_lock_;
 };
