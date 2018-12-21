@@ -325,15 +325,20 @@ std::vector<VISIBILITY> knnPredictor(KDTNode* slice, std::uint32_t neighbours, s
             kdt.findNeighbors(result_set, query_pt, nanoflann::SearchParams(10));
 
             std::uint32_t num_visible = 0;
+            float p_visible = 0.f;
             for(std::uint32_t j = 0; j < num_neighbours; ++j){
                 std::uint32_t sample_index = point_set.pts[indices[j]].idx;
                 if(slice->sample(sample_index).visibility[col] == VISIBLE){
                     num_visible++;
+                    p_visible += std::max(0.f, std::min(1.f, 1.f / (float)sqrt(distances[j]))) / (float)num_neighbours;
                 }
             }
 
+            //std::cout << p_visible << std::endl;
+
             float p_v = (float)num_visible / num_neighbours;
-            output[i] = gen(rng) < p_v ? P_VISIBLE : P_NOT_VISIBLE;
+            //output[i] = gen(rng) < p_v ? P_VISIBLE : P_NOT_VISIBLE;
+            output[i] = gen(rng) < p_visible ? P_VISIBLE : P_NOT_VISIBLE;
         }
     }
 
@@ -540,8 +545,8 @@ std::set<std::uint32_t> sampleAndPredictVisibility(KDTNode* slice, float sample_
 
         std::vector<std::vector<VISIBILITY>> predictions;
         
-        predictions.push_back(linearPredictor(slice, *iter, min_dist, rng));
-        predictions.push_back(naiveBayes(slice, *iter, 3, vpls, rng));
+        //predictions.push_back(linearPredictor(slice, *iter, min_dist, rng));
+        //predictions.push_back(naiveBayes(slice, *iter, 3, vpls, rng));
         predictions.push_back(knnPredictor(slice, 3, *iter, rng));
 
         std::vector<std::uint32_t> to_sample;
@@ -884,7 +889,7 @@ bool MatrixSeparationRenderer::render(Scene* scene){
                 iter++;
             }
 
-            std::set<std::pair<std::uint32_t, std::uint32_t>> sampled;
+            /*std::set<std::pair<std::uint32_t, std::uint32_t>> sampled;
             for(std::uint32_t j = 0; j < slices[i]->sample_indices.size(); ++j){
                 for(std::uint32_t k = 0; k < slices[i]->sample(j).visibility.size(); ++k){
                     if(slices[i]->sample(j).visibility[k] == VISIBLE || slices[i]->sample(j).visibility[k] == NOT_VISIBLE){
@@ -906,7 +911,7 @@ bool MatrixSeparationRenderer::render(Scene* scene){
             reincorporateDenseHighRank(l, s, slices[i], 0.00001f, gaussian_kernel, reincorporation_density_threshold_, 
                 scene, vpls, min_dist_);
 
-            matrixToSlice(slices[i], l);
+            matrixToSlice(slices[i], l);*/
         }
     }
 
