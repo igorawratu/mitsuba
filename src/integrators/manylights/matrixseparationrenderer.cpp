@@ -684,8 +684,14 @@ std::tuple<Eigen::MatrixXf, Eigen::MatrixXf> separate(const Eigen::MatrixXf& mat
         b = z - lambda/beta;
         Eigen::MatrixXf ru = b * y.transpose();
         
-        x = ru.householderQr().householderQ();
-        x = x.block(0, 0, x.rows(), ru.cols());
+        Eigen::MatrixXf ruq = ru.householderQr().householderQ();
+        x = Eigen::MatrixXf(ruq.rows(), ru.cols());
+        for(int i = 0; i < x.rows(); ++i){
+            for(int j = 0; j < x.cols(); ++j){
+                x(i, j) = ruq(i, j);
+            }
+        }
+
         y = x.transpose() * b;
 
         z = 0.5 * (mat + h - x * y - (lambda + pi) / beta);
@@ -783,10 +789,11 @@ void reincorporateDenseHighRank(Eigen::MatrixXf& low_rank, const Eigen::MatrixXf
 
             if(requires_direct_sample){
                 Spectrum col = sample(scene, sampler, slice->sample(row).its, vpls[light], 
-                slice->sample(row).position, slice->sample(row).normal, min_dist, true);
+                    slice->sample(row).position, slice->sample(row).normal, min_dist, true);
 
                 float r, g, b;
                 col.toLinearRGB(r, g, b);
+
                 low_rank(row, light * 3) = r;
                 low_rank(row, light * 3 + 1) = g;
                 low_rank(row, light * 3 + 2) = b;
@@ -852,60 +859,58 @@ bool MatrixSeparationRenderer::render(Scene* scene){
     auto root = constructKDTree(scene, vpls, slice_size_, min_dist_, samples_);
     std::vector<KDTNode*> slices;
 
-    std::cout << "getting slices" << std::endl;
     getSlices(root.get(), slices);
 
     auto seed = std::chrono::high_resolution_clock::now().time_since_epoch().count();
-    std::mt19937 rng(seed);
 
-    for(std::uint32_t i = 0; i < slices.size() && !show_slices_; ++i){
-        std::cout << "slice " << i << " of " << slices.size() << std::endl;
+    std::cout << "processing slices..." << std::endl;
+    if(!show_slices_){
+        #pragma omp parallel for
+        for(std::uint32_t i = 0; i < slices.size(); ++i){
+            std::mt19937 rng(seed * i);
 
-        std::cout << "initial visibility samples" << std::endl;
-        performInitialVisibilitySamples(slices[i], sample_percentage_, rng, scene, vpls);
+            performInitialVisibilitySamples(slices[i], sample_percentage_, rng, scene, vpls);
 
-        std::set<std::uint32_t> active_cols;
-        for(std::uint32_t j = 0; j < vpls.size(); ++j){
-            active_cols.insert(j);
-        }
+            std::set<std::uint32_t> active_cols;
+            for(std::uint32_t j = 0; j < vpls.size(); ++j){
+                active_cols.insert(j);
+            }
 
-        std::uint32_t iter = 0;
+            std::uint32_t iter = 0;
 
-        std::cout << "predicting visibility samples" << std::endl;
-        while(active_cols.size() > 0 && iter < max_prediction_iterations_){
-            active_cols = sampleAndPredictVisibility(slices[i], sample_percentage_, rng, scene, vpls,  
-                active_cols, error_threshold_, min_dist_);
-            iter++;
-        }
+            while(active_cols.size() > 0 && iter < max_prediction_iterations_){
+                active_cols = sampleAndPredictVisibility(slices[i], sample_percentage_, rng, scene, vpls,  
+                    active_cols, error_threshold_, min_dist_);
+                iter++;
+            }
 
-        std::set<std::pair<std::uint32_t, std::uint32_t>> sampled;
-        for(std::uint32_t j = 0; j < slices[i]->sample_indices.size(); ++j){
-            for(std::uint32_t k = 0; k < slices[i]->sample(j).visibility.size(); ++k){
-                if(slices[i]->sample(j).visibility[k] == VISIBLE || slices[i]->sample(j).visibility[k] == NOT_VISIBLE){
-                    sampled.insert(std::make_pair(j, k));
+            std::set<std::pair<std::uint32_t, std::uint32_t>> sampled;
+            for(std::uint32_t j = 0; j < slices[i]->sample_indices.size(); ++j){
+                for(std::uint32_t k = 0; k < slices[i]->sample(j).visibility.size(); ++k){
+                    if(slices[i]->sample(j).visibility[k] == VISIBLE || slices[i]->sample(j).visibility[k] == NOT_VISIBLE){
+                        sampled.insert(std::make_pair(j, k));
+                    }
                 }
             }
+
+            Eigen::MatrixXf d, two_q;
+            std::tie(d, two_q) = sliceToMatrices(slices[i]);
+            
+            float beta = 500.f / d.norm();
+            
+            Eigen::MatrixXf l, s;
+            std::tie(l, s) = separate(d, two_q, max_separation_iterations_, beta, sampled);
+
+            auto gaussian_kernel = createGaussianKernel(7);
+
+            reincorporateDenseHighRank(l, s, slices[i], 0.00001f, gaussian_kernel, reincorporation_density_threshold_, 
+                scene, vpls, min_dist_);
+
+            matrixToSlice(slices[i], l);
         }
-
-
-        /*std::cout << "separating" << std::endl;
-        Eigen::MatrixXf d, two_q;
-        std::tie(d, two_q) = sliceToMatrices(slices[i]);
-        
-        float beta = 500.f / d.norm();
-        
-        Eigen::MatrixXf l, s;
-        std::tie(l, s) = separate(d, two_q, max_separation_iterations_, beta, sampled);
-
-        std::cout << "reincorporating high rank info" << std::endl;
-        auto gaussian_kernel = createGaussianKernel(7);
-
-        reincorporateDenseHighRank(l, s, slices[i], 0.00001f, gaussian_kernel, reincorporation_density_threshold_, 
-            scene, vpls, min_dist_);
-
-        matrixToSlice(slices[i], l);*/
     }
 
+    std::cout << "generating final image" << std::endl;
     ref<Sensor> sensor = scene->getSensor();
     ref<Film> film = sensor->getFilm();
 
