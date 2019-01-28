@@ -9,7 +9,7 @@
 
 MTS_NAMESPACE_BEGIN
 
-enum VISIBILITY{VISIBLE, NOT_VISIBLE, P_VISIBLE, P_NOT_VISIBLE, UNKNOWN};
+enum VISIBILITY{VISIBLE = 0, NOT_VISIBLE, P_VISIBLE, P_NOT_VISIBLE, UNKNOWN};
 
 struct RowSample{
     RowSample(const Point3f& p, const Normal& n, std::uint32_t x, std::uint32_t y, std::uint32_t cols, bool in_scene, Intersection intersection) : 
@@ -30,7 +30,7 @@ public:
     MatrixSeparationRenderer(std::unique_ptr<ManyLightsClusterer> clusterer, 
         float min_dist, float sample_percentage, float error_threshold, float reincorporation_density_threshold,
         std::uint32_t slice_size, std::uint32_t max_prediction_iterations, std::uint32_t max_separation_iterations,
-        std::uint32_t show_slices, std::uint32_t only_directsamples);
+        std::uint32_t show_slices, std::uint32_t only_directsamples, bool separate, bool show_error);
     MatrixSeparationRenderer(const MatrixSeparationRenderer& other) = delete;
     MatrixSeparationRenderer(MatrixSeparationRenderer&& other);
     MatrixSeparationRenderer& operator = (const MatrixSeparationRenderer& other) = delete;
@@ -53,6 +53,7 @@ private:
     bool cancel_;
     std::mutex cancel_lock_;
     std::vector<RowSample> samples_;
+    bool separate_, show_error_;
 };
 
 MTS_NAMESPACE_END

@@ -16,8 +16,10 @@
 
 #include <eigen3/Eigen/Dense>
 
+
 #include "definitions.h"
 #include "nanoflann.hpp"
+#include "common.h"
 
 MTS_NAMESPACE_BEGIN
 
@@ -294,6 +296,13 @@ std::vector<VISIBILITY> knnPredictor(KDTNode* slice, std::uint32_t neighbours, s
         }
     }
 
+    /*for(int i =0 ; i < point_set.pts.size(); ++i){
+        std::cout << slice->sample(point_set.pts[i].idx).visibility[col] << " ";
+    }
+    std::cout << std::endl;*/
+
+    //std::cout << point_set.pts.size() << std::endl;
+
     KDTree kdt(3, point_set, nanoflann::KDTreeSingleIndexAdaptorParams(10));
     kdt.buildIndex();
 
@@ -320,11 +329,32 @@ std::vector<VISIBILITY> knnPredictor(KDTNode* slice, std::uint32_t neighbours, s
             output[i] = slice->sample(i).visibility[col];
         }
         else{
-            float query_pt[3] = 
-                {slice->sample(i).position.x, slice->sample(i).position.y, slice->sample(i).position.z};
-            kdt.findNeighbors(result_set, query_pt, nanoflann::SearchParams(10));
+            std::vector<std::pair<float, std::uint32_t>> neighbours;
+            for(size_t j = 0; j < point_set.pts.size(); ++j){
+                float d = abs(slice->sample(i).position.x - slice->sample(point_set.pts[j].idx).position.x);
+                d += abs(slice->sample(i).position.y - slice->sample(point_set.pts[j].idx).position.y);
+                d += abs(slice->sample(i).position.z - slice->sample(point_set.pts[j].idx).position.z);
+                neighbours.emplace_back(d, point_set.pts[j].idx);
+            }
 
-            std::uint32_t num_visible = 0;
+            auto sorter = [](const std::pair<float, std::uint32_t>& lhs, const std::pair<float, std::uint32_t>& rhs){
+                return lhs.first < rhs.first;
+            };
+            
+            std::sort(neighbours.begin(), neighbours.end(), sorter);
+
+            //float query_pt[3] = 
+            //    {slice->sample(i).position.x, slice->sample(i).position.y, slice->sample(i).position.z};
+            //kdt.findNeighbors(result_set, query_pt, nanoflann::SearchParams(10));
+
+            std::uint32_t idx = std::min(num_neighbours - 1, (std::uint32_t)(gen(rng) * num_neighbours));
+            //std::uint32_t sample_index = point_set.pts[indices[idx]].idx;
+
+            std::uint32_t sample_index = neighbours[idx].second;
+
+            output[i] = slice->sample(sample_index).visibility[col] == NOT_VISIBLE ? P_NOT_VISIBLE : P_VISIBLE;
+
+            /*std::uint32_t num_visible = 0;
             float p_visible = 0.f;
             for(std::uint32_t j = 0; j < num_neighbours; ++j){
                 std::uint32_t sample_index = point_set.pts[indices[j]].idx;
@@ -332,15 +362,23 @@ std::vector<VISIBILITY> knnPredictor(KDTNode* slice, std::uint32_t neighbours, s
                     num_visible++;
                     p_visible += std::max(0.f, std::min(1.f, 1.f / (float)sqrt(distances[j]))) / (float)num_neighbours;
                 }
-            }
+            }*/
 
             //std::cout << p_visible << std::endl;
 
-            float p_v = (float)num_visible / num_neighbours;
-            //output[i] = gen(rng) < p_v ? P_VISIBLE : P_NOT_VISIBLE;
-            output[i] = gen(rng) < p_visible ? P_VISIBLE : P_NOT_VISIBLE;
+            //float p_v = (float)num_visible / num_neighbours;
+            //output[i] = num_visible > (num_neighbours / 2) ? P_VISIBLE : P_NOT_VISIBLE;
+            //output[i] = gen(rng) < p_visible ? P_VISIBLE : P_NOT_VISIBLE;
         }
     }
+
+    //std::cout << std::endl;
+    //std::cout << std::endl;
+
+    /*for(int i =0 ; i < output.size(); ++i){
+        std::cout << output[i] << " ";
+    }
+    std::cout << std::endl << std::endl;*/
 
     return output;
 }
@@ -545,8 +583,8 @@ std::set<std::uint32_t> sampleAndPredictVisibility(KDTNode* slice, float sample_
 
         std::vector<std::vector<VISIBILITY>> predictions;
         
-        //predictions.push_back(linearPredictor(slice, *iter, min_dist, rng));
-        //predictions.push_back(naiveBayes(slice, *iter, 3, vpls, rng));
+        predictions.push_back(linearPredictor(slice, *iter, min_dist, rng));
+        predictions.push_back(naiveBayes(slice, *iter, 3, vpls, rng));
         predictions.push_back(knnPredictor(slice, 3, *iter, rng));
 
         std::vector<std::uint32_t> to_sample;
@@ -660,65 +698,62 @@ void matrixToSlice(KDTNode* node, const Eigen::MatrixXf& mat){
     }
 }
 
-void shrink(Eigen::MatrixXf& mat, float amount){
-    for(std::uint32_t i = 0; i < mat.rows(); ++i){
-        for(std::uint32_t j = 0; j < mat.cols(); ++j){
-            int sign = mat(i, j) < 0 ? -1 : 1;
-            mat(i, j) = sign * std::max(0.f, abs(mat(i, j)) - amount);
-        }
-    }
-}
-
 std::tuple<Eigen::MatrixXf, Eigen::MatrixXf> separate(const Eigen::MatrixXf& mat, const Eigen::MatrixXf& two_q,
-    const std::uint32_t max_iterations, float beta, const std::set<std::pair<std::uint32_t, std::uint32_t>>& sampled){
-    float c = two_q.rows() * two_q.cols();
+    const std::uint32_t max_iterations, float beta, float step, float theta, const Eigen::MatrixXf& sampled){
+    
+    std::uint32_t rank_estimate = mat.rows() / 2;
 
-    std::uint32_t rank_estimate = mat.bdcSvd().nonzeroSingularValues();;
-    Eigen::MatrixXf identity = Eigen::MatrixXf::Identity(two_q.rows(), two_q.cols());
-    Eigen::MatrixXf inv_two_q = two_q.cwiseInverse();
-    Eigen::MatrixXf x;
-    Eigen::MatrixXf y = Eigen::MatrixXf::Zero(rank_estimate, mat.cols());
-    Eigen::MatrixXf z = Eigen::MatrixXf::Zero(mat.rows(), mat.cols());
-    Eigen::MatrixXf h = Eigen::MatrixXf::Zero(mat.rows(), mat.cols());
+    Eigen::MatrixXf z = mat;
+    Eigen::MatrixXf u;
+    //maybe initialize to v to v transpose of svd as stated by paper 
+    Eigen::MatrixXf v = /*mat.jacobiSvd(Eigen::ComputeFullV).matrixV();*/Eigen::MatrixXf::Identity(rank_estimate, mat.cols());
     Eigen::MatrixXf lambda = Eigen::MatrixXf::Zero(mat.rows(), mat.cols());
-    Eigen::MatrixXf pi = Eigen::MatrixXf::Zero(mat.rows(), mat.cols());
+    Eigen::MatrixXf b = Eigen::MatrixXf::Zero(mat.rows(), mat.cols());
+    Eigen::MatrixXf bvt = Eigen::MatrixXf::Zero(mat.rows(), mat.cols());
+    Eigen::MatrixXf lambda_over_beta = Eigen::MatrixXf::Zero(mat.rows(), mat.cols());
+    Eigen::MatrixXf convergence_check = Eigen::MatrixXf::Zero(mat.rows(), mat.cols());
+    Eigen::MatrixXf uv;
 
-    Eigen::MatrixXf b;
+    for(std::uint32_t i = 0; i < max_iterations; ++i){
+        //u and v update
+        lambda_over_beta = lambda / beta;
+        b = z - lambda_over_beta;
+        bvt = b * v.transpose();
+        Eigen::MatrixXf range_space = bvt.fullPivLu().image(bvt);
+        u = range_space.householderQr().householderQ();
+        //std::cout << range_space << std::endl;
+        //int input;
+        //std::cin >> input;
+        u.conservativeResize(u.rows(), range_space.cols());
+        v = u.transpose() * b;
 
-    for(std::uint32_t iteration = 0; iteration < max_iterations; ++iteration){
-        b = z - lambda/beta;
-        Eigen::MatrixXf ru = b * y.transpose();
-        
-        Eigen::MatrixXf ruq = ru.householderQr().householderQ();
-        x = Eigen::MatrixXf(ruq.rows(), ru.cols());
-        for(int i = 0; i < x.rows(); ++i){
-            for(int j = 0; j < x.cols(); ++j){
-                x(i, j) = ruq(i, j);
+        //std::cout << bvt.rows() << " " << bvt.cols() << " " << range_space.rows() << " " << range_space.cols() << " " << u.rows() << " " << u.cols() << std::endl;
+
+        //z update
+        uv = u * v;
+        //z = uv - mat + lambda_over_beta;
+
+        for(std::uint32_t i = 0; i < z.rows(); ++i){
+            for(std::uint32_t j = 0; j < z.cols(); ++j){
+                float d_min_uv = mat(i, j) - uv(i, j);
+                int sign = d_min_uv < 0 ? -1 : 1;
+                z(i, j) = sign * std::max(0.f, abs(d_min_uv) - 1.f / beta  + lambda_over_beta(i, j)) + mat(i, j);
             }
         }
 
-        y = x.transpose() * b;
-
-        z = 0.5 * (mat + h - x * y - (lambda + pi) / beta);
-        shrink(z, 1.f / beta);
-
-        h = z + pi / beta;
-        
-        for(auto iter = sampled.begin(); iter != sampled.end(); ++iter){
-            h(iter->first, iter->second) = 0.f;
+        convergence_check = uv - z;
+        float frob = convergence_check.norm();
+        //std::cout << frob << std::endl;
+        if(frob < theta){
+            break;
         }
 
-        float gamma = sqrt(c / (two_q.cwiseProduct(h) - identity).squaredNorm());
-
-        h = gamma * (h - inv_two_q) + inv_two_q;
-
-        lambda = lambda + beta * (z + x * y - mat);
-        pi = pi + beta * (z - h);
-
-        //check for convergence???
+        lambda = lambda + step * beta * convergence_check;
     }
 
-    return std::make_tuple(x * y, z);
+    //std::cout << u.rows() << " " << u.cols() << " " << v.rows() << " " << v.cols() << std::endl;
+
+    return std::make_tuple(uv, mat - uv);
 }
 
 float gaussian(float x, float mu, float sigma){
@@ -810,12 +845,12 @@ void reincorporateDenseHighRank(Eigen::MatrixXf& low_rank, const Eigen::MatrixXf
 MatrixSeparationRenderer::MatrixSeparationRenderer(std::unique_ptr<ManyLightsClusterer> clusterer, 
         float min_dist, float sample_percentage, float error_threshold, float reincorporation_density_threshold,
         std::uint32_t slice_size, std::uint32_t max_prediction_iterations, std::uint32_t max_separation_iterations,
-        std::uint32_t show_slices, std::uint32_t only_directsamples) : 
+        std::uint32_t show_slices, std::uint32_t only_directsamples, bool separate, bool show_error) : 
         clusterer_(std::move(clusterer)), min_dist_(min_dist), sample_percentage_(sample_percentage),
         error_threshold_(error_threshold), reincorporation_density_threshold_(reincorporation_density_threshold),
         slice_size_(slice_size), max_prediction_iterations_(max_prediction_iterations), 
         max_separation_iterations_(max_separation_iterations), show_slices_(show_slices > 0),
-        show_only_directsamples_(only_directsamples > 0), cancel_(false){
+        show_only_directsamples_(only_directsamples > 0), cancel_(false), separate_(separate), show_error_(show_error){
 
 }
 
@@ -824,7 +859,8 @@ MatrixSeparationRenderer::MatrixSeparationRenderer(MatrixSeparationRenderer&& ot
         reincorporation_density_threshold_(other.reincorporation_density_threshold_), slice_size_(other.slice_size_),
         max_prediction_iterations_(other.max_prediction_iterations_),
         max_separation_iterations_(other.max_separation_iterations_), show_slices_(other.show_slices_), 
-        show_only_directsamples_(other.show_only_directsamples_), cancel_(false), samples_(std::move(other.samples_)){
+        show_only_directsamples_(other.show_only_directsamples_), cancel_(false), samples_(std::move(other.samples_)),
+        separate_(other.separate_), show_error_(other.show_error_){
     
 }
 
@@ -842,6 +878,8 @@ MatrixSeparationRenderer& MatrixSeparationRenderer::operator = (MatrixSeparation
         show_only_directsamples_ = other.show_only_directsamples_;
         cancel_ = false;
         samples_ = std::move(other.samples_);
+        separate_ = other.separate_;
+        show_error_ = other.show_error_;
     }
     
     return *this;
@@ -889,29 +927,35 @@ bool MatrixSeparationRenderer::render(Scene* scene){
                 iter++;
             }
 
-            /*std::set<std::pair<std::uint32_t, std::uint32_t>> sampled;
+            Eigen::MatrixXf d, two_q;
+            std::tie(d, two_q) = sliceToMatrices(slices[i]);
+
+            Eigen::MatrixXf sampled = Eigen::MatrixXf::Zero(d.rows(), d.cols());
+
             for(std::uint32_t j = 0; j < slices[i]->sample_indices.size(); ++j){
                 for(std::uint32_t k = 0; k < slices[i]->sample(j).visibility.size(); ++k){
                     if(slices[i]->sample(j).visibility[k] == VISIBLE || slices[i]->sample(j).visibility[k] == NOT_VISIBLE){
-                        sampled.insert(std::make_pair(j, k));
+                        sampled(j, k) = 1.f;
                     }
                 }
             }
 
-            Eigen::MatrixXf d, two_q;
-            std::tie(d, two_q) = sliceToMatrices(slices[i]);
+            if(separate_){
+                float beta = 500.f / d.norm();
+                float step = 0.1f;
+                float theta = 0.0001f;
+                
+                Eigen::MatrixXf l, s;
+                std::tie(l, s) = separate(d, two_q, max_separation_iterations_, beta, step, theta, sampled);
+
+                auto gaussian_kernel = createGaussianKernel(7);
+
+                reincorporateDenseHighRank(l, s, slices[i], 0.00001f, gaussian_kernel, reincorporation_density_threshold_, 
+                    scene, vpls, min_dist_);
+
+                matrixToSlice(slices[i], l);
+            }
             
-            float beta = 500.f / d.norm();
-            
-            Eigen::MatrixXf l, s;
-            std::tie(l, s) = separate(d, two_q, max_separation_iterations_, beta, sampled);
-
-            auto gaussian_kernel = createGaussianKernel(7);
-
-            reincorporateDenseHighRank(l, s, slices[i], 0.00001f, gaussian_kernel, reincorporation_density_threshold_, 
-                scene, vpls, min_dist_);
-
-            matrixToSlice(slices[i], l);*/
         }
     }
 
@@ -961,13 +1005,14 @@ bool MatrixSeparationRenderer::render(Scene* scene){
                     fully_sampled++;
                 }
 
-                if(slices[i]->sample(j).visibility[k] == NOT_VISIBLE ||
-                    (slices[i]->sample(j).visibility[k] == P_NOT_VISIBLE && !show_only_directsamples_)){
-                    continue;
+                if(!separate_){
+                    if(slices[i]->sample(j).visibility[k] == NOT_VISIBLE ||
+                        (slices[i]->sample(j).visibility[k] == P_NOT_VISIBLE && !show_only_directsamples_)){
+                        continue;
+                    }
                 }
 
                 s += slices[i]->sample(j).col_samples[k];
-
             }
 
             float r, g, b;
@@ -977,6 +1022,11 @@ bool MatrixSeparationRenderer::render(Scene* scene){
             output_image[offset + 1] = std::min(1.f, g) * 255 + 0.5f;
             output_image[offset + 2] = std::min(1.f, b) * 255 + 0.5f;
         }
+    }
+
+    if(show_error_){
+        float error = calculateError(scene, vpls, min_dist_, output_image);
+        std::cout << "Error: " << error << std::endl;
     }
 
     film->setBitmap(output_bitmap);
