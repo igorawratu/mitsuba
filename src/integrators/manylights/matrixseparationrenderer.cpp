@@ -736,7 +736,7 @@ std::tuple<Eigen::MatrixXf, Eigen::MatrixXf> separate(const Eigen::MatrixXf& mat
             z(i, j) += dist(rng);
         }
     }*/
-
+    Eigen::MatrixXf x_inverse, y_inverse;
     Eigen::MatrixXf x;
     //maybe initialize to v to v transpose of svd as stated by paper 
     Eigen::MatrixXf y = /*mat.bdcSvd(Eigen::ComputeFullV).matrixV();*/Eigen::MatrixXf::Identity(mat.rows(), mat.cols());
@@ -757,6 +757,7 @@ std::tuple<Eigen::MatrixXf, Eigen::MatrixXf> separate(const Eigen::MatrixXf& mat
         //u and v update
         lambda_over_beta = lambda / beta;
         b = mat - z - lambda_over_beta;
+
         bvt = b * y.transpose();
         auto qr = bvt.colPivHouseholderQr();
         Eigen::VectorXf diag = qr.matrixR().diagonal();
@@ -768,13 +769,14 @@ std::tuple<Eigen::MatrixXf, Eigen::MatrixXf> separate(const Eigen::MatrixXf& mat
         }
         x = qr.householderQ();
         x.conservativeResize(x.rows(), std::min((std::uint32_t)diag.size(), rank_estimate + 1));
-        //v_inverse = computeMoorePenroseInverse(v);
-        //u = b * v_inverse;
-        
-        //u_inverse = computeMoorePenroseInverse(u);
-        //v = u_inverse * b;
         y = x.transpose() * b;
 
+        /*y_inverse = computeMoorePenroseInverse(y);
+        x = b * y_inverse;
+        
+        x_inverse = computeMoorePenroseInverse(x);
+        y = x_inverse * b;*/
+        
         //std::cout << x.rows() << " " << x.cols() << " " << y.rows() << " " << y.cols() << std::endl;
         //z update
         xy = x * y;
@@ -782,15 +784,16 @@ std::tuple<Eigen::MatrixXf, Eigen::MatrixXf> separate(const Eigen::MatrixXf& mat
 
         for(std::uint32_t j = 0; j < z.rows(); ++j){
             for(std::uint32_t k = 0; k < z.cols(); ++k){
-                if(z(j, k) > 0){
+                float val = mat(j, k) - xy(j, k) - lambda_over_beta(j, k);
+                if(val > 0){
                     //z(j, k) = 0.5f * std::max(0.f, mat(j, k) - xy(j, k) + h(j, k) - lambda_over_beta(j, k) - 
                     //    pi_over_beta(j, k) - 1.f / beta);
-                    z(j, k) = std::max(0.f, mat(j, k) - xy(j, k) - lambda_over_beta(j, k) - 1.f / beta);
+                    z(j, k) = std::max(0.f, val - 1.f / beta);
                 }
                 else{
                     //z(j, k) = 0.5f * std::min(0.f, mat(j, k) - xy(j, k) + h(j, k) - lambda_over_beta(j, k) - 
                     //    pi_over_beta(j, k) + 1.f / beta);
-                    z(j, k) = std::min(0.f, mat(j, k) - xy(j, k) - lambda_over_beta(j, k) + 1.f / beta);
+                    z(j, k) = std::min(0.f, val + 1.f / beta);
                 }
             }
         }
