@@ -1,8 +1,33 @@
 #include "common.h"
 
-#include <tuple>
-
 MTS_NAMESPACE_BEGIN
+
+std::tuple<float, float, float> floatToRGB(float v){
+    float r = 0.f, g = 0.f, b = 0.f;
+
+    if(v < 0.25f){
+        r = 0.f;
+        b = 1.f;
+        g = v * 4.f;
+    }
+    else if(v >= 0.25f && v < 0.5f){
+        r = 0.f;
+        b = 1.f - (v - 0.25f) * 4.f;
+        g = 1.f;
+    }
+    else if(v >= 0.5f && v < 0.75f){
+        r = (v - 0.5f) * 4.f;
+        b = 0.f;
+        g = 1.f;
+    }
+    else if(v >= 0.75f){
+        r = 1.f;
+        b = 0.f;
+        g = 1.f - (v - 0.75f) * 4.f;
+    }
+
+    return std::make_tuple(r, g, b);
+}
 
 float calculateError(Scene* scene, const std::vector<VPL>& vpls, float min_dist, std::uint8_t* image_buffer){
     float tot_error = 0.f;
@@ -78,21 +103,31 @@ float calculateError(Scene* scene, const std::vector<VPL>& vpls, float min_dist,
             }
 
             float r, g, b;
-            accumulator.toSRGB(r, g, b);
+            accumulator.toLinearRGB(r, g, b);
+            r = std::min(1.f, r);
+            g = std::min(1.f, g);
+            b = std::min(1.f, b);
 
+            //convert from srgb to linear for correct scaling
             std::uint32_t offset = (x + y * film->getSize().x) * 3;
+            float ir, ig, ib;
+            Spectrum converter;
+            converter.fromSRGB((float)image_buffer[offset] / 255.f, (float)image_buffer[offset + 1] / 255.f,
+                (float)image_buffer[offset + 2] / 255.f);
+            converter.toLinearRGB(ir, ig, ib);
 
-            float error = fabs((float)image_buffer[offset] / 255.f - r)
-                + fabs((float)image_buffer[offset + 1] / 255.f - g)
-                + fabs((float)image_buffer[offset + 2] / 255.f - b);
+            float error = fabs(ir - r) + fabs(ig - g) + fabs(ib - b);
 
             tot_error += error;
 
-            error = error / 3.f * 20.f;
+            error *= 20.f;
 
-            image_buffer[offset] = std::min(1.f, error) * 255 + 0.5f;
-            image_buffer[offset + 1] = 0;
-            image_buffer[offset + 2] = (1.f - std::min(1.f, error)) * 255 + 0.5f;
+            float er, eg, eb;
+            std::tie(er, eg, eb) = floatToRGB(std::min(1.f, error));
+
+            image_buffer[offset] = er * 255 + 0.5f;
+            image_buffer[offset + 1] = eg * 255 + 0.5f;
+            image_buffer[offset + 2] = eb * 255 + 0.5f;
         }
     }
 

@@ -30,7 +30,8 @@ public:
     MatrixSeparationRenderer(std::unique_ptr<ManyLightsClusterer> clusterer, 
         float min_dist, float sample_percentage, float error_threshold, float reincorporation_density_threshold,
         std::uint32_t slice_size, std::uint32_t max_prediction_iterations, std::uint32_t max_separation_iterations,
-        std::uint32_t show_slices, std::uint32_t only_directsamples, bool separate, bool show_error);
+        std::uint32_t show_slices, std::uint32_t only_directsamples, bool separate, bool show_error, bool show_sparse,
+        std::uint32_t predictor_mask, bool show_rank);
     MatrixSeparationRenderer(const MatrixSeparationRenderer& other) = delete;
     MatrixSeparationRenderer(MatrixSeparationRenderer&& other);
     MatrixSeparationRenderer& operator = (const MatrixSeparationRenderer& other) = delete;
@@ -53,7 +54,9 @@ private:
     bool cancel_;
     std::mutex cancel_lock_;
     std::vector<RowSample> samples_;
-    bool separate_, show_error_;
+    bool separate_, show_error_, show_sparse_;
+    std::uint32_t predictor_mask_;
+    bool show_rank_;
 };
 
 MTS_NAMESPACE_END

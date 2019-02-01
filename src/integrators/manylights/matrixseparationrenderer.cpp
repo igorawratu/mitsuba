@@ -334,6 +334,9 @@ std::vector<VISIBILITY> knnPredictor(KDTNode* slice, std::uint32_t neighbours, s
                 float d = abs(slice->sample(i).position.x - slice->sample(point_set.pts[j].idx).position.x);
                 d += abs(slice->sample(i).position.y - slice->sample(point_set.pts[j].idx).position.y);
                 d += abs(slice->sample(i).position.z - slice->sample(point_set.pts[j].idx).position.z);
+                d += 200.f * abs(slice->sample(i).normal.x - slice->sample(point_set.pts[j].idx).normal.x);
+                d += 200.f * abs(slice->sample(i).normal.y - slice->sample(point_set.pts[j].idx).normal.y);
+                d += 200.f * abs(slice->sample(i).normal.z - slice->sample(point_set.pts[j].idx).normal.z);
                 neighbours.emplace_back(d, point_set.pts[j].idx);
             }
 
@@ -565,7 +568,8 @@ void performInitialVisibilitySamples(KDTNode* slice, float sample_percentage, st
 }
 
 std::set<std::uint32_t> sampleAndPredictVisibility(KDTNode* slice, float sample_percentage, std::mt19937& rng, Scene* scene,
-    const std::vector<VPL>& vpls, const std::set<std::uint32_t>& active_columns, float error_threshold, float min_dist){
+    const std::vector<VPL>& vpls, const std::set<std::uint32_t>& active_columns, float error_threshold, float min_dist,
+    std::uint32_t prediction_mask){
 
     std::set<std::uint32_t> new_active_cols;
 
@@ -583,9 +587,17 @@ std::set<std::uint32_t> sampleAndPredictVisibility(KDTNode* slice, float sample_
 
         std::vector<std::vector<VISIBILITY>> predictions;
         
-        predictions.push_back(linearPredictor(slice, *iter, min_dist, rng));
-        predictions.push_back(naiveBayes(slice, *iter, 3, vpls, rng));
-        predictions.push_back(knnPredictor(slice, 3, *iter, rng));
+        if(prediction_mask & 1){
+            predictions.push_back(linearPredictor(slice, *iter, min_dist, rng));
+        }
+
+        if(prediction_mask & 2){
+            predictions.push_back(naiveBayes(slice, *iter, 3, vpls, rng));
+        }
+        
+        if(prediction_mask & 4){
+            predictions.push_back(knnPredictor(slice, 3, *iter, rng));
+        }
 
         std::vector<std::uint32_t> to_sample;
         
@@ -674,9 +686,9 @@ std::tuple<Eigen::MatrixXf, Eigen::MatrixXf> sliceToMatrices(KDTNode* node){
                 slice_mat(row, col * 3) = slice_mat(row, col * 3 + 1) = slice_mat(row, col * 3 + 2) = 0.f;
             }
             
-            error_mat(row, col * 3) = 2.f / r;
-            error_mat(row, col * 3 + 1) = 2.f / g;
-            error_mat(row, col * 3 + 2) = 2.f / b;
+            error_mat(row, col * 3) = r > 0.f ? 2.f / r : 0.f;
+            error_mat(row, col * 3 + 1) = g > 0.f ? 2.f / g : 0.f;
+            error_mat(row, col * 3 + 2) = b > 0.f ? 2.f / b : 0.f;
         }
     }
 
@@ -698,62 +710,143 @@ void matrixToSlice(KDTNode* node, const Eigen::MatrixXf& mat){
     }
 }
 
-std::tuple<Eigen::MatrixXf, Eigen::MatrixXf> separate(const Eigen::MatrixXf& mat, const Eigen::MatrixXf& two_q,
-    const std::uint32_t max_iterations, float beta, float step, float theta, const Eigen::MatrixXf& sampled){
-    
-    std::uint32_t rank_estimate = mat.rows() / 2;
+Eigen::MatrixXf computeMoorePenroseInverse(const Eigen::MatrixXf& m){
+    auto svd = m.bdcSvd(Eigen::ComputeFullV | Eigen::ComputeFullU);
+    auto singular_values = svd.singularValues();
+    Eigen::MatrixXf svmat = Eigen::MatrixXf::Zero(m.cols(), m.rows());
+    for(auto i = 0; i < singular_values.size(); ++i){
+        if(fabs(singular_values(i)) > 0.000001f){
+            svmat(i, i) = 1.f / singular_values(i);
+        }
+    }
+    return svd.matrixV() * svmat * svd.matrixU().adjoint();
+}
 
-    Eigen::MatrixXf z = mat;
-    Eigen::MatrixXf u;
+std::tuple<Eigen::MatrixXf, Eigen::MatrixXf> separate(const Eigen::MatrixXf& mat, const Eigen::MatrixXf& two_q,
+    const std::uint32_t max_iterations, float beta, float step, float theta, const Eigen::MatrixXf& sampled,
+    bool show_rank){
+
+    Eigen::MatrixXf z = Eigen::MatrixXf::Zero(mat.rows(), mat.cols());// = 2 * mat;
+
+    /*std::mt19937 rng(std::chrono::high_resolution_clock::now().time_since_epoch().count());
+    std::normal_distribution<float> dist(0.f, 0.1f);
+
+    for(auto i = 0; i < z.rows(); ++i){
+        for(auto j = 0; j < z.cols(); ++j){
+            z(i, j) += dist(rng);
+        }
+    }*/
+
+    Eigen::MatrixXf x;
     //maybe initialize to v to v transpose of svd as stated by paper 
-    Eigen::MatrixXf v = /*mat.jacobiSvd(Eigen::ComputeFullV).matrixV();*/Eigen::MatrixXf::Identity(rank_estimate, mat.cols());
+    Eigen::MatrixXf y = /*mat.bdcSvd(Eigen::ComputeFullV).matrixV();*/Eigen::MatrixXf::Identity(mat.rows(), mat.cols());
     Eigen::MatrixXf lambda = Eigen::MatrixXf::Zero(mat.rows(), mat.cols());
     Eigen::MatrixXf b = Eigen::MatrixXf::Zero(mat.rows(), mat.cols());
     Eigen::MatrixXf bvt = Eigen::MatrixXf::Zero(mat.rows(), mat.cols());
     Eigen::MatrixXf lambda_over_beta = Eigen::MatrixXf::Zero(mat.rows(), mat.cols());
-    Eigen::MatrixXf convergence_check = Eigen::MatrixXf::Zero(mat.rows(), mat.cols());
-    Eigen::MatrixXf uv;
+    Eigen::MatrixXf lambda_converge = Eigen::MatrixXf::Zero(mat.rows(), mat.cols());
+    Eigen::MatrixXf pi_converge = Eigen::MatrixXf::Zero(mat.rows(), mat.cols());
+    Eigen::MatrixXf xy;
+
+    Eigen::MatrixXf h = Eigen::MatrixXf::Zero(mat.rows(), mat.cols());
+    Eigen::MatrixXf pi = Eigen::MatrixXf::Zero(mat.rows(), mat.cols());
+    Eigen::MatrixXf rescaled_h = Eigen::MatrixXf::Zero(mat.rows(), mat.cols());
+    float c = mat.rows() * mat.cols();
 
     for(std::uint32_t i = 0; i < max_iterations; ++i){
         //u and v update
         lambda_over_beta = lambda / beta;
-        b = z - lambda_over_beta;
-        bvt = b * v.transpose();
-        Eigen::MatrixXf range_space = bvt.fullPivLu().image(bvt);
-        u = range_space.householderQr().householderQ();
-        //std::cout << range_space << std::endl;
-        //int input;
-        //std::cin >> input;
-        u.conservativeResize(u.rows(), range_space.cols());
-        v = u.transpose() * b;
+        b = mat - z - lambda_over_beta;
+        bvt = b * y.transpose();
+        auto qr = bvt.colPivHouseholderQr();
+        Eigen::VectorXf diag = qr.matrixR().diagonal();
+        std::uint32_t rank_estimate = 0;
+        for(; rank_estimate < diag.size(); ++rank_estimate){
+            if(fabs(diag(rank_estimate)) < 1e-5){
+                break;
+            }
+        }
+        x = qr.householderQ();
+        x.conservativeResize(x.rows(), std::min((std::uint32_t)diag.size(), rank_estimate + 1));
+        //v_inverse = computeMoorePenroseInverse(v);
+        //u = b * v_inverse;
+        
+        //u_inverse = computeMoorePenroseInverse(u);
+        //v = u_inverse * b;
+        y = x.transpose() * b;
 
-        //std::cout << bvt.rows() << " " << bvt.cols() << " " << range_space.rows() << " " << range_space.cols() << " " << u.rows() << " " << u.cols() << std::endl;
-
+        //std::cout << x.rows() << " " << x.cols() << " " << y.rows() << " " << y.cols() << std::endl;
         //z update
-        uv = u * v;
-        //z = uv - mat + lambda_over_beta;
+        xy = x * y;
+        //Eigen::MatrixXf pi_over_beta = pi / beta;
 
-        for(std::uint32_t i = 0; i < z.rows(); ++i){
-            for(std::uint32_t j = 0; j < z.cols(); ++j){
-                float d_min_uv = mat(i, j) - uv(i, j);
-                int sign = d_min_uv < 0 ? -1 : 1;
-                z(i, j) = sign * std::max(0.f, abs(d_min_uv) - 1.f / beta  + lambda_over_beta(i, j)) + mat(i, j);
+        for(std::uint32_t j = 0; j < z.rows(); ++j){
+            for(std::uint32_t k = 0; k < z.cols(); ++k){
+                if(z(j, k) > 0){
+                    //z(j, k) = 0.5f * std::max(0.f, mat(j, k) - xy(j, k) + h(j, k) - lambda_over_beta(j, k) - 
+                    //    pi_over_beta(j, k) - 1.f / beta);
+                    z(j, k) = std::max(0.f, mat(j, k) - xy(j, k) - lambda_over_beta(j, k) - 1.f / beta);
+                }
+                else{
+                    //z(j, k) = 0.5f * std::min(0.f, mat(j, k) - xy(j, k) + h(j, k) - lambda_over_beta(j, k) - 
+                    //    pi_over_beta(j, k) + 1.f / beta);
+                    z(j, k) = std::min(0.f, mat(j, k) - xy(j, k) - lambda_over_beta(j, k) + 1.f / beta);
+                }
             }
         }
 
-        convergence_check = uv - z;
-        float frob = convergence_check.norm();
-        //std::cout << frob << std::endl;
-        if(frob < theta){
-            break;
+        /*for(std::uint32_t j = 0; j < h.rows(); ++j){
+            for(std::uint32_t k = 0; k < h.cols(); ++k){
+                h(j, k) = sampled(j, k) * (z(j, k) + pi_over_beta(j, k));
+                rescaled_h(j, k) = h(j, k) * two_q(j, k) - 1.f;
+            }
+        }
+        float rhfrobsq = rescaled_h.norm();
+        //std::cout << rhfrobsq << " " << pi_over_beta.norm() << " " << two_q.norm() << " " << h.norm() << std::endl;
+        rhfrobsq *= rhfrobsq;
+        float gamma = sqrt(c / rhfrobsq);
+
+        for(std::uint32_t j = 0; j < h.rows(); ++j){
+            for(std::uint32_t k = 0; k < h.cols(); ++k){
+                float inv_twoq = two_q(j, k) == 0.f ? 0.f : 1.f / two_q(j, k);
+                h(j, k) = gamma * (h(j, k) - inv_twoq) + inv_twoq;
+            }
+        }*/
+
+        lambda_converge = xy + z - mat;
+        //pi_converge = z - h;
+        float lc = lambda_converge.norm() / mat.norm();
+        //float pc = pi_converge.norm();
+        float lvt = (lambda * y.transpose()).norm();
+        float utl = (x.transpose() * lambda).norm();
+        std::cout << i << " " << lc << /*" " << pc << */" " << xy.norm() << " " << z.lpNorm<1>() << " " << 
+            lambda.norm() << " " << lambda_converge.norm() << " " << beta << std::endl;
+        if(lc < theta/* && pc < theta*/){
+            //break;
         }
 
-        lambda = lambda + step * beta * convergence_check;
+        lambda = lambda + beta * lambda_converge;
+        //pi = pi + step * beta * pi_converge;
     }
 
-    //std::cout << u.rows() << " " << u.cols() << " " << v.rows() << " " << v.cols() << std::endl;
+    if(show_rank){
+        float val = (float)x.cols() / (float)std::min((int)x.rows(), (int)y.cols());
+        float r, g, b;
+        std::tie(r, g, b) = floatToRGB(val);
+        r /= (float)(xy.cols() / 3);
+        g /= (float)(xy.cols() / 3);
+        b /= (float)(xy.cols() / 3);
 
-    return std::make_tuple(uv, mat - uv);
+        for(int i = 0; i < xy.rows(); ++i){
+            for(int j = 0; j < xy.cols() / 3; ++j){
+                xy(i, j * 3) = r;
+                xy(i, j * 3 + 1) = g;
+                xy(i, j * 3 + 2) = b;
+            }
+        }
+    }
+
+    return std::make_tuple(xy, z);
 }
 
 float gaussian(float x, float mu, float sigma){
@@ -842,15 +935,19 @@ void reincorporateDenseHighRank(Eigen::MatrixXf& low_rank, const Eigen::MatrixXf
     }
 }
 
+
+
 MatrixSeparationRenderer::MatrixSeparationRenderer(std::unique_ptr<ManyLightsClusterer> clusterer, 
         float min_dist, float sample_percentage, float error_threshold, float reincorporation_density_threshold,
         std::uint32_t slice_size, std::uint32_t max_prediction_iterations, std::uint32_t max_separation_iterations,
-        std::uint32_t show_slices, std::uint32_t only_directsamples, bool separate, bool show_error) : 
+        std::uint32_t show_slices, std::uint32_t only_directsamples, bool separate, bool show_error, bool show_sparse,
+        std::uint32_t predictor_mask, bool show_rank) : 
         clusterer_(std::move(clusterer)), min_dist_(min_dist), sample_percentage_(sample_percentage),
         error_threshold_(error_threshold), reincorporation_density_threshold_(reincorporation_density_threshold),
         slice_size_(slice_size), max_prediction_iterations_(max_prediction_iterations), 
         max_separation_iterations_(max_separation_iterations), show_slices_(show_slices > 0),
-        show_only_directsamples_(only_directsamples > 0), cancel_(false), separate_(separate), show_error_(show_error){
+        show_only_directsamples_(only_directsamples > 0), cancel_(false), separate_(separate), show_error_(show_error),
+        show_sparse_(show_sparse), predictor_mask_(predictor_mask), show_rank_(show_rank){
 
 }
 
@@ -860,7 +957,8 @@ MatrixSeparationRenderer::MatrixSeparationRenderer(MatrixSeparationRenderer&& ot
         max_prediction_iterations_(other.max_prediction_iterations_),
         max_separation_iterations_(other.max_separation_iterations_), show_slices_(other.show_slices_), 
         show_only_directsamples_(other.show_only_directsamples_), cancel_(false), samples_(std::move(other.samples_)),
-        separate_(other.separate_), show_error_(other.show_error_){
+        separate_(other.separate_), show_error_(other.show_error_), show_sparse_(other.show_sparse_),
+        predictor_mask_(other.predictor_mask_), show_rank_(other.show_rank_){
     
 }
 
@@ -880,6 +978,9 @@ MatrixSeparationRenderer& MatrixSeparationRenderer::operator = (MatrixSeparation
         samples_ = std::move(other.samples_);
         separate_ = other.separate_;
         show_error_ = other.show_error_;
+        show_sparse_ = other.show_sparse_;
+        predictor_mask_ = other.predictor_mask_;
+        show_rank_ = other.show_rank_;
     }
     
     return *this;
@@ -908,7 +1009,7 @@ bool MatrixSeparationRenderer::render(Scene* scene){
 
     std::cout << "processing slices..." << std::endl;
     if(!show_slices_){
-        #pragma omp parallel for
+        //#pragma omp parallel for
         for(std::uint32_t i = 0; i < slices.size(); ++i){
             std::mt19937 rng(seed * i);
 
@@ -923,7 +1024,7 @@ bool MatrixSeparationRenderer::render(Scene* scene){
 
             while(active_cols.size() > 0 && iter < max_prediction_iterations_){
                 active_cols = sampleAndPredictVisibility(slices[i], sample_percentage_, rng, scene, vpls,  
-                    active_cols, error_threshold_, min_dist_);
+                    active_cols, error_threshold_, min_dist_, predictor_mask_);
                 iter++;
             }
 
@@ -946,14 +1047,14 @@ bool MatrixSeparationRenderer::render(Scene* scene){
                 float theta = 0.0001f;
                 
                 Eigen::MatrixXf l, s;
-                std::tie(l, s) = separate(d, two_q, max_separation_iterations_, beta, step, theta, sampled);
+                std::tie(l, s) = separate(d, two_q, max_separation_iterations_, beta, step, theta, sampled, show_rank_);
 
                 auto gaussian_kernel = createGaussianKernel(7);
 
-                reincorporateDenseHighRank(l, s, slices[i], 0.00001f, gaussian_kernel, reincorporation_density_threshold_, 
-                    scene, vpls, min_dist_);
+                //reincorporateDenseHighRank(l, s, slices[i], 0.00001f, gaussian_kernel, reincorporation_density_threshold_, 
+                //    scene, vpls, min_dist_);
 
-                matrixToSlice(slices[i], l);
+                matrixToSlice(slices[i], show_sparse_ ? s : l);
             }
             
         }
