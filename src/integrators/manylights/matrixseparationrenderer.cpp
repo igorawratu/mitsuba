@@ -21,6 +21,8 @@
 #include "nanoflann.hpp"
 #include "common.h"
 
+#include "arpaca.hpp"
+
 MTS_NAMESPACE_BEGIN
 
 struct KDTNode{
@@ -244,11 +246,11 @@ std::unique_ptr<KDTNode> constructKDTree(Scene* scene, const std::vector<VPL>& v
 
             auto& curr_sample = samples.back();
 
-            if(its.isEmitter()){
+            /*if(its.isEmitter()){
                 std::fill(curr_sample.col_samples.begin(), 
                     curr_sample.col_samples.end(), its.Le(-ray.d));
                 continue;
-            }
+            }*/
 
             for (std::uint32_t i = 0; i < vpls.size(); ++i) {
                 curr_sample.col_samples[i] = sample(scene, sampler, its, vpls[i], its.p, 
@@ -686,9 +688,9 @@ std::tuple<Eigen::MatrixXf, Eigen::MatrixXf> sliceToMatrices(KDTNode* node){
                 slice_mat(row, col * 3) = slice_mat(row, col * 3 + 1) = slice_mat(row, col * 3 + 2) = 0.f;
             }
             
-            error_mat(row, col * 3) = r > 0.f ? 2.f / r : 0.f;
-            error_mat(row, col * 3 + 1) = g > 0.f ? 2.f / g : 0.f;
-            error_mat(row, col * 3 + 2) = b > 0.f ? 2.f / b : 0.f;
+            error_mat(row, col * 3) = r > 1e-4 ? 2.f / r : 0.f;
+            error_mat(row, col * 3 + 1) = g > 1e-4 ? 2.f / g : 0.f;
+            error_mat(row, col * 3 + 2) = b > 1e-4 ? 2.f / b : 0.f;
         }
     }
 
@@ -726,20 +728,13 @@ std::tuple<Eigen::MatrixXf, Eigen::MatrixXf> separate(const Eigen::MatrixXf& mat
     const std::uint32_t max_iterations, float beta, float step, float theta, const Eigen::MatrixXf& sampled,
     bool show_rank){
 
-    Eigen::MatrixXf z = Eigen::MatrixXf::Zero(mat.rows(), mat.cols());// = 2 * mat;
-
-    /*std::mt19937 rng(std::chrono::high_resolution_clock::now().time_since_epoch().count());
+    std::mt19937 rng(std::chrono::high_resolution_clock::now().time_since_epoch().count());
     std::normal_distribution<float> dist(0.f, 0.1f);
 
-    for(auto i = 0; i < z.rows(); ++i){
-        for(auto j = 0; j < z.cols(); ++j){
-            z(i, j) += dist(rng);
-        }
-    }*/
-    Eigen::MatrixXf x_inverse, y_inverse;
+    Eigen::MatrixXf y = Eigen::MatrixXf::Identity(mat.cols(), mat.cols());
+
     Eigen::MatrixXf x;
-    //maybe initialize to v to v transpose of svd as stated by paper 
-    Eigen::MatrixXf y = /*mat.bdcSvd(Eigen::ComputeFullV).matrixV();*/Eigen::MatrixXf::Identity(mat.rows(), mat.cols());
+    Eigen::MatrixXf z = Eigen::MatrixXf::Zero(mat.rows(), mat.cols());
     Eigen::MatrixXf lambda = Eigen::MatrixXf::Zero(mat.rows(), mat.cols());
     Eigen::MatrixXf b = Eigen::MatrixXf::Zero(mat.rows(), mat.cols());
     Eigen::MatrixXf bvt = Eigen::MatrixXf::Zero(mat.rows(), mat.cols());
@@ -767,40 +762,33 @@ std::tuple<Eigen::MatrixXf, Eigen::MatrixXf> separate(const Eigen::MatrixXf& mat
                 break;
             }
         }
+
         x = qr.householderQ();
+
+        rank_estimate = qr.rank();
         x.conservativeResize(x.rows(), std::min((std::uint32_t)diag.size(), rank_estimate + 1));
         y = x.transpose() * b;
 
-        /*y_inverse = computeMoorePenroseInverse(y);
-        x = b * y_inverse;
-        
-        x_inverse = computeMoorePenroseInverse(x);
-        y = x_inverse * b;*/
-        
-        //std::cout << x.rows() << " " << x.cols() << " " << y.rows() << " " << y.cols() << std::endl;
         //z update
         xy = x * y;
-        //Eigen::MatrixXf pi_over_beta = pi / beta;
+        Eigen::MatrixXf pi_over_beta = pi / beta;
 
         for(std::uint32_t j = 0; j < z.rows(); ++j){
             for(std::uint32_t k = 0; k < z.cols(); ++k){
-                float val = mat(j, k) - xy(j, k) - lambda_over_beta(j, k);
+                //float val = mat(j, k) - xy(j, k) - lambda_over_beta(j, k);
+                float val = mat(j, k) - xy(j, k) + h(j, k) - lambda_over_beta(j, k) - pi_over_beta(j, k);
                 if(val > 0){
-                    //z(j, k) = 0.5f * std::max(0.f, mat(j, k) - xy(j, k) + h(j, k) - lambda_over_beta(j, k) - 
-                    //    pi_over_beta(j, k) - 1.f / beta);
-                    z(j, k) = std::max(0.f, val - 1.f / beta);
+                    z(j, k) = 0.5f * std::max(0.f, val - 1.f / beta);
                 }
                 else{
-                    //z(j, k) = 0.5f * std::min(0.f, mat(j, k) - xy(j, k) + h(j, k) - lambda_over_beta(j, k) - 
-                    //    pi_over_beta(j, k) + 1.f / beta);
-                    z(j, k) = std::min(0.f, val + 1.f / beta);
+                    z(j, k) = 0.5f * std::min(0.f, val + 1.f / beta);
                 }
             }
         }
 
-        /*for(std::uint32_t j = 0; j < h.rows(); ++j){
+        for(std::uint32_t j = 0; j < h.rows(); ++j){
             for(std::uint32_t k = 0; k < h.cols(); ++k){
-                h(j, k) = sampled(j, k) * (z(j, k) + pi_over_beta(j, k));
+                h(j, k) = (1.f - sampled(j, k)) * (z(j, k) + pi_over_beta(j, k));
                 rescaled_h(j, k) = h(j, k) * two_q(j, k) - 1.f;
             }
         }
@@ -811,25 +799,31 @@ std::tuple<Eigen::MatrixXf, Eigen::MatrixXf> separate(const Eigen::MatrixXf& mat
 
         for(std::uint32_t j = 0; j < h.rows(); ++j){
             for(std::uint32_t k = 0; k < h.cols(); ++k){
-                float inv_twoq = two_q(j, k) == 0.f ? 0.f : 1.f / two_q(j, k);
+                float inv_twoq = fabs(two_q(j, k)) < 1e-5 ? 0.f : 1.f / two_q(j, k);
                 h(j, k) = gamma * (h(j, k) - inv_twoq) + inv_twoq;
             }
-        }*/
+        }
 
         lambda_converge = xy + z - mat;
-        //pi_converge = z - h;
+        pi_converge = z - h;
         float lc = lambda_converge.norm() / mat.norm();
-        //float pc = pi_converge.norm();
+        float pc = pi_converge.norm();
         float lvt = (lambda * y.transpose()).norm();
         float utl = (x.transpose() * lambda).norm();
-        std::cout << i << " " << lc << /*" " << pc << */" " << xy.norm() << " " << z.lpNorm<1>() << " " << 
-            lambda.norm() << " " << lambda_converge.norm() << " " << beta << std::endl;
-        if(lc < theta/* && pc < theta*/){
+        //std::cout << i << " " << lc << " " << pc << " " << z.lpNorm<1>() << " " << h.lpNorm<1>() << " " <<
+        //    lambda.norm() << " " << pi.norm() << " " << x.cols() << std::endl;
+        if(lc < theta && pc < theta){
             //break;
         }
 
         lambda = lambda + beta * lambda_converge;
-        //pi = pi + step * beta * pi_converge;
+        pi = pi + beta * pi_converge;
+    }
+
+    for(int i = 0; i < xy.rows(); ++i){
+        for(int j = 0; j < xy.cols(); ++j){
+            xy(i, j) = std::max(0.f, xy(i, j));
+        }
     }
 
     if(show_rank){
@@ -849,7 +843,7 @@ std::tuple<Eigen::MatrixXf, Eigen::MatrixXf> separate(const Eigen::MatrixXf& mat
         }
     }
 
-    return std::make_tuple(xy, z);
+    return std::make_tuple(xy, mat - xy);
 }
 
 float gaussian(float x, float mu, float sigma){
@@ -1045,7 +1039,7 @@ bool MatrixSeparationRenderer::render(Scene* scene){
             }
 
             if(separate_){
-                float beta = 500.f / d.norm();
+                float beta = 5000.f / d.norm();
                 float step = 0.1f;
                 float theta = 0.0001f;
                 

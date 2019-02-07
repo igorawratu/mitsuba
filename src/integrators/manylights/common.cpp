@@ -1,5 +1,7 @@
 #include "common.h"
 
+#include "arpaca.hpp"
+
 MTS_NAMESPACE_BEGIN
 
 std::tuple<float, float, float> floatToRGB(float v){
@@ -61,10 +63,10 @@ float calculateError(Scene* scene, const std::vector<VPL>& vpls, float min_dist,
 
                 Spectrum albedo(0.f);
 
-                if(its.isEmitter()){
+                /*if(its.isEmitter()){
                     accumulator = its.Le(-ray.d);
                 }
-                else{
+                else*/{
                     for (std::uint32_t i = 0; i < vpls.size(); ++i) {
                         Point ray_origin = its.p;
                         Ray shadow_ray(ray_origin, normalize(vpls[i].its.p - ray_origin), ray.time);
@@ -132,6 +134,70 @@ float calculateError(Scene* scene, const std::vector<VPL>& vpls, float min_dist,
     }
 
     return tot_error;
+}
+
+std::tuple<Eigen::MatrixXf, Eigen::MatrixXf, Eigen::MatrixXf> partialSvd(const Eigen::MatrixXf& mat, 
+    const std::uint32_t num_singular_values){
+    assert(num_singular_values < std::min(mat.rows(), mat.cols()));
+
+    std::uint32_t dim = std::max(mat.rows(), mat.cols());
+    Eigen::MatrixXf jordan_wielandt = Eigen::MatrixXf::Zero(dim * 2, dim * 2);
+    jordan_wielandt.block(0, dim, mat.rows(), mat.cols()) = mat;
+    jordan_wielandt.block(dim, 0, mat.cols(), mat.rows()) = mat.transpose();
+
+    const arpaca::EigenvalueType type = arpaca::ALGEBRAIC_LARGEST;
+    arpaca::SymmetricEigenSolver<float> solver = arpaca::Solve(jordan_wielandt, num_singular_values, type);
+    const Eigen::MatrixXf& eigenvectors = solver.eigenvectors();
+    const Eigen::VectorXf& eigenvalues = solver.eigenvalues();
+
+    Eigen::MatrixXf singular_values = Eigen::MatrixXf::Zero(mat.rows(), mat.cols());
+    Eigen::MatrixXf u = Eigen::MatrixXf::Zero(mat.rows(), mat.rows());
+    Eigen::MatrixXf v = Eigen::MatrixXf::Zero(mat.cols(), mat.cols());
+
+    float scale = sqrt(2.f);
+
+    for(int i = 0; i < eigenvalues.size(); ++i){
+        singular_values(i, i) = eigenvalues(i);
+        u.col(i) = scale * eigenvectors.block(0, i, mat.rows(), 1);
+        v.col(i) = scale * eigenvectors.block(dim, i, mat.cols(), 1);
+    }
+
+    return std::make_tuple(u, singular_values, v);
+}
+
+Eigen::MatrixXf softThreshRank(const Eigen::MatrixXf& mat, float theta, const std::uint32_t step_size){
+    std::uint32_t max_rank = std::min(mat.rows(), mat.cols());
+    std::uint32_t curr_step_size = step_size;
+
+    std::uint32_t dim = std::max(mat.rows(), mat.cols());
+    Eigen::MatrixXf jordan_wielandt = Eigen::MatrixXf::Zero(dim * 2, dim * 2);
+    jordan_wielandt.block(0, dim, mat.rows(), mat.cols()) = mat;
+    jordan_wielandt.block(dim, 0, mat.cols(), mat.rows()) = mat.transpose();
+
+    arpaca::SymmetricEigenSolver<float> solver;
+    while(true){
+        solver = arpaca::Solve(jordan_wielandt, curr_step_size, arpaca::ALGEBRAIC_LARGEST);
+        if(curr_step_size == max_rank || solver.eigenvalues()(0) < theta){
+            break;
+        }
+        curr_step_size = std::min(max_rank, curr_step_size + step_size);
+    }
+
+    const Eigen::MatrixXf& eigenvectors = solver.eigenvectors();
+    const Eigen::VectorXf& eigenvalues = solver.eigenvalues();
+
+    Eigen::MatrixXf singular_values = Eigen::MatrixXf::Zero(mat.rows(), mat.cols());
+    Eigen::MatrixXf u = Eigen::MatrixXf::Zero(mat.rows(), mat.rows());
+    Eigen::MatrixXf v = Eigen::MatrixXf::Zero(mat.cols(), mat.cols());
+
+    float scale = sqrt(2.f);
+    for(int i = 0; i < eigenvalues.size(); ++i){
+        singular_values(i, i) = std::max(0.f, eigenvalues(i) - theta);
+        u.col(i) = scale * eigenvectors.block(0, i, mat.rows(), 1);
+        v.col(i) = scale * eigenvectors.block(dim, i, mat.cols(), 1);
+    }
+    
+    return u * singular_values * v.transpose();
 }
 
 MTS_NAMESPACE_END
