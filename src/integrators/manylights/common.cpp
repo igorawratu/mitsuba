@@ -200,4 +200,42 @@ Eigen::MatrixXf softThreshRank(const Eigen::MatrixXf& mat, float theta, const st
     return u * singular_values * v.transpose();
 }
 
+Spectrum sample(Scene* scene, Sampler* sampler, const Intersection& its, const VPL& vpl, float min_dist, 
+    bool check_occlusion){
+
+    //only dealing with emitter and surface VPLs curently.
+    if (vpl.type != EPointEmitterVPL && vpl.type != ESurfaceVPL){
+        return Spectrum(0.f);
+    }
+
+    if(check_occlusion){
+        Ray shadow_ray(its.p, normalize(vpl.its.p - its.p), 0.f);
+
+        Float t;
+        ConstShapePtr shape;
+        Normal norm;
+        Point2 uv;
+
+        if(scene->rayIntersect(shadow_ray, t, shape, norm, uv)){
+            if(abs((its.p - vpl.its.p).length() - t) > 0.0001f ){
+                return Spectrum(0.f);
+            }
+        }
+    }
+
+    BSDFSamplingRecord bsdf_sample_record(its, sampler, ERadiance);
+        bsdf_sample_record.wi = its.toLocal(normalize(vpl.its.p - its.p));
+        bsdf_sample_record.wo = its.toLocal(its.geoFrame.n);
+
+    Spectrum albedo = its.getBSDF()->eval(bsdf_sample_record);
+
+    float d = std::max((its.p - vpl.its.p).length(), min_dist);
+    float attenuation = 1.f / (d * d);
+
+    float n_dot_ldir = std::max(0.f, dot(normalize(its.geoFrame.n), normalize(vpl.its.p - its.p)));
+    float ln_dot_ldir = std::max(0.f, dot(normalize(vpl.its.shFrame.n), normalize(its.p - vpl.its.p)));
+
+    return (vpl.P * ln_dot_ldir * attenuation * n_dot_ldir * albedo) / PI;
+}
+
 MTS_NAMESPACE_END

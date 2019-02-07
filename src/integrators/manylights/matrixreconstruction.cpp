@@ -9,6 +9,7 @@
 #include "definitions.h"
 #include <utility>
 #include <eigen3/Eigen/Dense>
+#include "common.h"
 
 MTS_NAMESPACE_BEGIN
 
@@ -114,34 +115,8 @@ void calculateSparseSamples(Scene* scene, const std::vector<VPL>& vpls, Eigen::M
             continue;
         }
 
-        Normal n = its.geoFrame.n;
+        Spectrum lightContribution = sample(scene, sampler, its, vpl, min_dist, true);
 
-        Point ray_origin = its.p;
-        Ray shadow_ray(ray_origin, normalize(vpl.its.p - ray_origin), ray.time);
-
-        Float t;
-        ConstShapePtr shape;
-        Normal norm;
-        Point2 uv;
-        if(scene->rayIntersect(shadow_ray, t, shape, norm, uv)){
-            if(abs((ray_origin - vpl.its.p).length() - t) > 0.0001f ){
-                continue;
-            }
-        }
-
-        BSDFSamplingRecord bsdf_sample_record(its, sampler, ERadiance);
-        bsdf_sample_record.wi = its.toLocal(normalize(vpl.its.p - its.p));
-        bsdf_sample_record.wo = its.toLocal(n);
-
-        Spectrum albedo = its.getBSDF()->eval(bsdf_sample_record);
-
-        float d = std::max((its.p - vpl.its.p).length(), min_dist);
-        float attenuation = 1.f / (d * d);
-
-        float n_dot_ldir = std::max(0.f, dot(normalize(n), normalize(vpl.its.p - its.p)));
-        float ln_dot_ldir = std::max(0.f, dot(normalize(vpl.its.shFrame.n), normalize(its.p - vpl.its.p)));
-
-        Spectrum lightContribution = (vpl.P * ln_dot_ldir * attenuation * n_dot_ldir * albedo) / PI;
         Float r, g, b;
         lightContribution.toSRGB(r, g, b);
         matrix(indices[i].first * 3, indices[i].second) = r;

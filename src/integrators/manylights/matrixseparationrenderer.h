@@ -12,17 +12,16 @@ MTS_NAMESPACE_BEGIN
 enum VISIBILITY{VISIBLE = 0, NOT_VISIBLE, P_VISIBLE, P_NOT_VISIBLE, UNKNOWN};
 
 struct RowSample{
-    RowSample(const Point3f& p, const Normal& n, std::uint32_t x, std::uint32_t y, std::uint32_t cols, bool in_scene, Intersection intersection) : 
-        position(p), normal(n), image_x(x), image_y(y), col_samples(cols, Spectrum(0.f)), visibility(cols, UNKNOWN), intersected_scene(in_scene), its(intersection){
+    RowSample(std::uint32_t x, std::uint32_t y, std::uint32_t cols, bool in_scene, Intersection intersection) : 
+        image_x(x), image_y(y), col_samples(cols, Spectrum(0.f)), visibility(cols, UNKNOWN), 
+        intersected_scene(in_scene), its(intersection), emitter_color(0.f){
     }
-
-    Point3f position;
-    Normal normal;
     std::uint32_t image_x, image_y;
     std::vector<Spectrum> col_samples;
     std::vector<VISIBILITY> visibility;
     bool intersected_scene;
     Intersection its;
+    Spectrum emitter_color;
 };
 
 class MatrixSeparationRenderer : public ManyLightsRenderer{

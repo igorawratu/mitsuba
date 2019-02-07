@@ -16,6 +16,8 @@ std::tuple<float, float, float> floatToRGB(float v);
 std::tuple<Eigen::MatrixXf, Eigen::MatrixXf, Eigen::MatrixXf> partialSvd(const Eigen::MatrixXf& mat, 
     std::uint32_t num_singular_values);
 Eigen::MatrixXf softThreshRank(const Eigen::MatrixXf& mat, float theta, const std::uint32_t step_size);
+Spectrum sample(Scene* scene, Sampler* sampler, const Intersection& its, const VPL& vpl, float min_dist, 
+    bool check_occlusion);
 
 MTS_NAMESPACE_END
 

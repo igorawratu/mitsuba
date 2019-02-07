@@ -2,7 +2,7 @@
 
 #include <mitsuba/core/plugin.h>
 #include "definitions.h"
-#include <iostream>
+#include "common.h"
 
 MTS_NAMESPACE_BEGIN
 
@@ -81,38 +81,7 @@ bool LightClustererRenderer::render(Scene* scene){
                 std::vector<VPL> vpls = clusterer_->getClusteringForPoint(its);
 
                 for (std::uint32_t i = 0; i < vpls.size(); ++i) {
-                    Point ray_origin = its.p;
-                    Ray shadow_ray(ray_origin, normalize(vpls[i].its.p - ray_origin), ray.time);
-
-                    Float t;
-                    ConstShapePtr shape;
-                    Normal norm;
-                    Point2 uv;
-
-                    if(scene->rayIntersect(shadow_ray, t, shape, norm, uv)){
-                        if(abs((ray_origin - vpls[i].its.p).length() - t) > 0.0001f ){
-                            continue;
-                        }
-                    }
-
-                    BSDFSamplingRecord bsdf_sample_record(its, sampler, ERadiance);
-                    bsdf_sample_record.wi = its.toLocal(normalize(vpls[i].its.p - its.p));
-                    bsdf_sample_record.wo = its.toLocal(n);
-
-                    albedo = its.getBSDF()->eval(bsdf_sample_record);
-
-                    //only dealing with emitter and surface VPLs curently.
-                    if (vpls[i].type != EPointEmitterVPL && vpls[i].type != ESurfaceVPL){
-                        continue;
-                    }
-
-                    float d = std::max((its.p - vpls[i].its.p).length(), min_dist_);
-                    float attenuation = 1.f / (d * d);
-
-                    float n_dot_ldir = std::max(0.f, dot(normalize(n), normalize(vpls[i].its.p - its.p)));
-                    float ln_dot_ldir = std::max(0.f, dot(normalize(vpls[i].its.shFrame.n), normalize(its.p - vpls[i].its.p)));
-
-                    accumulator += (vpls[i].P * ln_dot_ldir * attenuation * n_dot_ldir * albedo) / PI;
+                    accumulator += sample(scene, sampler, its, vpls[i], min_dist_, true);
                 }
             }
 

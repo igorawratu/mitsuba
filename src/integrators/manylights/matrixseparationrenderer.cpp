@@ -37,41 +37,41 @@ struct KDTNode{
         left(nullptr), right(nullptr){
 
         sorters[0] =    [this](const std::uint32_t& lhs, const std::uint32_t& rhs){
-                            return (*this->samples)[lhs].position.x < (*this->samples)[rhs].position.x;
+                            return (*this->samples)[lhs].its.p.x < (*this->samples)[rhs].its.p.x;
                         };
         sorters[1] =    [this](const std::uint32_t& lhs, const std::uint32_t& rhs){
-                            return (*this->samples)[lhs].position.y < (*this->samples)[rhs].position.y;
+                            return (*this->samples)[lhs].its.p.y < (*this->samples)[rhs].its.p.y;
                         };
         sorters[2] =    [this](const std::uint32_t& lhs, const std::uint32_t& rhs){
-                            return (*this->samples)[lhs].position.z < (*this->samples)[rhs].position.z;
+                            return (*this->samples)[lhs].its.p.z < (*this->samples)[rhs].its.p.z;
                         };
         sorters[3] =    [this](const std::uint32_t& lhs, const std::uint32_t& rhs){
-                            return (*this->samples)[lhs].normal.x < (*this->samples)[rhs].normal.x;
+                            return (*this->samples)[lhs].its.geoFrame.n.x < (*this->samples)[rhs].its.geoFrame.n.x;
                         };
         sorters[4] =    [this](const std::uint32_t& lhs, const std::uint32_t& rhs){
-                            return (*this->samples)[lhs].normal.y < (*this->samples)[rhs].normal.y;
+                            return (*this->samples)[lhs].its.geoFrame.n.y < (*this->samples)[rhs].its.geoFrame.n.y;
                         };
         sorters[5] =    [this](const std::uint32_t& lhs, const std::uint32_t& rhs){
-                            return (*this->samples)[lhs].normal.z < (*this->samples)[rhs].normal.z;
+                            return (*this->samples)[lhs].its.geoFrame.n.z < (*this->samples)[rhs].its.geoFrame.n.z;
                         };
 
         searchers[0] =  [this](float value, const std::uint32_t& entry){
-                            return value < (*this->samples)[entry].position.x;
+                            return value < (*this->samples)[entry].its.p.x;
                         };
         searchers[1] =  [this](float value, const std::uint32_t& entry){
-                            return value < (*this->samples)[entry].position.y;
+                            return value < (*this->samples)[entry].its.p.y;
                         };
         searchers[2] =  [this](float value, const std::uint32_t& entry){
-                            return value < (*this->samples)[entry].position.z;
+                            return value < (*this->samples)[entry].its.p.z;
                         };
         searchers[3] =  [this](float value, const std::uint32_t& entry){
-                            return value < (*this->samples)[entry].normal.x;
+                            return value < (*this->samples)[entry].its.geoFrame.n.x;
                         };
         searchers[4] =  [this](float value, const std::uint32_t& entry){
-                            return value < (*this->samples)[entry].normal.y;
+                            return value < (*this->samples)[entry].its.geoFrame.n.y;
                         };
         searchers[5] =  [this](float value, const std::uint32_t& entry){
-                            return value < (*this->samples)[entry].normal.z;
+                            return value < (*this->samples)[entry].its.geoFrame.n.z;
                         };
     }
 
@@ -84,19 +84,19 @@ struct KDTNode{
         for(size_t i = 0; i < sample_indices.size(); ++i){
             auto& curr_sample = (*samples)[sample_indices[i]];
 
-            min_pos.x = std::min(curr_sample.position.x, min_pos.x);
-            min_pos.y = std::min(curr_sample.position.y, min_pos.y);
-            max_pos.z = std::max(curr_sample.position.z, max_pos.z);
-            min_pos.z = std::min(curr_sample.position.z, min_pos.z);
-            max_pos.x = std::max(curr_sample.position.x, max_pos.x);
-            max_pos.y = std::max(curr_sample.position.y, max_pos.y);
+            min_pos.x = std::min(curr_sample.its.p.x, min_pos.x);
+            min_pos.y = std::min(curr_sample.its.p.y, min_pos.y);
+            max_pos.z = std::max(curr_sample.its.p.z, max_pos.z);
+            min_pos.z = std::min(curr_sample.its.p.z, min_pos.z);
+            max_pos.x = std::max(curr_sample.its.p.x, max_pos.x);
+            max_pos.y = std::max(curr_sample.its.p.y, max_pos.y);
 
-            min_normal.x = std::min(curr_sample.normal.x, min_normal.x);
-            min_normal.y = std::min(curr_sample.normal.y, min_normal.y);
-            min_normal.z = std::min(curr_sample.normal.z, min_normal.z);
-            max_normal.x = std::max(curr_sample.normal.x, max_normal.x);
-            max_normal.y = std::max(curr_sample.normal.y, max_normal.y);
-            max_normal.z = std::max(curr_sample.normal.z, max_normal.z);
+            min_normal.x = std::min(curr_sample.its.geoFrame.n.x, min_normal.x);
+            min_normal.y = std::min(curr_sample.its.geoFrame.n.y, min_normal.y);
+            min_normal.z = std::min(curr_sample.its.geoFrame.n.z, min_normal.z);
+            max_normal.x = std::max(curr_sample.its.geoFrame.n.x, max_normal.x);
+            max_normal.y = std::max(curr_sample.its.geoFrame.n.y, max_normal.y);
+            max_normal.z = std::max(curr_sample.its.geoFrame.n.z, max_normal.z);
         }
 
         std::array<std::pair<std::uint8_t, float>, 6> ranges;
@@ -172,44 +172,6 @@ void getSlices(KDTNode* curr, std::vector<KDTNode*>& slices){
     getSlices(curr->right.get(), slices);
 }
 
-Spectrum sample(Scene* scene, Sampler* sampler, const Intersection& its, const VPL& vpl, const Point& position, 
-    const Normal& normal, float min_dist, bool check_occlusion){
-
-    //only dealing with emitter and surface VPLs curently.
-    if (vpl.type != EPointEmitterVPL && vpl.type != ESurfaceVPL){
-        return Spectrum(0.f);
-    }
-
-    if(check_occlusion){
-        Ray shadow_ray(position, normalize(vpl.its.p - position), 0.f);
-
-        Float t;
-        ConstShapePtr shape;
-        Normal norm;
-        Point2 uv;
-
-        if(scene->rayIntersect(shadow_ray, t, shape, norm, uv)){
-            if(abs((position - vpl.its.p).length() - t) > 0.0001f ){
-                return Spectrum(0.f);
-            }
-        }
-    }
-
-    BSDFSamplingRecord bsdf_sample_record(its, sampler, ERadiance);
-        bsdf_sample_record.wi = its.toLocal(normalize(vpl.its.p - its.p));
-        bsdf_sample_record.wo = its.toLocal(normal);
-
-    Spectrum albedo = its.getBSDF()->eval(bsdf_sample_record);
-
-    float d = std::max((its.p - vpl.its.p).length(), min_dist);
-    float attenuation = 1.f / (d * d);
-
-    float n_dot_ldir = std::max(0.f, dot(normalize(normal), normalize(vpl.its.p - its.p)));
-    float ln_dot_ldir = std::max(0.f, dot(normalize(vpl.its.shFrame.n), normalize(its.p - vpl.its.p)));
-
-    return (vpl.P * ln_dot_ldir * attenuation * n_dot_ldir * albedo) / PI;
-}
-
 std::unique_ptr<KDTNode> constructKDTree(Scene* scene, const std::vector<VPL>& vpls, 
     std::uint32_t size_threshold, float min_dist, std::vector<RowSample>& samples){
 
@@ -246,15 +208,12 @@ std::unique_ptr<KDTNode> constructKDTree(Scene* scene, const std::vector<VPL>& v
 
             auto& curr_sample = samples.back();
 
-            /*if(its.isEmitter()){
-                std::fill(curr_sample.col_samples.begin(), 
-                    curr_sample.col_samples.end(), its.Le(-ray.d));
-                continue;
-            }*/
+            if(its.isEmitter()){
+                curr_sample.emitter_color = its.Le(-ray.d);
+            }
 
             for (std::uint32_t i = 0; i < vpls.size(); ++i) {
-                curr_sample.col_samples[i] = sample(scene, sampler, its, vpls[i], its.p, 
-                    its.geoFrame.n, min_dist, false);
+                curr_sample.col_samples[i] = sample(scene, sampler, its, vpls[i], min_dist, false);
             }
         }
     }
@@ -918,8 +877,7 @@ void reincorporateDenseHighRank(Eigen::MatrixXf& low_rank, const Eigen::MatrixXf
                 discrete_sparse(row, light * 3 + 2) > density_threshold;
 
             if(requires_direct_sample){
-                Spectrum col = sample(scene, sampler, slice->sample(row).its, vpls[light], 
-                    slice->sample(row).position, slice->sample(row).normal, min_dist, true);
+                Spectrum col = sample(scene, sampler, slice->sample(row).its, vpls[light], min_dist, true);
 
                 float r, g, b;
                 col.toLinearRGB(r, g, b);
@@ -1006,7 +964,7 @@ bool MatrixSeparationRenderer::render(Scene* scene){
 
     std::cout << "processing slices..." << std::endl;
     if(!show_slices_){
-        //#pragma omp parallel for
+        #pragma omp parallel for
         for(std::uint32_t i = 0; i < slices.size(); ++i){
             std::mt19937 rng(seed * i);
 
@@ -1079,7 +1037,7 @@ bool MatrixSeparationRenderer::render(Scene* scene){
         int u = rand() % 255;
         int v = ((float)i / slices.size()) * 255.f;
 
-        int sb = 1.164 * (y - 16.f) + 2.018 * (u - 128.f);
+        int sb = 1.164 * (y - 16) + 2.018 * (u - 128);
         int sg = 1.164 * (y - 16) - 0.813 * (v - 128) - 0.391 * (u - 128);
         int sr = 1.164 * (y - 16) + 1.596 * (v - 128);
 
@@ -1096,23 +1054,30 @@ bool MatrixSeparationRenderer::render(Scene* scene){
             }
 
             Spectrum s(0.f);
-
-            for(std::uint32_t k = 0; k < slices[i]->sample(j).col_samples.size(); ++k){
-                total++;
-                if(slices[i]->sample(j).visibility[k] == NOT_VISIBLE || slices[i]->sample(j).visibility[k] == VISIBLE){
-                    fully_sampled++;
-                }
-
-                if(!separate_){
-                    if(slices[i]->sample(j).visibility[k] == NOT_VISIBLE ||
-                        (slices[i]->sample(j).visibility[k] == P_NOT_VISIBLE && !show_only_directsamples_)){
-                        continue;
+            
+            if(slices[i]->sample(j).its.isEmitter()){
+                s = slices[i]->sample(j).emitter_color;
+                total = 1;
+            }
+            else{
+                for(std::uint32_t k = 0; k < slices[i]->sample(j).col_samples.size(); ++k){
+                    total++;
+                    if(slices[i]->sample(j).visibility[k] == NOT_VISIBLE || slices[i]->sample(j).visibility[k] == VISIBLE){
+                        fully_sampled++;
                     }
-                }
 
-                s += slices[i]->sample(j).col_samples[k];
+                    if(!separate_){
+                        if(slices[i]->sample(j).visibility[k] == NOT_VISIBLE ||
+                            (slices[i]->sample(j).visibility[k] == P_NOT_VISIBLE && !show_only_directsamples_)){
+                            continue;
+                        }
+                    }
+
+                    s += slices[i]->sample(j).col_samples[k];
+                }
             }
 
+            
             float r, g, b;
             s.toSRGB(r, g, b);
 
