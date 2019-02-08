@@ -37,41 +37,41 @@ struct KDTNode{
         left(nullptr), right(nullptr){
 
         sorters[0] =    [this](const std::uint32_t& lhs, const std::uint32_t& rhs){
-                            return (*this->samples)[lhs].its.p.x < (*this->samples)[rhs].its.p.x;
+                            return (*this->samples)[lhs].position.x < (*this->samples)[rhs].position.x;
                         };
         sorters[1] =    [this](const std::uint32_t& lhs, const std::uint32_t& rhs){
-                            return (*this->samples)[lhs].its.p.y < (*this->samples)[rhs].its.p.y;
+                            return (*this->samples)[lhs].position.y < (*this->samples)[rhs].position.y;
                         };
         sorters[2] =    [this](const std::uint32_t& lhs, const std::uint32_t& rhs){
-                            return (*this->samples)[lhs].its.p.z < (*this->samples)[rhs].its.p.z;
+                            return (*this->samples)[lhs].position.z < (*this->samples)[rhs].position.z;
                         };
         sorters[3] =    [this](const std::uint32_t& lhs, const std::uint32_t& rhs){
-                            return (*this->samples)[lhs].its.geoFrame.n.x < (*this->samples)[rhs].its.geoFrame.n.x;
+                            return (*this->samples)[lhs].normal.x < (*this->samples)[rhs].normal.x;
                         };
         sorters[4] =    [this](const std::uint32_t& lhs, const std::uint32_t& rhs){
-                            return (*this->samples)[lhs].its.geoFrame.n.y < (*this->samples)[rhs].its.geoFrame.n.y;
+                            return (*this->samples)[lhs].normal.y < (*this->samples)[rhs].normal.y;
                         };
         sorters[5] =    [this](const std::uint32_t& lhs, const std::uint32_t& rhs){
-                            return (*this->samples)[lhs].its.geoFrame.n.z < (*this->samples)[rhs].its.geoFrame.n.z;
+                            return (*this->samples)[lhs].normal.z < (*this->samples)[rhs].normal.z;
                         };
 
         searchers[0] =  [this](float value, const std::uint32_t& entry){
-                            return value < (*this->samples)[entry].its.p.x;
+                            return value < (*this->samples)[entry].position.x;
                         };
         searchers[1] =  [this](float value, const std::uint32_t& entry){
-                            return value < (*this->samples)[entry].its.p.y;
+                            return value < (*this->samples)[entry].position.y;
                         };
         searchers[2] =  [this](float value, const std::uint32_t& entry){
-                            return value < (*this->samples)[entry].its.p.z;
+                            return value < (*this->samples)[entry].position.z;
                         };
         searchers[3] =  [this](float value, const std::uint32_t& entry){
-                            return value < (*this->samples)[entry].its.geoFrame.n.x;
+                            return value < (*this->samples)[entry].normal.x;
                         };
         searchers[4] =  [this](float value, const std::uint32_t& entry){
-                            return value < (*this->samples)[entry].its.geoFrame.n.y;
+                            return value < (*this->samples)[entry].normal.y;
                         };
         searchers[5] =  [this](float value, const std::uint32_t& entry){
-                            return value < (*this->samples)[entry].its.geoFrame.n.z;
+                            return value < (*this->samples)[entry].normal.z;
                         };
     }
 
@@ -84,19 +84,19 @@ struct KDTNode{
         for(size_t i = 0; i < sample_indices.size(); ++i){
             auto& curr_sample = (*samples)[sample_indices[i]];
 
-            min_pos.x = std::min(curr_sample.its.p.x, min_pos.x);
-            min_pos.y = std::min(curr_sample.its.p.y, min_pos.y);
-            max_pos.z = std::max(curr_sample.its.p.z, max_pos.z);
-            min_pos.z = std::min(curr_sample.its.p.z, min_pos.z);
-            max_pos.x = std::max(curr_sample.its.p.x, max_pos.x);
-            max_pos.y = std::max(curr_sample.its.p.y, max_pos.y);
+            min_pos.x = std::min(curr_sample.position.x, min_pos.x);
+            min_pos.y = std::min(curr_sample.position.y, min_pos.y);
+            max_pos.z = std::max(curr_sample.position.z, max_pos.z);
+            min_pos.z = std::min(curr_sample.position.z, min_pos.z);
+            max_pos.x = std::max(curr_sample.position.x, max_pos.x);
+            max_pos.y = std::max(curr_sample.position.y, max_pos.y);
 
-            min_normal.x = std::min(curr_sample.its.geoFrame.n.x, min_normal.x);
-            min_normal.y = std::min(curr_sample.its.geoFrame.n.y, min_normal.y);
-            min_normal.z = std::min(curr_sample.its.geoFrame.n.z, min_normal.z);
-            max_normal.x = std::max(curr_sample.its.geoFrame.n.x, max_normal.x);
-            max_normal.y = std::max(curr_sample.its.geoFrame.n.y, max_normal.y);
-            max_normal.z = std::max(curr_sample.its.geoFrame.n.z, max_normal.z);
+            min_normal.x = std::min(curr_sample.normal.x, min_normal.x);
+            min_normal.y = std::min(curr_sample.normal.y, min_normal.y);
+            min_normal.z = std::min(curr_sample.normal.z, min_normal.z);
+            max_normal.x = std::max(curr_sample.normal.x, max_normal.x);
+            max_normal.y = std::max(curr_sample.normal.y, max_normal.y);
+            max_normal.z = std::max(curr_sample.normal.z, max_normal.z);
         }
 
         std::array<std::pair<std::uint8_t, float>, 6> ranges;
@@ -120,22 +120,17 @@ struct KDTNode{
                 return lhs.second > rhs.second;
             });
 
-        std::sort(sample_indices.begin(), sample_indices.end(), sorters[ranges[0].first]);
-
-        auto split_iter = std::upper_bound(sample_indices.begin(), sample_indices.end(), midpoints[ranges[0].first], 
-            searchers[ranges[0].first]);
-
-        std::uint32_t split_index = split_iter - sample_indices.begin();
-        std::uint32_t smallest_slice_size = std::min(split_index, std::uint32_t(sample_indices.size() - split_index));
-
-        //for degenerate cases where one child is too small
-        split_index = smallest_slice_size < (size_threshold / 10) ? sample_indices.size() / 2 : split_index;
-
         left = std::unique_ptr<KDTNode>(new KDTNode(samples));
         right = std::unique_ptr<KDTNode>(new KDTNode(samples));
 
-        left->sample_indices.insert(left->sample_indices.end(), sample_indices.begin(), sample_indices.begin() + split_index);
-        right->sample_indices.insert(right->sample_indices.end(), sample_indices.begin() + split_index, sample_indices.end());
+        for(std::uint32_t i = 0; i < sample_indices.size(); ++i){
+            if(searchers[ranges[0].first](midpoints[ranges[0].first], sample_indices[i])){
+                right->sample_indices.push_back(sample_indices[i]);
+            }
+            else{
+                left->sample_indices.push_back(sample_indices[i]);
+            }
+        }
 
         sample_indices.clear();
     }
