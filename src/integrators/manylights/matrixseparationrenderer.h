@@ -16,11 +16,12 @@ struct RowSample{
     }
 
     RowSample(std::uint32_t x, std::uint32_t y, std::uint32_t cols, bool in_scene, Intersection intersection) : 
-        image_x(x), image_y(y), col_samples(cols, Spectrum(0.f)), visibility(cols, UNKNOWN), intersected_scene(in_scene), its(intersection){
+        image_x(x), image_y(y), col_samples(cols, Spectrum(0.f)), visibility(cols, UNKNOWN), predictors(cols, 0),
+        intersected_scene(in_scene), its(intersection){
     }
 
     RowSample(RowSample&& other) : image_x(other.image_x), image_y(other.image_y), 
-        col_samples(std::move(other.col_samples)), visibility(std::move(other.visibility)),
+        col_samples(std::move(other.col_samples)), visibility(std::move(other.visibility)), predictors(std::move(other.predictors)),
         intersected_scene(other.intersected_scene), its(other.its), emitter_color(other.emitter_color){
     }
 
@@ -30,6 +31,7 @@ struct RowSample{
             image_y = other.image_y;
             col_samples = std::move(other.col_samples);
             visibility = std::move(other.visibility);
+            predictors = std::move(other.predictors);
             intersected_scene = other.intersected_scene;
             its = other.its;
             emitter_color = other.emitter_color;
@@ -41,6 +43,7 @@ struct RowSample{
     std::uint32_t image_x, image_y;
     std::vector<Spectrum> col_samples;
     std::vector<VISIBILITY> visibility;
+    std::vector<std::uint32_t> predictors;
     bool intersected_scene;
     Intersection its;
     Spectrum emitter_color;
@@ -52,7 +55,7 @@ public:
         float min_dist, float sample_percentage, float error_threshold, float reincorporation_density_threshold,
         std::uint32_t slice_size, std::uint32_t max_prediction_iterations, std::uint32_t max_separation_iterations,
         std::uint32_t show_slices, std::uint32_t only_directsamples, bool separate, bool show_error, bool show_sparse,
-        std::uint32_t predictor_mask, bool show_rank);
+        std::uint32_t predictor_mask, bool show_rank, bool show_predictors);
     MatrixSeparationRenderer(const MatrixSeparationRenderer& other) = delete;
     MatrixSeparationRenderer(MatrixSeparationRenderer&& other);
     MatrixSeparationRenderer& operator = (const MatrixSeparationRenderer& other) = delete;
@@ -78,6 +81,7 @@ private:
     bool separate_, show_error_, show_sparse_;
     std::uint32_t predictor_mask_;
     bool show_rank_;
+    bool show_predictors_;
 };
 
 MTS_NAMESPACE_END

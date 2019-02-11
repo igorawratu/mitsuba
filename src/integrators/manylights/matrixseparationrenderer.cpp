@@ -25,54 +25,36 @@
 
 MTS_NAMESPACE_BEGIN
 
+const std::array<std::function<bool(float, const Intersection&)>, 6> searchers {
+    [](float value, const Intersection& its){
+        return value < its.p.x;
+    },
+    [](float value, const Intersection& its){
+        return value < its.p.y;
+    },
+    [](float value, const Intersection& its){
+        return value < its.p.z;
+    },
+    [](float value, const Intersection& its){
+        return value < its.geoFrame.n.x;
+    },
+    [](float value, const Intersection& its){
+        return value < its.geoFrame.n.y;
+    },
+    [](float value, const Intersection& its){
+        return value < its.geoFrame.n.z;
+    }
+};
+                
 struct KDTNode{
     std::vector<std::uint32_t> sample_indices;
     std::vector<RowSample>* samples;
     std::unique_ptr<KDTNode> left;
     std::unique_ptr<KDTNode> right;
-    std::array<std::function<bool(const std::uint32_t& lhs, const std::uint32_t& rhs)>, 6> sorters;
-    std::array<std::function<bool(float, const std::uint32_t&)>, 6> searchers;
 
     KDTNode(std::vector<RowSample>* sample_set) : sample_indices(), samples(sample_set), 
         left(nullptr), right(nullptr){
 
-        sorters[0] =    [this](const std::uint32_t& lhs, const std::uint32_t& rhs){
-                            return (*this->samples)[lhs].its.p.x < (*this->samples)[rhs].its.p.x;
-                        };
-        sorters[1] =    [this](const std::uint32_t& lhs, const std::uint32_t& rhs){
-                            return (*this->samples)[lhs].its.p.y < (*this->samples)[rhs].its.p.y;
-                        };
-        sorters[2] =    [this](const std::uint32_t& lhs, const std::uint32_t& rhs){
-                            return (*this->samples)[lhs].its.p.z < (*this->samples)[rhs].its.p.z;
-                        };
-        sorters[3] =    [this](const std::uint32_t& lhs, const std::uint32_t& rhs){
-                            return (*this->samples)[lhs].its.geoFrame.n.x < (*this->samples)[rhs].its.geoFrame.n.x;
-                        };
-        sorters[4] =    [this](const std::uint32_t& lhs, const std::uint32_t& rhs){
-                            return (*this->samples)[lhs].its.geoFrame.n.y < (*this->samples)[rhs].its.geoFrame.n.y;
-                        };
-        sorters[5] =    [this](const std::uint32_t& lhs, const std::uint32_t& rhs){
-                            return (*this->samples)[lhs].its.geoFrame.n.z < (*this->samples)[rhs].its.geoFrame.n.z;
-                        };
-
-        searchers[0] =  [this](float value, const std::uint32_t& entry){
-                            return value < (*this->samples)[entry].its.p.x;
-                        };
-        searchers[1] =  [this](float value, const std::uint32_t& entry){
-                            return value < (*this->samples)[entry].its.p.y;
-                        };
-        searchers[2] =  [this](float value, const std::uint32_t& entry){
-                            return value < (*this->samples)[entry].its.p.z;
-                        };
-        searchers[3] =  [this](float value, const std::uint32_t& entry){
-                            return value < (*this->samples)[entry].its.geoFrame.n.x;
-                        };
-        searchers[4] =  [this](float value, const std::uint32_t& entry){
-                            return value < (*this->samples)[entry].its.geoFrame.n.y;
-                        };
-        searchers[5] =  [this](float value, const std::uint32_t& entry){
-                            return value < (*this->samples)[entry].its.geoFrame.n.z;
-                        };
     }
 
     void Split(float norm_scale, std::uint32_t size_threshold){
@@ -124,7 +106,7 @@ struct KDTNode{
         right = std::unique_ptr<KDTNode>(new KDTNode(samples));
 
         for(std::uint32_t i = 0; i < sample_indices.size(); ++i){
-            if(searchers[ranges[0].first](midpoints[ranges[0].first], sample_indices[i])){
+            if(searchers[ranges[0].first](midpoints[ranges[0].first], sample(i).its)){
                 right->sample_indices.push_back(sample_indices[i]);
             }
             else{
@@ -349,6 +331,7 @@ std::vector<VISIBILITY> knnPredictor(KDTNode* slice, std::uint32_t neighbours, s
 
     return output;
 }
+
 std::vector<VISIBILITY> linearPredictor(KDTNode* slice, std::uint32_t col, float min_dist, std::mt19937& rng){
     assert(slice != nullptr && slice->sample_indices.size() > 0);
 
@@ -639,6 +622,7 @@ std::set<std::uint32_t> sampleAndPredictVisibility(KDTNode* slice, float sample_
 
         for(std::uint32_t i = 0; i < slice->sample_indices.size(); ++i){
             slice->sample(i).visibility[*iter] = predictions[smallest_idx][i];
+            slice->sample(i).predictors[*iter] = smallest_idx;
         }
 
         float normalized_error = (float)smallest_error / to_sample.size();
@@ -907,13 +891,13 @@ MatrixSeparationRenderer::MatrixSeparationRenderer(std::unique_ptr<ManyLightsClu
         float min_dist, float sample_percentage, float error_threshold, float reincorporation_density_threshold,
         std::uint32_t slice_size, std::uint32_t max_prediction_iterations, std::uint32_t max_separation_iterations,
         std::uint32_t show_slices, std::uint32_t only_directsamples, bool separate, bool show_error, bool show_sparse,
-        std::uint32_t predictor_mask, bool show_rank) : 
+        std::uint32_t predictor_mask, bool show_rank, bool show_predictors) : 
         clusterer_(std::move(clusterer)), min_dist_(min_dist), sample_percentage_(sample_percentage),
         error_threshold_(error_threshold), reincorporation_density_threshold_(reincorporation_density_threshold),
         slice_size_(slice_size), max_prediction_iterations_(max_prediction_iterations), 
         max_separation_iterations_(max_separation_iterations), show_slices_(show_slices > 0),
         show_only_directsamples_(only_directsamples > 0), cancel_(false), separate_(separate), show_error_(show_error),
-        show_sparse_(show_sparse), predictor_mask_(predictor_mask), show_rank_(show_rank){
+        show_sparse_(show_sparse), predictor_mask_(predictor_mask), show_rank_(show_rank), show_predictors_(show_predictors){
 
 }
 
@@ -924,7 +908,7 @@ MatrixSeparationRenderer::MatrixSeparationRenderer(MatrixSeparationRenderer&& ot
         max_separation_iterations_(other.max_separation_iterations_), show_slices_(other.show_slices_), 
         show_only_directsamples_(other.show_only_directsamples_), cancel_(false), samples_(std::move(other.samples_)),
         separate_(other.separate_), show_error_(other.show_error_), show_sparse_(other.show_sparse_),
-        predictor_mask_(other.predictor_mask_), show_rank_(other.show_rank_){
+        predictor_mask_(other.predictor_mask_), show_rank_(other.show_rank_), show_predictors_(other.show_predictors_){
     
 }
 
@@ -947,6 +931,7 @@ MatrixSeparationRenderer& MatrixSeparationRenderer::operator = (MatrixSeparation
         show_sparse_ = other.show_sparse_;
         predictor_mask_ = other.predictor_mask_;
         show_rank_ = other.show_rank_;
+        show_predictors_ = other.show_predictors_;
     }
     
     return *this;
@@ -1064,6 +1049,41 @@ bool MatrixSeparationRenderer::render(Scene* scene){
                 output_image[offset] = sr;
                 output_image[offset + 1] = sg;
                 output_image[offset + 2] = sb;
+
+                continue;
+            }
+
+            if(show_predictors_){
+                Spectrum r, g, b;
+                r.fromLinearRGB(1.f, 0.f, 0.f);
+                g.fromLinearRGB(0.f, 1.f, 0.f);
+                b.fromLinearRGB(0.f, 0.f, 1.f);
+
+                float rtot = 0.f, gtot = 0.f, btot = 0.f;
+                for(std::uint32_t k = 0; k < slices[i]->sample(j).predictors.size(); ++k){
+                    if(slices[i]->sample(j).predictors[k] == 0){
+                        rtot += 1.f;
+                    }
+                    else if(slices[i]->sample(j).predictors[k] == 1){
+                        gtot += 1.f;
+                    }
+                    else if(slices[i]->sample(j).predictors[k] == 2){
+                        btot += 1.f;
+                    }
+                }
+
+                rtot /= slices[i]->sample(j).predictors.size();
+                gtot /= slices[i]->sample(j).predictors.size();
+                btot /= slices[i]->sample(j).predictors.size();
+
+                Spectrum predictor_col = rtot * r + gtot * g + btot * b;
+
+                float pr, pg, pb;
+                predictor_col.toSRGB(pr, pg, pb);
+
+                output_image[offset] = pr * 255.f + 0.5f;
+                output_image[offset + 1] = pg * 255.f + 0.5f;
+                output_image[offset + 2] = pb * 255.f + 0.5f;
 
                 continue;
             }

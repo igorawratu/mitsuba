@@ -341,12 +341,13 @@ private:
 				bool show_sparse = props.getInteger("show_sparse", 0) > 0;
 				std::uint32_t predictor_mask = (std::uint32_t)props.getInteger("predictor_mask", 7);
 				bool show_rank = props.getInteger("show_rank", 0) > 0;
+				bool show_predictors = props.getInteger("show_predictors", 0) > 0;
 
 				std::unique_ptr<ManyLightsClusterer> clusterer(new PassthroughClusterer(vpls_));
 				return std::unique_ptr<MatrixSeparationRenderer>(new MatrixSeparationRenderer(std::move(clusterer), 
 					min_dist_, sample_percentage, error_threshold, reincorporation_density_threshold, slice_size, 
 					max_prediction_iterations, max_separation_iterations, show_slices, only_directsamples, separate,
-					show_error, show_sparse, predictor_mask, show_rank));
+					show_error, show_sparse, predictor_mask, show_rank, show_predictors));
 			}
 			default:
 				return nullptr;
