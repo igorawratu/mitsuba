@@ -238,4 +238,16 @@ Spectrum sample(Scene* scene, Sampler* sampler, const Intersection& its, const V
     return (vpl.P * ln_dot_ldir * attenuation * n_dot_ldir * albedo) / PI;
 }
 
+Eigen::MatrixXf computeMoorePenroseInverse(const Eigen::MatrixXf& m){
+    auto svd = m.jacobiSvd(Eigen::ComputeFullV | Eigen::ComputeFullU);
+    auto singular_values = svd.singularValues();
+    Eigen::MatrixXf svmat = Eigen::MatrixXf::Zero(m.cols(), m.rows());
+    for(auto i = 0; i < singular_values.size(); ++i){
+        if(fabs(singular_values(i)) > 0.000001f){
+            svmat(i, i) = 1.f / singular_values(i);
+        }
+    }
+    return svd.matrixV() * svmat * svd.matrixU().adjoint();
+}
+
 MTS_NAMESPACE_END
