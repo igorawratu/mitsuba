@@ -12,12 +12,32 @@ MTS_NAMESPACE_BEGIN
 enum VISIBILITY{VISIBLE = 0, NOT_VISIBLE, P_VISIBLE, P_NOT_VISIBLE, UNKNOWN};
 
 struct RowSample{
-    RowSample(const Point3f& p, const Normal& n, std::uint32_t x, std::uint32_t y, std::uint32_t cols, bool in_scene, Intersection intersection) : 
-        position(p), normal(n), image_x(x), image_y(y), col_samples(cols, Spectrum(0.f)), visibility(cols, UNKNOWN), intersected_scene(in_scene), its(intersection){
+    RowSample() : intersected_scene(false){
     }
 
-    Point3f position;
-    Normal normal;
+    RowSample(std::uint32_t x, std::uint32_t y, std::uint32_t cols, bool in_scene, Intersection intersection) : 
+        image_x(x), image_y(y), col_samples(cols, Spectrum(0.f)), visibility(cols, UNKNOWN), intersected_scene(in_scene), its(intersection){
+    }
+
+    RowSample(RowSample&& other) : image_x(other.image_x), image_y(other.image_y), 
+        col_samples(std::move(other.col_samples)), visibility(std::move(other.visibility)),
+        intersected_scene(other.intersected_scene), its(other.its), emitter_color(other.emitter_color){
+    }
+
+    RowSample& operator = (RowSample&& other){
+        if(this != &other){
+            image_x = other.image_x;
+            image_y = other.image_y;
+            col_samples = std::move(other.col_samples);
+            visibility = std::move(other.visibility);
+            intersected_scene = other.intersected_scene;
+            its = other.its;
+            emitter_color = other.emitter_color;
+        }
+
+        return *this;
+    }
+
     std::uint32_t image_x, image_y;
     std::vector<Spectrum> col_samples;
     std::vector<VISIBILITY> visibility;

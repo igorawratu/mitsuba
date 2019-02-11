@@ -37,41 +37,41 @@ struct KDTNode{
         left(nullptr), right(nullptr){
 
         sorters[0] =    [this](const std::uint32_t& lhs, const std::uint32_t& rhs){
-                            return (*this->samples)[lhs].position.x < (*this->samples)[rhs].position.x;
+                            return (*this->samples)[lhs].its.p.x < (*this->samples)[rhs].its.p.x;
                         };
         sorters[1] =    [this](const std::uint32_t& lhs, const std::uint32_t& rhs){
-                            return (*this->samples)[lhs].position.y < (*this->samples)[rhs].position.y;
+                            return (*this->samples)[lhs].its.p.y < (*this->samples)[rhs].its.p.y;
                         };
         sorters[2] =    [this](const std::uint32_t& lhs, const std::uint32_t& rhs){
-                            return (*this->samples)[lhs].position.z < (*this->samples)[rhs].position.z;
+                            return (*this->samples)[lhs].its.p.z < (*this->samples)[rhs].its.p.z;
                         };
         sorters[3] =    [this](const std::uint32_t& lhs, const std::uint32_t& rhs){
-                            return (*this->samples)[lhs].normal.x < (*this->samples)[rhs].normal.x;
+                            return (*this->samples)[lhs].its.geoFrame.n.x < (*this->samples)[rhs].its.geoFrame.n.x;
                         };
         sorters[4] =    [this](const std::uint32_t& lhs, const std::uint32_t& rhs){
-                            return (*this->samples)[lhs].normal.y < (*this->samples)[rhs].normal.y;
+                            return (*this->samples)[lhs].its.geoFrame.n.y < (*this->samples)[rhs].its.geoFrame.n.y;
                         };
         sorters[5] =    [this](const std::uint32_t& lhs, const std::uint32_t& rhs){
-                            return (*this->samples)[lhs].normal.z < (*this->samples)[rhs].normal.z;
+                            return (*this->samples)[lhs].its.geoFrame.n.z < (*this->samples)[rhs].its.geoFrame.n.z;
                         };
 
         searchers[0] =  [this](float value, const std::uint32_t& entry){
-                            return value < (*this->samples)[entry].position.x;
+                            return value < (*this->samples)[entry].its.p.x;
                         };
         searchers[1] =  [this](float value, const std::uint32_t& entry){
-                            return value < (*this->samples)[entry].position.y;
+                            return value < (*this->samples)[entry].its.p.y;
                         };
         searchers[2] =  [this](float value, const std::uint32_t& entry){
-                            return value < (*this->samples)[entry].position.z;
+                            return value < (*this->samples)[entry].its.p.z;
                         };
         searchers[3] =  [this](float value, const std::uint32_t& entry){
-                            return value < (*this->samples)[entry].normal.x;
+                            return value < (*this->samples)[entry].its.geoFrame.n.x;
                         };
         searchers[4] =  [this](float value, const std::uint32_t& entry){
-                            return value < (*this->samples)[entry].normal.y;
+                            return value < (*this->samples)[entry].its.geoFrame.n.y;
                         };
         searchers[5] =  [this](float value, const std::uint32_t& entry){
-                            return value < (*this->samples)[entry].normal.z;
+                            return value < (*this->samples)[entry].its.geoFrame.n.z;
                         };
     }
 
@@ -84,19 +84,19 @@ struct KDTNode{
         for(size_t i = 0; i < sample_indices.size(); ++i){
             auto& curr_sample = (*samples)[sample_indices[i]];
 
-            min_pos.x = std::min(curr_sample.position.x, min_pos.x);
-            min_pos.y = std::min(curr_sample.position.y, min_pos.y);
-            max_pos.z = std::max(curr_sample.position.z, max_pos.z);
-            min_pos.z = std::min(curr_sample.position.z, min_pos.z);
-            max_pos.x = std::max(curr_sample.position.x, max_pos.x);
-            max_pos.y = std::max(curr_sample.position.y, max_pos.y);
+            min_pos.x = std::min(curr_sample.its.p.x, min_pos.x);
+            min_pos.y = std::min(curr_sample.its.p.y, min_pos.y);
+            max_pos.z = std::max(curr_sample.its.p.z, max_pos.z);
+            min_pos.z = std::min(curr_sample.its.p.z, min_pos.z);
+            max_pos.x = std::max(curr_sample.its.p.x, max_pos.x);
+            max_pos.y = std::max(curr_sample.its.p.y, max_pos.y);
 
-            min_normal.x = std::min(curr_sample.normal.x, min_normal.x);
-            min_normal.y = std::min(curr_sample.normal.y, min_normal.y);
-            min_normal.z = std::min(curr_sample.normal.z, min_normal.z);
-            max_normal.x = std::max(curr_sample.normal.x, max_normal.x);
-            max_normal.y = std::max(curr_sample.normal.y, max_normal.y);
-            max_normal.z = std::max(curr_sample.normal.z, max_normal.z);
+            min_normal.x = std::min(curr_sample.its.geoFrame.n.x, min_normal.x);
+            min_normal.y = std::min(curr_sample.its.geoFrame.n.y, min_normal.y);
+            min_normal.z = std::min(curr_sample.its.geoFrame.n.z, min_normal.z);
+            max_normal.x = std::max(curr_sample.its.geoFrame.n.x, max_normal.x);
+            max_normal.y = std::max(curr_sample.its.geoFrame.n.y, max_normal.y);
+            max_normal.z = std::max(curr_sample.its.geoFrame.n.z, max_normal.z);
         }
 
         std::array<std::pair<std::uint8_t, float>, 6> ranges;
@@ -133,6 +133,7 @@ struct KDTNode{
         }
 
         sample_indices.clear();
+        sample_indices.shrink_to_fit();
     }
 
     RowSample& sample(std::uint32_t index){
@@ -175,12 +176,15 @@ std::unique_ptr<KDTNode> constructKDTree(Scene* scene, const std::vector<VPL>& v
     ref<Sensor> sensor = scene->getSensor();
     ref<Film> film = sensor->getFilm();
 
+    samples.resize(film->getSize().y * film->getSize().x);
+
     Properties props("independent");
     Sampler *sampler = static_cast<Sampler*>(PluginManager::getInstance()->createObject(MTS_CLASS(Sampler), props));
     sampler->configure();
     sampler->generate(Point2i(0));
 
     for (std::int32_t y = 0; y < film->getSize().y; ++y) {
+        #pragma omp parallel for
         for (std::int32_t x = 0; x < film->getSize().x; ++x) {
             Ray ray;
 
@@ -199,9 +203,7 @@ std::unique_ptr<KDTNode> constructKDTree(Scene* scene, const std::vector<VPL>& v
                 continue;
             }
 
-            samples.emplace_back(its.p, its.geoFrame.n, x, y, vpls.size(), intersected, its);
-
-            auto& curr_sample = samples.back();
+            RowSample curr_sample(x, y, vpls.size(), intersected, its);;
 
             if(its.isEmitter()){
                 curr_sample.emitter_color = its.Le(-ray.d);
@@ -210,11 +212,17 @@ std::unique_ptr<KDTNode> constructKDTree(Scene* scene, const std::vector<VPL>& v
             for (std::uint32_t i = 0; i < vpls.size(); ++i) {
                 curr_sample.col_samples[i] = sample(scene, sampler, its, vpls[i], min_dist, false);
             }
+
+            samples[y * film->getSize().x + x] = std::move(curr_sample);
         }
     }
 
-    kdt_root->sample_indices.resize(samples.size(), 0);
-    std::iota(kdt_root->sample_indices.begin(), kdt_root->sample_indices.end(), 0);
+    kdt_root->sample_indices.reserve(samples.size());
+    for(std::uint32_t i = 0; i < samples.size(); ++i){
+        if(samples[i].intersected_scene){
+            kdt_root->sample_indices.push_back(i);
+        }
+    }
 
     splitKDTree(kdt_root.get(), size_threshold, min_dist);
 
@@ -245,7 +253,7 @@ std::vector<VISIBILITY> knnPredictor(KDTNode* slice, std::uint32_t neighbours, s
     for(std::uint32_t i = 0; i < slice->sample_indices.size(); ++i){
         if(slice->sample(i).visibility[col] == VISIBLE || slice->sample(i).visibility[col] == NOT_VISIBLE){
             FLANNPoint p;
-            p.position = slice->sample(i).position;
+            p.position = slice->sample(i).its.p;
             p.idx = i;
 
             point_set.pts.push_back(p);
@@ -287,12 +295,12 @@ std::vector<VISIBILITY> knnPredictor(KDTNode* slice, std::uint32_t neighbours, s
         else{
             std::vector<std::pair<float, std::uint32_t>> neighbours;
             for(size_t j = 0; j < point_set.pts.size(); ++j){
-                float d = abs(slice->sample(i).position.x - slice->sample(point_set.pts[j].idx).position.x);
-                d += abs(slice->sample(i).position.y - slice->sample(point_set.pts[j].idx).position.y);
-                d += abs(slice->sample(i).position.z - slice->sample(point_set.pts[j].idx).position.z);
-                d += 200.f * abs(slice->sample(i).normal.x - slice->sample(point_set.pts[j].idx).normal.x);
-                d += 200.f * abs(slice->sample(i).normal.y - slice->sample(point_set.pts[j].idx).normal.y);
-                d += 200.f * abs(slice->sample(i).normal.z - slice->sample(point_set.pts[j].idx).normal.z);
+                float d = abs(slice->sample(i).its.p.x - slice->sample(point_set.pts[j].idx).its.p.x);
+                d += abs(slice->sample(i).its.p.y - slice->sample(point_set.pts[j].idx).its.p.y);
+                d += abs(slice->sample(i).its.p.z - slice->sample(point_set.pts[j].idx).its.p.z);
+                d += 200.f * abs(slice->sample(i).its.geoFrame.n.x - slice->sample(point_set.pts[j].idx).its.geoFrame.n.x);
+                d += 200.f * abs(slice->sample(i).its.geoFrame.n.y - slice->sample(point_set.pts[j].idx).its.geoFrame.n.y);
+                d += 200.f * abs(slice->sample(i).its.geoFrame.n.z - slice->sample(point_set.pts[j].idx).its.geoFrame.n.z);
                 neighbours.emplace_back(d, point_set.pts[j].idx);
             }
 
@@ -351,9 +359,9 @@ std::vector<VISIBILITY> linearPredictor(KDTNode* slice, std::uint32_t col, float
         if(slice->sample(i).visibility[col] == VISIBLE || slice->sample(i).visibility[col] == NOT_VISIBLE){
             sampled.push_back(i);
         }
-        q(i, 0) = slice->sample(i).position.x / min_dist;
-        q(i, 1) = slice->sample(i).position.y / min_dist;
-        q(i, 2) = slice->sample(i).position.z / min_dist;
+        q(i, 0) = slice->sample(i).its.p.x / min_dist;
+        q(i, 1) = slice->sample(i).its.p.y / min_dist;
+        q(i, 2) = slice->sample(i).its.p.z / min_dist;
         q(i, 3) = 1;
     }
 
@@ -361,9 +369,9 @@ std::vector<VISIBILITY> linearPredictor(KDTNode* slice, std::uint32_t col, float
     Eigen::MatrixXf y(sampled.size(), 1);
 
     for(std::uint32_t i = 0; i < sampled.size(); ++i){
-        x(i, 0) = slice->sample(sampled[i]).position.x / min_dist;
-        x(i, 1) = slice->sample(sampled[i]).position.y / min_dist;
-        x(i, 2) = slice->sample(sampled[i]).position.z / min_dist;
+        x(i, 0) = slice->sample(sampled[i]).its.p.x / min_dist;
+        x(i, 1) = slice->sample(sampled[i]).its.p.y / min_dist;
+        x(i, 2) = slice->sample(sampled[i]).its.p.z / min_dist;
         x(i, 3) = 1;
 
         y(i, 0) = slice->sample(sampled[i]).visibility[col] == VISIBLE ? 1 : -1;
@@ -504,7 +512,7 @@ void performInitialVisibilitySamples(KDTNode* slice, float sample_percentage, st
         }
 
         for(std::uint32_t j = 0; j < to_sample.size(); ++j){
-            Point ray_origin = slice->sample(to_sample[j]).position;
+            Point ray_origin = slice->sample(to_sample[j]).its.p;
             Ray shadow_ray(ray_origin, normalize(vpls[i].its.p - ray_origin), 0.f);
 
             Float t;
@@ -573,7 +581,7 @@ std::set<std::uint32_t> sampleAndPredictVisibility(KDTNode* slice, float sample_
         std::vector<VISIBILITY> samples(to_sample.size());
 
         for(std::uint32_t i = 0; i < to_sample.size(); ++i){
-            Point ray_origin = slice->sample(to_sample[i]).position;
+            Point ray_origin = slice->sample(to_sample[i]).its.p;
             Ray shadow_ray(ray_origin, normalize(vpls[*iter].its.p - ray_origin), 0.f);
 
             Float t;
