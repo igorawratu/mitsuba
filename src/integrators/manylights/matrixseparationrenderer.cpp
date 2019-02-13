@@ -15,10 +15,9 @@
 #include <mitsuba/core/plugin.h>
 
 #include <eigen3/Eigen/Dense>
-
+#include <flann/flann.hpp>
 
 #include "definitions.h"
-#include "nanoflann.hpp"
 #include "common.h"
 
 #include "arpaca.hpp"
@@ -46,11 +45,27 @@ const std::array<std::function<bool(float, const Intersection&)>, 6> searchers {
     }
 };
                 
+void constructFlannSampleMatrix(flann::Matrix<float>& mat, const std::vector<RowSample>& samples, 
+    const std::vector<std::uint32_t>& indices){
+
+    assert(indices.size() > 0 && mat.rows == indices.size() && mat.cols == 3);
+
+    for(std::uint32_t i = 0; i < indices.size(); ++i){
+        float* curr_pos = (float*)mat[i];
+
+        curr_pos[0] = samples[indices[i]].its.p.x;
+        curr_pos[1] = samples[indices[i]].its.p.y;
+        curr_pos[2] = samples[indices[i]].its.p.z;
+    }
+}
+
 struct KDTNode{
     std::vector<std::uint32_t> sample_indices;
     std::vector<RowSample>* samples;
     std::unique_ptr<KDTNode> left;
     std::unique_ptr<KDTNode> right;
+    std::vector<std::vector<int>> nearest_neighbours;
+    std::vector<std::vector<float>> neighbour_distances;
 
     KDTNode(std::vector<RowSample>* sample_set) : sample_indices(), samples(sample_set), 
         left(nullptr), right(nullptr){
@@ -115,13 +130,47 @@ struct KDTNode{
         }
 
         sample_indices.clear();
+        nearest_neighbours.clear();
+        neighbour_distances.clear();
+
         sample_indices.shrink_to_fit();
+        nearest_neighbours.shrink_to_fit();
+        neighbour_distances.shrink_to_fit();
     }
 
     RowSample& sample(std::uint32_t index){
         assert(samples != nullptr && index < sample_indices.size());
 
         return (*samples)[sample_indices[index]];
+    }
+
+    void buildNearestNeighbours(std::uint32_t nn = 0){
+        assert(nn < sample_indices.size());
+
+        if(nn == 0){
+            nn = std::min((size_t)100, sample_indices.size() / 10 + 1);
+        }
+
+        flann::Matrix<float> query_points(new float[sample_indices.size() * 3], sample_indices.size(), 3);
+        constructFlannSampleMatrix(query_points, *(samples), sample_indices);
+        flann::Index<flann::L2<float>> index(query_points, flann::KDTreeIndexParams(4));
+        index.buildIndex();
+        index.knnSearch(query_points, nearest_neighbours, neighbour_distances, nn, flann::SearchParams(128));
+
+        for(std::uint32_t i = 0; i < nearest_neighbours.size(); ++i){
+            auto iter = std::find(nearest_neighbours[i].begin(), nearest_neighbours[i].end(), i);
+            if(iter != nearest_neighbours[i].end()){
+                nearest_neighbours[i].pop_back();
+                neighbour_distances[i].pop_back();
+            }
+            else{
+                std::uint32_t pos = iter - nearest_neighbours[i].begin();
+                nearest_neighbours[i].erase(iter);
+                neighbour_distances[i].erase(neighbour_distances[i].begin() + pos);
+            }
+        }
+
+        delete query_points.ptr();
     }
 };
 
@@ -211,123 +260,52 @@ std::unique_ptr<KDTNode> constructKDTree(Scene* scene, const std::vector<VPL>& v
     return kdt_root;
 }
 
-struct FLANNPoint
-{
-    Point position;
-    std::uint32_t idx;
-
-    inline float get_pt(const size_t dim) const
-	{
-		if (dim == 0) return position.x;
-		else if (dim == 1) return position.y;
-		else return position.z;
-	}
-};
-
-typedef nanoflann::KDTreeSingleIndexAdaptor<nanoflann::L2_Simple_Adaptor<float, FLANNPointCloud<FLANNPoint>>, 
-    FLANNPointCloud<FLANNPoint>, 3> KDTree;
-
 std::vector<VISIBILITY> knnPredictor(KDTNode* slice, std::uint32_t neighbours, std::uint32_t col, std::mt19937& rng){
     assert(slice != nullptr && neighbours > 0 && slice->sample_indices.size() > 0
         && col < slice->sample(0).visibility.size());
 
-    FLANNPointCloud<FLANNPoint> point_set;
-    for(std::uint32_t i = 0; i < slice->sample_indices.size(); ++i){
-        if(slice->sample(i).visibility[col] == VISIBLE || slice->sample(i).visibility[col] == NOT_VISIBLE){
-            FLANNPoint p;
-            p.position = slice->sample(i).its.p;
-            p.idx = i;
-
-            point_set.pts.push_back(p);
-        }
-    }
-
-    /*for(int i =0 ; i < point_set.pts.size(); ++i){
-        std::cout << slice->sample(point_set.pts[i].idx).visibility[col] << " ";
-    }
-    std::cout << std::endl;*/
-
-    //std::cout << point_set.pts.size() << std::endl;
-
-    KDTree kdt(3, point_set, nanoflann::KDTreeSingleIndexAdaptorParams(10));
-    kdt.buildIndex();
-
-    std::uint32_t num_neighbours = std::min(neighbours, (std::uint32_t)point_set.pts.size());
+    std::uint32_t num_neighbours = std::min(neighbours, (std::uint32_t)slice->nearest_neighbours.size());
     std::vector<VISIBILITY> output(slice->sample_indices.size());
 
     if(num_neighbours == 0){
         for(std::uint32_t i = 0; i < slice->sample_indices.size(); ++i){
-            output[i] = P_VISIBLE;
+            if(slice->sample(slice->sample_indices[i]).visibility[col] != VISIBLE || 
+                slice->sample(slice->sample_indices[i]).visibility[col] != NOT_VISIBLE){
+                output[i] = P_VISIBLE;
+            }
+            else output[i] = slice->sample(slice->sample_indices[i]).visibility[col];
         }
 
         return output;
     }
 
     std::uniform_real_distribution<float> gen(0.f, 1.f);
-    nanoflann::KNNResultSet<float> result_set(num_neighbours);
-    std::unique_ptr<size_t[]> indices(new size_t[num_neighbours]);
-    std::unique_ptr<float[]> distances(new float[num_neighbours]);
-
-    result_set.init(indices.get(), distances.get());
 
     for(std::uint32_t i = 0; i < slice->sample_indices.size(); ++i){
         if(slice->sample(i).visibility[col] == VISIBLE || slice->sample(i).visibility[col] == NOT_VISIBLE){
             output[i] = slice->sample(i).visibility[col];
         }
         else{
-            std::vector<std::pair<float, std::uint32_t>> neighbours;
-            for(size_t j = 0; j < point_set.pts.size(); ++j){
-                float d = abs(slice->sample(i).its.p.x - slice->sample(point_set.pts[j].idx).its.p.x);
-                d += abs(slice->sample(i).its.p.y - slice->sample(point_set.pts[j].idx).its.p.y);
-                d += abs(slice->sample(i).its.p.z - slice->sample(point_set.pts[j].idx).its.p.z);
-                d += 200.f * abs(slice->sample(i).its.geoFrame.n.x - slice->sample(point_set.pts[j].idx).its.geoFrame.n.x);
-                d += 200.f * abs(slice->sample(i).its.geoFrame.n.y - slice->sample(point_set.pts[j].idx).its.geoFrame.n.y);
-                d += 200.f * abs(slice->sample(i).its.geoFrame.n.z - slice->sample(point_set.pts[j].idx).its.geoFrame.n.z);
-                neighbours.emplace_back(d, point_set.pts[j].idx);
+            std::vector<std::uint32_t> sampled_neighbours_indices;
+            for(std::uint32_t j = 0; j < slice->nearest_neighbours[i].size(); ++j){
+                if(slice->sample(slice->nearest_neighbours[i][j]).visibility[col] == VISIBLE || 
+                    slice->sample(slice->nearest_neighbours[i][j]).visibility[col] == NOT_VISIBLE){
+                    sampled_neighbours_indices.push_back(slice->nearest_neighbours[i][j]);
+                    if(sampled_neighbours_indices.size() == num_neighbours){
+                        break;
+                    }
+                }
             }
 
-            auto sorter = [](const std::pair<float, std::uint32_t>& lhs, const std::pair<float, std::uint32_t>& rhs){
-                return lhs.first < rhs.first;
-            };
-            
-            std::sort(neighbours.begin(), neighbours.end(), sorter);
-
-            //float query_pt[3] = 
-            //    {slice->sample(i).position.x, slice->sample(i).position.y, slice->sample(i).position.z};
-            //kdt.findNeighbors(result_set, query_pt, nanoflann::SearchParams(10));
-
-            std::uint32_t idx = std::min(num_neighbours - 1, (std::uint32_t)(gen(rng) * num_neighbours));
-            //std::uint32_t sample_index = point_set.pts[indices[idx]].idx;
-
-            std::uint32_t sample_index = neighbours[idx].second;
-
-            output[i] = slice->sample(sample_index).visibility[col] == NOT_VISIBLE ? P_NOT_VISIBLE : P_VISIBLE;
-
-            /*std::uint32_t num_visible = 0;
-            float p_visible = 0.f;
-            for(std::uint32_t j = 0; j < num_neighbours; ++j){
-                std::uint32_t sample_index = point_set.pts[indices[j]].idx;
-                if(slice->sample(sample_index).visibility[col] == VISIBLE){
-                    num_visible++;
-                    p_visible += std::max(0.f, std::min(1.f, 1.f / (float)sqrt(distances[j]))) / (float)num_neighbours;
-                }
-            }*/
-
-            //std::cout << p_visible << std::endl;
-
-            //float p_v = (float)num_visible / num_neighbours;
-            //output[i] = num_visible > (num_neighbours / 2) ? P_VISIBLE : P_NOT_VISIBLE;
-            //output[i] = gen(rng) < p_visible ? P_VISIBLE : P_NOT_VISIBLE;
+            if(sampled_neighbours_indices.size() > 0){
+                std::uint32_t idx = std::min(sampled_neighbours_indices.size() - 1, 
+                    (size_t)(gen(rng) * sampled_neighbours_indices.size()));
+                output[i] = slice->sample(sampled_neighbours_indices[idx]).visibility[col] == NOT_VISIBLE ? 
+                    P_NOT_VISIBLE : P_VISIBLE;
+            }
+            else output[i] = gen(rng) < 0.5f ? P_NOT_VISIBLE : P_VISIBLE;
         }
     }
-
-    //std::cout << std::endl;
-    //std::cout << std::endl;
-
-    /*for(int i =0 ; i < output.size(); ++i){
-        std::cout << output[i] << " ";
-    }
-    std::cout << std::endl << std::endl;*/
 
     return output;
 }
@@ -383,12 +361,12 @@ std::vector<VISIBILITY> linearPredictor(KDTNode* slice, std::uint32_t col, float
 }
 
 std::vector<VISIBILITY> naiveBayes(KDTNode* slice, std::uint32_t col, std::uint32_t neighbours, 
-    const std::vector<VPL>& vpls, std::mt19937& rng){
+    const std::vector<VPL>& vpls, std::mt19937& rng, const std::vector<std::vector<int>>& nearest_vpls){
 
     assert(slice != nullptr && slice->sample_indices.size() > 0 && slice->sample(0).visibility.size() > 0 && 
         vpls.size() > col);
     
-    std::uint32_t num_neighbours = std::min(neighbours, (std::uint32_t)vpls.size() - 1);
+    std::uint32_t num_neighbours = std::min(neighbours, (std::uint32_t)nearest_vpls.size());
     std::vector<VISIBILITY> output(slice->sample_indices.size());
     if(num_neighbours == 0){
         std::fill(output.begin(), output.end(), P_VISIBLE);
@@ -396,30 +374,13 @@ std::vector<VISIBILITY> naiveBayes(KDTNode* slice, std::uint32_t col, std::uint3
         return output;
     }
 
-    std::vector<std::uint32_t> vpl_indices(vpls.size());
-    std::iota(vpl_indices.begin(), vpl_indices.end(), 0);
-    std::sort(vpl_indices.begin(), vpl_indices.end(), 
-        [&vpls, &col](const std::uint32_t& lhs, const std::uint32_t& rhs){
-            //don't care about itself, so dump it at the back
-            if(lhs == col){
-                return false;
-            }
-            else if(rhs == col){
-                return true;
-            }
-
-            float lhd = (vpls[lhs].its.p - vpls[col].its.p).length();
-            float rhd = (vpls[rhs].its.p - vpls[col].its.p).length();
-            return lhd < rhd;
-        });
-
     float tot_vis = 0.f;
     float neighbor_vis = 0.f;
     float tot_sampled = 0.f;
 
     for(std::uint32_t i = 0; i < slice->sample_indices.size(); ++i){
         for(std::uint32_t j = 0; j < num_neighbours; ++j){
-            VISIBILITY v = slice->sample(i).visibility[vpl_indices[j]];
+            VISIBILITY v = slice->sample(i).visibility[nearest_vpls[col][j]];
             if(v == NOT_VISIBLE || v == VISIBLE){
                 if(v == VISIBLE){
                     tot_vis += 1.f;
@@ -433,7 +394,6 @@ std::vector<VISIBILITY> naiveBayes(KDTNode* slice, std::uint32_t col, std::uint3
         if(v == NOT_VISIBLE || v == VISIBLE){
             if(v == VISIBLE){
                 tot_vis += 1.f;
-                tot_sampled += 1.f;
             }
             tot_sampled += 1.f;
         }
@@ -441,7 +401,7 @@ std::vector<VISIBILITY> naiveBayes(KDTNode* slice, std::uint32_t col, std::uint3
 
     float pv = tot_vis / tot_sampled;
     float pj_v = tot_vis == 0.f ? 1.f : (tot_vis - neighbor_vis) / tot_vis;
-    float pij = 1.f / (slice->sample_indices.size() * (1.f / (num_neighbours + 1)));
+    float pij = 1.f / (slice->sample_indices.size() * (num_neighbours + 1));
 
     std::uniform_real_distribution<float> gen(0.f, 1.f);
 
@@ -452,34 +412,24 @@ std::vector<VISIBILITY> naiveBayes(KDTNode* slice, std::uint32_t col, std::uint3
             continue;
         }
         
-        float tot_iv = 0.f;
-        float tot_isampled = 0.f;
-        float tot_p_visible = 0.f;
+        float pi_v = 0.f;
 
-        for(std::uint32_t j = 0; j < num_neighbours; ++j){
-            VISIBILITY v = slice->sample(i).visibility[vpl_indices[j]];
-            if(v == VISIBLE || v == NOT_VISIBLE){
-                if(v == VISIBLE){
-                    tot_iv += 1.f;
-                }
-                else if(v == P_VISIBLE){
-                    tot_p_visible += 1.f;
-                }
-                tot_isampled += 1.f;
-            }   
-        }
-
-        float pi_v;
         if(tot_vis == 0.f){
             pi_v = 1.f;
         }
-        else if(tot_isampled == 0.f){
-            pi_v = (1.f / slice->sample_indices.size()) * pv;
-        }
         else{
-            pi_v = tot_iv / tot_sampled;
+            for(std::uint32_t k = 0; k < slice->nearest_neighbours[i].size(); ++k){
+                for(std::uint32_t j = 0; j < num_neighbours; ++j){
+                    VISIBILITY v = slice->sample(slice->nearest_neighbours[i][k]).visibility[nearest_vpls[col][j]];
+                    if(v == VISIBLE){
+                        pi_v += 1.f;
+                    }   
+                }
+            }
+            pi_v /= (float)slice->nearest_neighbours[i].size();
+            pi_v /= tot_vis;
         }
-
+        
         float pv_ij = (pi_v * pj_v * pv) / pij;
 
         //std::cout << pv_ij << " " << pv << " " << pi_v << " " << pj_v << std::endl;
@@ -535,7 +485,7 @@ void performInitialVisibilitySamples(KDTNode* slice, float sample_percentage, st
 
 std::set<std::uint32_t> sampleAndPredictVisibility(KDTNode* slice, float sample_percentage, std::mt19937& rng, Scene* scene,
     const std::vector<VPL>& vpls, const std::set<std::uint32_t>& active_columns, float error_threshold, float min_dist,
-    std::uint32_t prediction_mask){
+    std::uint32_t prediction_mask, const std::vector<std::vector<int>>& nearest_vpls){
 
     std::set<std::uint32_t> new_active_cols;
 
@@ -558,7 +508,7 @@ std::set<std::uint32_t> sampleAndPredictVisibility(KDTNode* slice, float sample_
         }
 
         if(prediction_mask & 2){
-            predictions.push_back(naiveBayes(slice, *iter, 3, vpls, rng));
+            predictions.push_back(naiveBayes(slice, *iter, 3, vpls, rng, nearest_vpls));
         }
         
         if(prediction_mask & 4){
@@ -941,6 +891,40 @@ MatrixSeparationRenderer::~MatrixSeparationRenderer(){
 
 }
 
+void calculateNearestVPLNeighbours(const std::vector<VPL>& vpls, std::vector<std::vector<int>>& indices, 
+    std::vector<std::vector<float>>& distances, std::uint32_t num_neighbours){
+    assert(num_neighbours > 1 && vpls.size() > 0);
+
+    num_neighbours = std::min((std::uint32_t)vpls.size(), num_neighbours + 1);
+
+    flann::Matrix<float> dataset(new float[vpls.size() * 3], vpls.size(), 3);
+    for(std::uint32_t i = 0; i < vpls.size(); ++i){
+        float* curr = (float*)dataset[i];
+        curr[0] = vpls[i].its.p.x;
+        curr[1] = vpls[i].its.p.y;
+        curr[2] = vpls[i].its.p.z;
+    }
+
+    flann::Index<flann::L2<float>> index(dataset, flann::KDTreeIndexParams(4));
+    index.buildIndex();
+    index.knnSearch(dataset, indices, distances, num_neighbours, flann::SearchParams(128));
+
+    for(std::uint32_t i = 0; i < indices.size(); ++i){
+        auto iter = std::find(indices[i].begin(), indices[i].end(), i);
+        if(iter != indices[i].end()){
+            indices[i].pop_back();
+            distances[i].pop_back();
+        }
+        else{
+            std::uint32_t pos = iter - indices[i].begin();
+            indices[i].erase(iter);
+            distances[i].erase(distances[i].begin() + pos);
+        }
+    }
+
+    delete dataset.ptr();
+}
+
 bool MatrixSeparationRenderer::render(Scene* scene){
     {
         std::lock_guard<std::mutex> lock(cancel_lock_);
@@ -949,12 +933,21 @@ bool MatrixSeparationRenderer::render(Scene* scene){
 
     Intersection its;
     std::vector<VPL> vpls = clusterer_->getClusteringForPoint(its);
+    std::vector<std::vector<int>> vpl_nearest_neighbours;
+    std::vector<std::vector<float>> vpl_nearest_distances;
+
+    calculateNearestVPLNeighbours(vpls, vpl_nearest_neighbours, vpl_nearest_distances, 10);
     
     std::cout << "constructing kd tree" << std::endl;
     auto root = constructKDTree(scene, vpls, slice_size_, min_dist_, samples_);
     std::vector<KDTNode*> slices;
 
     getSlices(root.get(), slices);
+
+    #pragma omp parallel for
+    for(std::uint32_t i = 0; i < slices.size(); ++i){
+        slices[i]->buildNearestNeighbours();
+    }
 
     auto seed = std::chrono::high_resolution_clock::now().time_since_epoch().count();
 
@@ -975,7 +968,7 @@ bool MatrixSeparationRenderer::render(Scene* scene){
 
             while(active_cols.size() > 0 && iter < max_prediction_iterations_){
                 active_cols = sampleAndPredictVisibility(slices[i], sample_percentage_, rng, scene, vpls,  
-                    active_cols, error_threshold_, min_dist_, predictor_mask_);
+                    active_cols, error_threshold_, min_dist_, predictor_mask_, vpl_nearest_neighbours);
                 iter++;
             }
 
