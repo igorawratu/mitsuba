@@ -165,9 +165,9 @@ std::tuple<Eigen::MatrixXf, Eigen::MatrixXf, Eigen::MatrixXf> partialSvd(const E
     return std::make_tuple(u, singular_values, v);
 }
 
-Eigen::MatrixXf softThreshRank(const Eigen::MatrixXf& mat, float theta, const std::uint32_t step_size){
+Eigen::MatrixXf softThreshRank(const Eigen::MatrixXf& mat, float theta, const std::uint32_t initial, const std::uint32_t step_size){
     std::uint32_t max_rank = std::min(mat.rows(), mat.cols());
-    std::uint32_t curr_step_size = step_size;
+    std::uint32_t curr_step_size = std::min(max_rank, initial);
 
     std::uint32_t dim = std::max(mat.rows(), mat.cols());
     Eigen::MatrixXf jordan_wielandt = Eigen::MatrixXf::Zero(dim * 2, dim * 2);

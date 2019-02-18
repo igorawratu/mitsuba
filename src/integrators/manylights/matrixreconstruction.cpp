@@ -15,13 +15,15 @@ MTS_NAMESPACE_BEGIN
 
 MatrixReconstructionRenderer::MatrixReconstructionRenderer(std::unique_ptr<ManyLightsClusterer> clusterer, std::pair<std::uint32_t, std::uint32_t> bucket_size,
     std::uint32_t light_samples, float min_dist, float step_size_factor, float tolerance, float tau, 
-    std::uint32_t max_iterations) : clusterer_(std::move(clusterer)), bucket_size_(bucket_size), light_samples_(light_samples), min_dist_(min_dist),
-    step_size_factor_(step_size_factor), tolerance_(tolerance), tau_(tau), max_iterations_(max_iterations), cancel_(false){
+    std::uint32_t max_iterations, bool output_stats) : clusterer_(std::move(clusterer)), bucket_size_(bucket_size), light_samples_(light_samples), 
+    min_dist_(min_dist), step_size_factor_(step_size_factor), tolerance_(tolerance), tau_(tau), max_iterations_(max_iterations), output_stats_(output_stats), 
+    cancel_(false){
 }
 
 MatrixReconstructionRenderer::MatrixReconstructionRenderer(MatrixReconstructionRenderer&& other) : clusterer_(std::move(other.clusterer_)), 
     bucket_size_(other.bucket_size_), light_samples_(other.light_samples_), min_dist_(other.min_dist_), 
-    step_size_factor_(other.step_size_factor_), tolerance_(other.tolerance_), tau_(other.tau_), max_iterations_(other.max_iterations_), cancel_(other.cancel_){
+    step_size_factor_(other.step_size_factor_), tolerance_(other.tolerance_), tau_(other.tau_), max_iterations_(other.max_iterations_), 
+    output_stats_(other.output_stats_), cancel_(other.cancel_){
 }
 
 MatrixReconstructionRenderer& MatrixReconstructionRenderer::operator = (MatrixReconstructionRenderer&& other){
@@ -34,6 +36,7 @@ MatrixReconstructionRenderer& MatrixReconstructionRenderer::operator = (MatrixRe
         tolerance_ = other.tolerance_; 
         tau_ = other.tau_;
         max_iterations_ = other.max_iterations_;
+        output_stats_ = other.output_stats_;
         cancel_ = other.cancel_;
     }
     return *this;
@@ -172,18 +175,7 @@ void svt(Eigen::MatrixXf& reconstructed_matrix, const Eigen::MatrixXf& lighting_
     std::vector<float> trace;
 
     for(std::uint32_t i = 0; i < max_iterations; ++i){
-        std::cout << "Computing svd for iteration " << i << std::endl;
-        auto svd = y.jacobiSvd(Eigen::ComputeFullU | Eigen::ComputeFullV);
-
-        std::cout << "Reconstructing matrix for iteration " << i << std::endl;
-        auto singular_values = svd.singularValues();
-        Eigen::MatrixXf diagonal_singular = Eigen::MatrixXf::Zero(svd.matrixU().rows(), svd.matrixV().rows());
-        
-        for(std::uint32_t j = 0; j < singular_values.rows(); ++j){
-            diagonal_singular(j, j) = std::max(0.f, singular_values(j, 0) - tau);
-        }
-
-        reconstructed_matrix = svd.matrixU() * diagonal_singular * svd.matrixV().transpose();
+        reconstructed_matrix = softThreshRank(y, tau, std::min(y.cols(), y.rows()) / 10, std::min(y.cols(), y.rows()) / 20);
 
         auto reconsvd = reconstructed_matrix.jacobiSvd();
         auto sv = reconsvd.singularValues();

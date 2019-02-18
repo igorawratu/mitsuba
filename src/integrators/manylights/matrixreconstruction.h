@@ -15,7 +15,7 @@ class MatrixReconstructionRenderer : public ManyLightsRenderer{
 public:
     MatrixReconstructionRenderer() = delete;
     MatrixReconstructionRenderer(std::unique_ptr<ManyLightsClusterer> clusterer, std::pair<std::uint32_t, std::uint32_t> bucket_size, std::uint32_t light_samples, 
-        float min_dist, float step_size_factor, float tolerance, float tau, std::uint32_t max_iterations);
+        float min_dist, float step_size_factor, float tolerance, float tau, std::uint32_t max_iterations, bool output_stats);
     MatrixReconstructionRenderer(const MatrixReconstructionRenderer& other) = delete;
     MatrixReconstructionRenderer(MatrixReconstructionRenderer&& other);
     MatrixReconstructionRenderer& operator = (const MatrixReconstructionRenderer& other) = delete;
@@ -36,8 +36,8 @@ private:
     std::uint32_t light_samples_;
     float min_dist_, step_size_factor_, tolerance_, tau_;
     std::uint32_t max_iterations_;
+    bool output_stats_;
     std::mutex cancel_lock_;
-    
     bool cancel_;
 };
 
