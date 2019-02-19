@@ -15,7 +15,6 @@
 #include <mitsuba/core/plugin.h>
 
 #include <eigen3/Eigen/Dense>
-#include <flann/flann.hpp>
 
 #include "definitions.h"
 #include "common.h"
@@ -24,185 +23,10 @@
 
 MTS_NAMESPACE_BEGIN
 
-const std::array<std::function<bool(float, const Intersection&)>, 6> searchers {
-    [](float value, const Intersection& its){
-        return value < its.p.x;
-    },
-    [](float value, const Intersection& its){
-        return value < its.p.y;
-    },
-    [](float value, const Intersection& its){
-        return value < its.p.z;
-    },
-    [](float value, const Intersection& its){
-        return value < its.geoFrame.n.x;
-    },
-    [](float value, const Intersection& its){
-        return value < its.geoFrame.n.y;
-    },
-    [](float value, const Intersection& its){
-        return value < its.geoFrame.n.z;
-    }
-};
-                
-void constructFlannSampleMatrix(flann::Matrix<float>& mat, const std::vector<RowSample>& samples, 
-    const std::vector<std::uint32_t>& indices){
-
-    assert(indices.size() > 0 && mat.rows == indices.size() && mat.cols == 3);
-
-    for(std::uint32_t i = 0; i < indices.size(); ++i){
-        float* curr_pos = (float*)mat[i];
-
-        curr_pos[0] = samples[indices[i]].its.p.x;
-        curr_pos[1] = samples[indices[i]].its.p.y;
-        curr_pos[2] = samples[indices[i]].its.p.z;
-    }
-}
-
-struct KDTNode{
-    std::vector<std::uint32_t> sample_indices;
-    std::vector<RowSample>* samples;
-    std::unique_ptr<KDTNode> left;
-    std::unique_ptr<KDTNode> right;
-    std::vector<std::vector<int>> nearest_neighbours;
-    std::vector<std::vector<float>> neighbour_distances;
-
-    KDTNode(std::vector<RowSample>* sample_set) : sample_indices(), samples(sample_set), 
-        left(nullptr), right(nullptr){
-
-    }
-
-    void Split(float norm_scale, std::uint32_t size_threshold){
-        float maxf = std::numeric_limits<float>::max();
-        float minf = std::numeric_limits<float>::min();
-        Vector3f min_pos(maxf, maxf, maxf), max_pos(minf, minf, minf);
-        Vector3f min_normal(maxf, maxf, maxf), max_normal(minf, minf, minf);
-
-        for(size_t i = 0; i < sample_indices.size(); ++i){
-            auto& curr_sample = (*samples)[sample_indices[i]];
-
-            min_pos.x = std::min(curr_sample.its.p.x, min_pos.x);
-            min_pos.y = std::min(curr_sample.its.p.y, min_pos.y);
-            max_pos.z = std::max(curr_sample.its.p.z, max_pos.z);
-            min_pos.z = std::min(curr_sample.its.p.z, min_pos.z);
-            max_pos.x = std::max(curr_sample.its.p.x, max_pos.x);
-            max_pos.y = std::max(curr_sample.its.p.y, max_pos.y);
-
-            min_normal.x = std::min(curr_sample.its.geoFrame.n.x, min_normal.x);
-            min_normal.y = std::min(curr_sample.its.geoFrame.n.y, min_normal.y);
-            min_normal.z = std::min(curr_sample.its.geoFrame.n.z, min_normal.z);
-            max_normal.x = std::max(curr_sample.its.geoFrame.n.x, max_normal.x);
-            max_normal.y = std::max(curr_sample.its.geoFrame.n.y, max_normal.y);
-            max_normal.z = std::max(curr_sample.its.geoFrame.n.z, max_normal.z);
-        }
-
-        std::array<std::pair<std::uint8_t, float>, 6> ranges;
-        ranges[0] = std::make_pair(0, max_pos.x - min_pos.x);
-        ranges[1] = std::make_pair(1, max_pos.y - min_pos.y);
-        ranges[2] = std::make_pair(2, max_pos.z - min_pos.z);
-        ranges[3] = std::make_pair(3, (max_normal.x - min_normal.x) * norm_scale);
-        ranges[4] = std::make_pair(4, (max_normal.y - min_normal.y) * norm_scale);
-        ranges[5] = std::make_pair(5, (max_normal.z - min_normal.z) * norm_scale);
-
-        std::array<float, 6> midpoints;
-        midpoints[0] = (max_pos.x + min_pos.x) / 2.f;
-        midpoints[1] = (max_pos.y + min_pos.y) / 2.f;
-        midpoints[2] = (max_pos.z + min_pos.z) / 2.f;
-        midpoints[3] = (max_normal.x + min_normal.x) / 2.f;
-        midpoints[4] = (max_normal.y + min_normal.y) / 2.f;
-        midpoints[5] = (max_normal.z + min_normal.z) / 2.f;
-
-        std::sort(ranges.begin(), ranges.end(), 
-            [](const std::pair<std::uint8_t, float>& lhs, const std::pair<std::uint8_t, float>& rhs){
-                return lhs.second > rhs.second;
-            });
-
-        left = std::unique_ptr<KDTNode>(new KDTNode(samples));
-        right = std::unique_ptr<KDTNode>(new KDTNode(samples));
-
-        for(std::uint32_t i = 0; i < sample_indices.size(); ++i){
-            if(searchers[ranges[0].first](midpoints[ranges[0].first], sample(i).its)){
-                right->sample_indices.push_back(sample_indices[i]);
-            }
-            else{
-                left->sample_indices.push_back(sample_indices[i]);
-            }
-        }
-
-        sample_indices.clear();
-        nearest_neighbours.clear();
-        neighbour_distances.clear();
-
-        sample_indices.shrink_to_fit();
-        nearest_neighbours.shrink_to_fit();
-        neighbour_distances.shrink_to_fit();
-    }
-
-    RowSample& sample(std::uint32_t index){
-        assert(samples != nullptr && index < sample_indices.size());
-
-        return (*samples)[sample_indices[index]];
-    }
-
-    void buildNearestNeighbours(std::uint32_t nn = 0){
-        assert(nn < sample_indices.size());
-
-        if(nn == 0){
-            nn = std::min((size_t)100, sample_indices.size() / 10 + 1);
-        }
-
-        flann::Matrix<float> query_points(new float[sample_indices.size() * 3], sample_indices.size(), 3);
-        constructFlannSampleMatrix(query_points, *(samples), sample_indices);
-        flann::Index<flann::L2<float>> index(query_points, flann::KDTreeIndexParams(4));
-        index.buildIndex();
-        index.knnSearch(query_points, nearest_neighbours, neighbour_distances, nn, flann::SearchParams(128));
-
-        for(std::uint32_t i = 0; i < nearest_neighbours.size(); ++i){
-            auto iter = std::find(nearest_neighbours[i].begin(), nearest_neighbours[i].end(), i);
-            if(iter != nearest_neighbours[i].end()){
-                nearest_neighbours[i].pop_back();
-                neighbour_distances[i].pop_back();
-            }
-            else{
-                std::uint32_t pos = iter - nearest_neighbours[i].begin();
-                nearest_neighbours[i].erase(iter);
-                neighbour_distances[i].erase(neighbour_distances[i].begin() + pos);
-            }
-        }
-
-        delete query_points.ptr();
-    }
-};
-
-void splitKDTree(KDTNode* node, std::uint32_t size_threshold, float min_dist){
-    if(node == nullptr || node->sample_indices.size() < size_threshold){
-        return;
-    }
-
-    if(node->left == nullptr && node->right == nullptr){
-        node->Split(min_dist / 10.f, size_threshold);
-        splitKDTree(node->left.get(), size_threshold, min_dist);
-        splitKDTree(node->right.get(), size_threshold, min_dist);
-    }
-}
-
-void getSlices(KDTNode* curr, std::vector<KDTNode*>& slices){
-    if(curr == nullptr){
-        return;
-    }
-
-    if(curr->left == nullptr && curr->right == nullptr){
-        slices.push_back(curr);
-    }
-
-    getSlices(curr->left.get(), slices);
-    getSlices(curr->right.get(), slices);
-}
-
-std::unique_ptr<KDTNode> constructKDTree(Scene* scene, const std::vector<VPL>& vpls, 
+std::unique_ptr<KDTNode<RowSample>> constructKDTree(Scene* scene, const std::vector<VPL>& vpls, 
     std::uint32_t size_threshold, float min_dist, std::vector<RowSample>& samples){
 
-    auto kdt_root = std::unique_ptr<KDTNode>(new KDTNode(&samples));
+    auto kdt_root = std::unique_ptr<KDTNode<RowSample>>(new KDTNode<RowSample>(&samples));
 
     ref<Sensor> sensor = scene->getSensor();
     ref<Film> film = sensor->getFilm();
@@ -260,7 +84,7 @@ std::unique_ptr<KDTNode> constructKDTree(Scene* scene, const std::vector<VPL>& v
     return kdt_root;
 }
 
-std::vector<VISIBILITY> knnPredictor(KDTNode* slice, std::uint32_t neighbours, std::uint32_t col, std::mt19937& rng){
+std::vector<VISIBILITY> knnPredictor(KDTNode<RowSample>* slice, std::uint32_t neighbours, std::uint32_t col, std::mt19937& rng){
     assert(slice != nullptr && neighbours > 0 && slice->sample_indices.size() > 0
         && col < slice->sample(0).visibility.size());
 
@@ -310,7 +134,7 @@ std::vector<VISIBILITY> knnPredictor(KDTNode* slice, std::uint32_t neighbours, s
     return output;
 }
 
-std::vector<VISIBILITY> linearPredictor(KDTNode* slice, std::uint32_t col, float min_dist, std::mt19937& rng){
+std::vector<VISIBILITY> linearPredictor(KDTNode<RowSample>* slice, std::uint32_t col, float min_dist, std::mt19937& rng){
     assert(slice != nullptr && slice->sample_indices.size() > 0);
 
     Eigen::MatrixXf q(slice->sample_indices.size(), 4);
@@ -360,7 +184,7 @@ std::vector<VISIBILITY> linearPredictor(KDTNode* slice, std::uint32_t col, float
     return output;
 }
 
-std::vector<VISIBILITY> naiveBayes(KDTNode* slice, std::uint32_t col, std::uint32_t neighbours, 
+std::vector<VISIBILITY> naiveBayes(KDTNode<RowSample>* slice, std::uint32_t col, std::uint32_t neighbours, 
     const std::vector<VPL>& vpls, std::mt19937& rng, const std::vector<std::vector<int>>& nearest_vpls){
 
     assert(slice != nullptr && slice->sample_indices.size() > 0 && slice->sample(0).visibility.size() > 0 && 
@@ -440,7 +264,7 @@ std::vector<VISIBILITY> naiveBayes(KDTNode* slice, std::uint32_t col, std::uint3
     return output;
 }
 
-void performInitialVisibilitySamples(KDTNode* slice, float sample_percentage, std::mt19937& rng, 
+void performInitialVisibilitySamples(KDTNode<RowSample>* slice, float sample_percentage, std::mt19937& rng, 
     Scene* scene, const std::vector<VPL>& vpls){
 
     assert(slice != nullptr);
@@ -483,7 +307,7 @@ void performInitialVisibilitySamples(KDTNode* slice, float sample_percentage, st
     }
 }
 
-std::set<std::uint32_t> sampleAndPredictVisibility(KDTNode* slice, float sample_percentage, std::mt19937& rng, Scene* scene,
+std::set<std::uint32_t> sampleAndPredictVisibility(KDTNode<RowSample>* slice, float sample_percentage, std::mt19937& rng, Scene* scene,
     const std::vector<VPL>& vpls, const std::set<std::uint32_t>& active_columns, float error_threshold, float min_dist,
     std::uint32_t prediction_mask, const std::vector<std::vector<int>>& nearest_vpls){
 
@@ -585,7 +409,7 @@ std::set<std::uint32_t> sampleAndPredictVisibility(KDTNode* slice, float sample_
     return new_active_cols;
 }
 
-std::tuple<Eigen::MatrixXf, Eigen::MatrixXf> sliceToMatrices(KDTNode* node){
+std::tuple<Eigen::MatrixXf, Eigen::MatrixXf> sliceToMatrices(KDTNode<RowSample>* node){
     assert(node->sample_indices.size() > 0 && node->sample(0).col_samples.size() > 0);
 
     Eigen::MatrixXf slice_mat(node->sample_indices.size(), node->sample(0).col_samples.size() * 3);
@@ -613,7 +437,7 @@ std::tuple<Eigen::MatrixXf, Eigen::MatrixXf> sliceToMatrices(KDTNode* node){
     return std::make_tuple(slice_mat, error_mat);
 }
 
-void matrixToSlice(KDTNode* node, const Eigen::MatrixXf& mat){
+void matrixToSlice(KDTNode<RowSample>* node, const Eigen::MatrixXf& mat){
     assert(node->sample_indices.size() == (std::uint32_t)mat.rows() && 
         (node->sample(0).col_samples.size() * 3) == (std::uint32_t)mat.cols());
 
@@ -795,7 +619,7 @@ void convolve(Eigen::MatrixXf& mat, const Eigen::VectorXf& row_kernel, const Eig
     }
 }
 
-void reincorporateDenseHighRank(Eigen::MatrixXf& low_rank, const Eigen::MatrixXf& sparse, KDTNode* slice,
+void reincorporateDenseHighRank(Eigen::MatrixXf& low_rank, const Eigen::MatrixXf& sparse, KDTNode<RowSample>* slice,
     float sparsity_threshold, const Eigen::VectorXf& kernel, float density_threshold, Scene* scene,
     const std::vector<VPL> vpls, float min_dist){
 
@@ -940,7 +764,7 @@ bool MatrixSeparationRenderer::render(Scene* scene){
     
     std::cout << "constructing kd tree" << std::endl;
     auto root = constructKDTree(scene, vpls, slice_size_, min_dist_, samples_);
-    std::vector<KDTNode*> slices;
+    std::vector<KDTNode<RowSample>*> slices;
 
     getSlices(root.get(), slices);
 

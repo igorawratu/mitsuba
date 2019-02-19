@@ -69,8 +69,6 @@ bool LightClustererRenderer::render(Scene* scene){
             Spectrum accumulator(0.f);
 
             if (scene->rayIntersect(ray, its)) {
-                Normal n = its.geoFrame.n;
-
                 Spectrum albedo(0.f);
 
                 if(its.isEmitter()){

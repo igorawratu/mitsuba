@@ -11,11 +11,42 @@
 
 MTS_NAMESPACE_BEGIN
 
+struct ReconstructionSample{
+    ReconstructionSample() : intersected_scene(false){
+    }
+
+    ReconstructionSample(std::uint32_t x, std::uint32_t y, bool in_scene, Intersection intersection) : 
+        image_x(x), image_y(y), intersected_scene(in_scene), its(intersection){
+    }
+
+    ReconstructionSample(ReconstructionSample&& other) : image_x(other.image_x), image_y(other.image_y), 
+        intersected_scene(other.intersected_scene), its(other.its), emitter_color(other.emitter_color){
+    }
+
+    ReconstructionSample& operator = (ReconstructionSample&& other){
+        if(this != &other){
+            image_x = other.image_x;
+            image_y = other.image_y;
+            intersected_scene = other.intersected_scene;
+            its = other.its;
+            emitter_color = other.emitter_color;
+        }
+
+        return *this;
+    }
+
+    std::uint32_t image_x, image_y;
+    bool intersected_scene;
+    Intersection its;
+    Spectrum emitter_color;
+};
+
 class MatrixReconstructionRenderer : public ManyLightsRenderer{
 public:
     MatrixReconstructionRenderer() = delete;
-    MatrixReconstructionRenderer(std::unique_ptr<ManyLightsClusterer> clusterer, std::pair<std::uint32_t, std::uint32_t> bucket_size, std::uint32_t light_samples, 
-        float min_dist, float step_size_factor, float tolerance, float tau, std::uint32_t max_iterations, bool output_stats);
+    MatrixReconstructionRenderer(std::unique_ptr<ManyLightsClusterer> clusterer, float sample_percentage_, 
+        float min_dist, float step_size_factor, float tolerance, float tau, std::uint32_t max_iterations,
+        std::uint32_t slice_size);
     MatrixReconstructionRenderer(const MatrixReconstructionRenderer& other) = delete;
     MatrixReconstructionRenderer(MatrixReconstructionRenderer&& other);
     MatrixReconstructionRenderer& operator = (const MatrixReconstructionRenderer& other) = delete;
@@ -32,13 +63,13 @@ public:
 
 private:
     std::unique_ptr<ManyLightsClusterer> clusterer_;
-    std::pair<std::uint32_t, std::uint32_t> bucket_size_;
-    std::uint32_t light_samples_;
-    float min_dist_, step_size_factor_, tolerance_, tau_;
-    std::uint32_t max_iterations_;
+    float sample_percentage_, min_dist_, step_size_factor_, tolerance_, tau_;
+    std::uint32_t max_iterations_, slice_size_;
     bool output_stats_;
     std::mutex cancel_lock_;
     bool cancel_;
+
+    std::vector<ReconstructionSample> samples_;
 };
 
 MTS_NAMESPACE_END

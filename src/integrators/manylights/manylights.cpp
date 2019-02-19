@@ -312,19 +312,16 @@ private:
 			}
 			case MATRIXRECONSTRUCTION:
 			{
-				std::uint32_t bucket_width = props.getInteger("bucketWidth", 2);
-				std::uint32_t bucket_height = props.getInteger("bucketHeight", 1);
-				float samples_per_bucket = props.getFloat("samplesPerBucket", 0.5);
-				int light_samples = samples_per_bucket * vpls_.size();
+				float sample_percentage = props.getFloat("sample_percentage", 0.1);
 				float step_size_factor = props.getFloat("stepSizeFactor", 1.5);
-				float tolerance = props.getFloat("tolerance", 0.0001);
+				float tolerance = props.getFloat("tolerance", 0.01);
 				float tau = props.getFloat("tau", 5);
 				int max_iterations = props.getInteger("maxIterations", 1000);
+				std::uint32_t slice_size = props.getInteger("slice_size", 1024);
 
 				std::unique_ptr<ManyLightsClusterer> clusterer(new PassthroughClusterer(vpls_));
 				return std::unique_ptr<ManyLightsRenderer>(new MatrixReconstructionRenderer(std::move(clusterer), 
-					std::make_pair(bucket_width, bucket_height), light_samples, min_dist_, step_size_factor, 
-					tolerance, tau, max_iterations));
+					sample_percentage, min_dist_, step_size_factor, tolerance, tau, max_iterations, slice_size));
 			}
 			case MATRIXSEPARATION:
 			{
