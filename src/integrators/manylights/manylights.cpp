@@ -312,11 +312,11 @@ private:
 			}
 			case MATRIXRECONSTRUCTION:
 			{
-				float sample_percentage = props.getFloat("sample_percentage", 0.1);
+				float sample_percentage = props.getFloat("sample_perc", 0.1);
 				float step_size_factor = props.getFloat("stepSizeFactor", 1.5);
 				float tolerance = props.getFloat("tolerance", 0.01);
 				float tau = props.getFloat("tau", 5);
-				int max_iterations = props.getInteger("maxIterations", 1000);
+				int max_iterations = props.getInteger("reconstruction_iterations", 20);
 				std::uint32_t slice_size = props.getInteger("slice_size", 1024);
 
 				std::unique_ptr<ManyLightsClusterer> clusterer(new PassthroughClusterer(vpls_));

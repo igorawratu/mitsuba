@@ -2,7 +2,6 @@
 
 #include "arpaca.hpp"
 
-
 MTS_NAMESPACE_BEGIN
 
 std::tuple<float, float, float> floatToRGB(float v){
@@ -64,10 +63,10 @@ float calculateError(Scene* scene, const std::vector<VPL>& vpls, float min_dist,
 
                 Spectrum albedo(0.f);
 
-                /*if(its.isEmitter()){
+                if(its.isEmitter()){
                     accumulator = its.Le(-ray.d);
                 }
-                else*/{
+                else{
                     for (std::uint32_t i = 0; i < vpls.size(); ++i) {
                         Point ray_origin = its.p;
                         Ray shadow_ray(ray_origin, normalize(vpls[i].its.p - ray_origin), ray.time);
@@ -166,8 +165,20 @@ std::tuple<Eigen::MatrixXf, Eigen::MatrixXf, Eigen::MatrixXf> partialSvd(const E
     return std::make_tuple(u, singular_values, v);
 }
 
+Eigen::MatrixXf softThreshRankNoTrunc(const Eigen::MatrixXf& mat, float theta){
+    auto svd = mat.jacobiSvd(Eigen::ComputeFullU | Eigen::ComputeFullV);
+    auto singular_values = svd.singularValues();
+    Eigen::MatrixXf diagonal_singular = Eigen::MatrixXf::Zero(svd.matrixU().rows(), svd.matrixV().rows());
+    
+    for(std::uint32_t j = 0; j < singular_values.rows(); ++j){
+        diagonal_singular(j, j) = std::max(0.f, singular_values(j, 0) - theta);
+    }
+
+    return svd.matrixU() * diagonal_singular * svd.matrixV().transpose();
+}
+
 Eigen::MatrixXf softThreshRank(const Eigen::MatrixXf& mat, float theta, const std::uint32_t initial, 
-    const std::uint32_t step_size, std::mutex& block_mutex){
+    const std::uint32_t step_size){
     std::uint32_t max_rank = std::min(mat.rows(), mat.cols());
     std::uint32_t curr_step_size = std::min(max_rank, initial);
 
@@ -175,7 +186,6 @@ Eigen::MatrixXf softThreshRank(const Eigen::MatrixXf& mat, float theta, const st
     Eigen::MatrixXf jordan_wielandt = Eigen::MatrixXf::Zero(dim * 2, dim * 2);
 
     {
-        std::lock_guard<std::mutex> lock(block_mutex);
         jordan_wielandt.block(0, dim, mat.rows(), mat.cols()) = mat;
         jordan_wielandt.block(dim, 0, mat.cols(), mat.rows()) = mat.transpose();
     }
@@ -198,7 +208,6 @@ Eigen::MatrixXf softThreshRank(const Eigen::MatrixXf& mat, float theta, const st
 
     float scale = sqrt(2.f);
     for(int i = 0; i < eigenvalues.size(); ++i){
-        std::lock_guard<std::mutex> lock(block_mutex);
         singular_values(i, i) = std::max(0.f, eigenvalues(i) - theta);
         u.col(i) = scale * eigenvectors.block(0, i, mat.rows(), 1);
         v.col(i) = scale * eigenvectors.block(dim, i, mat.cols(), 1);

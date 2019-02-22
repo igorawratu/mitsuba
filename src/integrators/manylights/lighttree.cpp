@@ -191,25 +191,25 @@ std::unique_ptr<LightTreeNode> createLightTree(const std::vector<VPL>& vpls, EVP
 	return std::move(nodes[current_level][0]);
 }
 
+//http://iquilezles.org/www/articles/distfunctions/distfunctions.htm
+float boxUDF(Point p, Point box_min, Point box_max){
+	assert(p.dim == box_min.dim && p.dim == box_max.dim && p.dim == 3);
+
+	Point box_center = (box_min + box_max) / 2;
+	Vector3f box_half_dims = (box_max - box_min) / 2;
+	
+	Point result;
+	result[0] = std::max(0., (double)fabs(p[0] - box_center[0]) - (double)box_half_dims.x);
+	result[1] = std::max(0., (double)fabs(p[1] - box_center[1]) - (double)box_half_dims.y);
+	result[2] = std::max(0., (double)fabs(p[2] - box_center[2]) - (double)box_half_dims.z);
+
+	return distance(result, Point(0.f));
+};
+
 float calculateClusterContribution(Point shading_point_position, Normal shading_point_normal,
 	LightTreeNode* light_tree_node, EVPLType vpl_type, float min_dist){
 
 	float geometric = 0.f;
-
-	//http://iquilezles.org/www/articles/distfunctions/distfunctions.htm
-	auto boxUDF = [](Point p, Point box_min, Point box_max){
-		assert(p.dim == box_min.dim && p.dim == box_max.dim && p.dim == 3);
-
-		Point box_center = (box_min + box_max) / 2;
-		Vector3f box_half_dims = (box_max - box_min) / 2;
-		
-		Point result;
-		result[0] = std::max(0., (double)fabs(p[0] - box_center[0]) - (double)box_half_dims.x);
-		result[1] = std::max(0., (double)fabs(p[1] - box_center[1]) - (double)box_half_dims.y);
-		result[2] = std::max(0., (double)fabs(p[2] - box_center[2]) - (double)box_half_dims.z);
-
-		return distance(result, Point(0.f));
-	};
 
 	float d;
 	switch(vpl_type){

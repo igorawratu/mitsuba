@@ -467,14 +467,20 @@ std::tuple<Eigen::MatrixXf, Eigen::MatrixXf> separate(const Eigen::MatrixXf& mat
     Eigen::MatrixXf b = Eigen::MatrixXf::Zero(mat.rows(), mat.cols());
     Eigen::MatrixXf bvt = Eigen::MatrixXf::Zero(mat.rows(), mat.cols());
     Eigen::MatrixXf lambda_over_beta = Eigen::MatrixXf::Zero(mat.rows(), mat.cols());
-    Eigen::MatrixXf lambda_converge = Eigen::MatrixXf::Zero(mat.rows(), mat.cols());
-    Eigen::MatrixXf pi_converge = Eigen::MatrixXf::Zero(mat.rows(), mat.cols());
+    Eigen::MatrixXf lambda_dif = Eigen::MatrixXf::Zero(mat.rows(), mat.cols());
+    Eigen::MatrixXf pi_dif = Eigen::MatrixXf::Zero(mat.rows(), mat.cols());
     Eigen::MatrixXf xy;
 
     Eigen::MatrixXf h = Eigen::MatrixXf::Zero(mat.rows(), mat.cols());
     Eigen::MatrixXf pi = Eigen::MatrixXf::Zero(mat.rows(), mat.cols());
     Eigen::MatrixXf rescaled_h = Eigen::MatrixXf::Zero(mat.rows(), mat.cols());
     float c = mat.rows() * mat.cols();
+
+    std::uint32_t max_rank = std::min(mat.rows(), mat.cols());
+    std::uint32_t rank_estimate = std::min(max_rank, 10u);
+
+    float prev_lambda_norm = 1.f;
+    float prev_pi_norm = 1.f;
 
     for(std::uint32_t i = 0; i < max_iterations; ++i){
         //u and v update
@@ -483,18 +489,10 @@ std::tuple<Eigen::MatrixXf, Eigen::MatrixXf> separate(const Eigen::MatrixXf& mat
 
         bvt = b * y.transpose();
         auto qr = bvt.colPivHouseholderQr();
-        Eigen::VectorXf diag = qr.matrixR().diagonal();
-        std::uint32_t rank_estimate = 0;
-        for(; rank_estimate < diag.size(); ++rank_estimate){
-            if(fabs(diag(rank_estimate)) < 1e-5){
-                break;
-            }
-        }
 
         x = qr.householderQ();
-
-        rank_estimate = qr.rank();
-        x.conservativeResize(x.rows(), std::min((std::uint32_t)diag.size(), rank_estimate + 1));
+        //rank_estimate = qr.rank();
+        x.conservativeResize(x.rows(), rank_estimate);
         y = x.transpose() * b;
 
         //z update
@@ -503,13 +501,13 @@ std::tuple<Eigen::MatrixXf, Eigen::MatrixXf> separate(const Eigen::MatrixXf& mat
 
         for(std::uint32_t j = 0; j < z.rows(); ++j){
             for(std::uint32_t k = 0; k < z.cols(); ++k){
-                //float val = mat(j, k) - xy(j, k) - lambda_over_beta(j, k);
-                float val = mat(j, k) - xy(j, k) + h(j, k) - lambda_over_beta(j, k) - pi_over_beta(j, k);
+                float val = mat(j, k) - xy(j, k) - lambda_over_beta(j, k);
+                //float val = mat(j, k) - xy(j, k) + h(j, k) - lambda_over_beta(j, k) - pi_over_beta(j, k);
                 if(val > 0){
-                    z(j, k) = 0.5f * std::max(0.f, val - 1.f / beta);
+                    z(j, k) = /*0.5f * */std::max(0.f, val - 1.f / beta);
                 }
                 else{
-                    z(j, k) = 0.5f * std::min(0.f, val + 1.f / beta);
+                    z(j, k) = /*0.5f * */std::min(0.f, val + 1.f / beta);
                 }
             }
         }
@@ -520,6 +518,7 @@ std::tuple<Eigen::MatrixXf, Eigen::MatrixXf> separate(const Eigen::MatrixXf& mat
                 rescaled_h(j, k) = h(j, k) * two_q(j, k) - 1.f;
             }
         }
+    
         float rhfrobsq = rescaled_h.norm();
         //std::cout << rhfrobsq << " " << pi_over_beta.norm() << " " << two_q.norm() << " " << h.norm() << std::endl;
         rhfrobsq *= rhfrobsq;
@@ -532,20 +531,27 @@ std::tuple<Eigen::MatrixXf, Eigen::MatrixXf> separate(const Eigen::MatrixXf& mat
             }
         }
 
-        lambda_converge = xy + z - mat;
-        pi_converge = z - h;
-        float lc = lambda_converge.norm() / mat.norm();
-        float pc = pi_converge.norm();
-        float lvt = (lambda * y.transpose()).norm();
-        float utl = (x.transpose() * lambda).norm();
-        //std::cout << i << " " << lc << " " << pc << " " << z.lpNorm<1>() << " " << h.lpNorm<1>() << " " <<
-        //    lambda.norm() << " " << pi.norm() << " " << x.cols() << std::endl;
-        if(lc < theta && pc < theta){
-            //break;
+        lambda_dif = xy + z - mat;
+        pi_dif = z - h;
+        float lc = prev_lambda_norm == 0.f ? 0.f : fabs(1.f - lambda_dif.norm() / prev_lambda_norm);
+        float pc = prev_pi_norm == 0.f ? 0.f : fabs(1.f - pi_dif.norm() / prev_pi_norm);
+        prev_lambda_norm = lambda_dif.norm();
+        prev_pi_norm = pi_dif.norm();
+
+        //std::cout << "iteration " << i << " " << rank_estimate << std::endl;
+        std::cout << i << " " << lambda_dif.norm() << " " << pi_dif.norm() << " " << z.norm() << std::endl;
+
+        /*if((lc < theta && pc < theta) && (lambda_dif.norm() < theta && pi_dif.norm() < theta)){
+            break;
         }
 
-        lambda = lambda + beta * lambda_converge;
-        pi = pi + beta * pi_converge;
+        if(lc < theta * 10.f && pc < theta * 10.f){
+            rank_estimate += max_rank < 50 ? 5 : 10;//std::max(max_rank / 10u, 1u);
+            rank_estimate = std::min(rank_estimate, max_rank);
+        }*/
+
+        lambda = lambda + beta * lambda_dif;
+        pi = pi + beta * pi_dif;
     }
 
     for(int i = 0; i < xy.rows(); ++i){
@@ -777,7 +783,7 @@ bool MatrixSeparationRenderer::render(Scene* scene){
 
     std::cout << "processing slices..." << std::endl;
     if(!show_slices_){
-        #pragma omp parallel for
+        //#pragma omp parallel for
         for(std::uint32_t i = 0; i < slices.size(); ++i){
             std::mt19937 rng(seed * i);
 
@@ -812,7 +818,7 @@ bool MatrixSeparationRenderer::render(Scene* scene){
             if(separate_){
                 float beta = 5000.f / d.norm();
                 float step = 0.1f;
-                float theta = 0.0001f;
+                float theta = 0.01f;
                 
                 Eigen::MatrixXf l, s;
                 std::tie(l, s) = separate(d, two_q, max_separation_iterations_, beta, step, theta, sampled, show_rank_);

@@ -9,6 +9,8 @@
 #include "definitions.h"
 #include <utility>
 #include <eigen3/Eigen/Dense>
+#include <thread>
+
 #include "common.h"
 
 MTS_NAMESPACE_BEGIN
@@ -102,11 +104,11 @@ std::unique_ptr<KDTNode<ReconstructionSample>> constructKDTree(Scene* scene, std
 }
 
 std::vector<std::uint32_t> calculateSparseSamples(Scene* scene, KDTNode<ReconstructionSample>* slice, 
-    const std::vector<VPL>& vpls, Eigen::MatrixXf& matrix, std::uint32_t num_samples, float min_dist, 
-    std::mt19937& rng){
-    assert(matrix.rows() > 0 && matrix.cols() > 0);
+    const std::vector<VPL>& vpls, Eigen::MatrixXf& rmat, Eigen::MatrixXf& gmat, Eigen::MatrixXf& bmat,
+    std::uint32_t num_samples, float min_dist, std::mt19937& rng){
+    assert(rmat.rows() * rmat.cols() > 0 && gmat.rows() * gmat.cols() && bmat.rows() * bmat.cols() > 0);
 
-    std::uint32_t total_samples = matrix.rows() * matrix.cols() / 3;
+    std::uint32_t total_samples = slice->sample_indices.size() * vpls.size();
     num_samples = std::min(num_samples, total_samples);
     std::vector<std::uint32_t> indices(total_samples);
     std::iota(indices.begin(), indices.end(), 0);
@@ -139,28 +141,37 @@ std::vector<std::uint32_t> calculateSparseSamples(Scene* scene, KDTNode<Reconstr
         Spectrum lightContribution = sample(scene, sampler, sample_to_compute.its, vpl, min_dist, true);
 
         Float r, g, b;
-        lightContribution.toSRGB(r, g, b);
-        matrix(sample_index, light_index * 3) = r;
-        matrix(sample_index, light_index * 3 + 1) = g;
-        matrix(sample_index, light_index * 3 + 2) = b;
+        lightContribution.toLinearRGB(r, g, b);
+        rmat(sample_index, light_index) = r;
+        gmat(sample_index, light_index) = g;
+        bmat(sample_index, light_index) = b;
     }
 
     return indices_to_compute;
 }
 
-void copyMatrixToBuffer(std::uint8_t* output_image, Eigen::MatrixXf& light_matrix, KDTNode<ReconstructionSample>* slice, 
-    Vector2i image_size){
-    for(std::uint32_t i = 0; i < light_matrix.rows(); ++i){
+void copyMatrixToBuffer(std::uint8_t* output_image, const Eigen::MatrixXf& rmat, const Eigen::MatrixXf& gmat,
+    const Eigen::MatrixXf& bmat, KDTNode<ReconstructionSample>* slice, Vector2i image_size){
+    for(std::uint32_t i = 0; i < rmat.rows(); ++i){
         float r = 0, g = 0, b = 0;
-        for(int j = 0; j < light_matrix.cols() / 3; ++j){
-            r += light_matrix(i, j * 3);
-            g += light_matrix(i, j * 3 + 1);
-            b += light_matrix(i, j * 3 + 2);
+        if(slice->sample(i).its.isEmitter()){
+            slice->sample(i).emitter_color.toSRGB(r, g, b);
         }
+        else{
+            for(int j = 0; j < rmat.cols(); ++j){
+                r += rmat(i, j);
+                g += gmat(i, j);
+                b += bmat(i, j);
+            }
 
+            Spectrum converter;
+            converter.fromLinearRGB(r, g, b);
+            converter.toSRGB(r, g, b);
+        }
+        
         ReconstructionSample& sample = slice->sample(i);
 
-        std::uint32_t buffer_pos = sample.image_x + sample.image_y * image_size.y;
+        std::uint32_t buffer_pos = sample.image_x + sample.image_y * image_size.x;
 
         output_image[buffer_pos*3] = std::min(1.f, r) * 255 + 0.5f;
         output_image[buffer_pos*3 + 1] = std::min(1.f, g) * 255 + 0.5f;
@@ -190,45 +201,62 @@ void printToFile(const std::vector<float>& vals, std::string filename, std::ios_
 }
 
 void svt(Eigen::MatrixXf& reconstructed_matrix, const Eigen::MatrixXf& lighting_matrix, float step_size, 
-    float tolerance, float tau, std::uint32_t max_iterations, const std::vector<std::uint32_t>& sampled_indices,
-    std::mutex& mutex){
+    float tolerance, float tau, std::uint32_t max_iterations, const std::vector<std::uint32_t>& sampled_indices){
 
     std::uint32_t k0 = tau / (step_size * lighting_matrix.norm()) + 1.5f; //extra .5 for rounding in case of float error
     Eigen::MatrixXf y = step_size * (float)k0 * lighting_matrix;
-
     for(std::uint32_t i = 0; i < max_iterations; ++i){
-        reconstructed_matrix = softThreshRank(y, tau, std::min(y.cols(), y.rows()) / 10, 
-            std::min(y.cols(), y.rows()) / 20, mutex);
+        std::uint32_t max_possible_rank = std::min(y.cols(), y.rows());
+        std::uint32_t initial_sv = std::max(1u, max_possible_rank / 10u);
+        std::uint32_t increment = std::max(1u, max_possible_rank / 20u);
+
+        //reconstructed_matrix = softThreshRank(y, tau, initial_sv, increment);
+        reconstructed_matrix = softThreshRankNoTrunc(y, tau);
 
         float numer_total_dist = 0.f;
 
         for(std::uint32_t j = 0; j < sampled_indices.size(); ++j){
-            for(std::uint32_t k = 0; k < 3; ++k){
-                std::uint32_t row = sampled_indices[j] / (lighting_matrix.cols() / 3);
-                std::uint32_t col = sampled_indices[j] % (lighting_matrix.cols() / 3) * 3 + k;
+            std::uint32_t row = sampled_indices[j] / lighting_matrix.cols();
+            std::uint32_t col = sampled_indices[j] % lighting_matrix.cols();
 
-                float d = reconstructed_matrix(row, col) - lighting_matrix(row, col);
-                numer_total_dist += d * d;
-            }
+            float d = reconstructed_matrix(row, col) - lighting_matrix(row, col);
+            numer_total_dist += d * d;
         }
 
+        //norm of lighting matrix is the same as the norm of its sampled entries since the other values are 0
         float ratio = sqrt(numer_total_dist) / lighting_matrix.norm();
-
         if(ratio < tolerance){
             break;
         }
 
         for(std::uint32_t j = 0; j < sampled_indices.size(); ++j){
-            for(std::uint32_t k = 0; k < 3; ++k){
-                std::uint32_t row = sampled_indices[j] / (lighting_matrix.cols() / 3);
-                std::uint32_t col = sampled_indices[j] % (lighting_matrix.cols() / 3) * 3 + k;
+            std::uint32_t row = sampled_indices[j] / lighting_matrix.cols();
+            std::uint32_t col = sampled_indices[j] % lighting_matrix.cols();
 
-                float step = lighting_matrix(row, col) - reconstructed_matrix(row, col);
-                y(row, col) += step_size * step;
-            }
+            float step = lighting_matrix(row, col) - reconstructed_matrix(row, col);
+            y(row, col) += step_size * step;
         }
     }
 }
+
+/*void processSlice(Scene* scene, KDTNode<ReconstructionSample>* slice, const std::vector<VPL>& vpls, 
+    float sample_percentage, float min_dist, float tolerance, float tau, std::uint32_t max_iterations, 
+    std::uint8_t* output_image, Vector2i size){
+    Eigen::MatrixXf lighting_matrix = Eigen::MatrixXf::Zero(slice->sample_indices.size(), vpls.size() * 3);
+
+    float step_size = 1.5f;//step_size_factor * (float)(lighting_matrix.rows() * lighting_matrix.cols()) / 
+        //(float)(indices_to_compute.size() * 3); 
+
+    std::mt19937 rng(std::chrono::high_resolution_clock::now().time_since_epoch().count());
+
+    std::uint32_t num_samples = slice->sample_indices.size() * vpls.size() * sample_percentage;
+    auto indices = calculateSparseSamples(scene, slice, vpls, lighting_matrix, num_samples, min_dist, rng);
+
+    Eigen::MatrixXf reconstructed_matrix;
+    svt(reconstructed_matrix, lighting_matrix, step_size, tolerance, tau, max_iterations, indices);
+
+    copyMatrixToBuffer(output_image, reconstructed_matrix, slice, size);
+}*/
 
 bool MatrixReconstructionRenderer::render(Scene* scene){
     Intersection its;
@@ -253,31 +281,44 @@ bool MatrixReconstructionRenderer::render(Scene* scene){
 
     ref<Bitmap> output_bitmap = new Bitmap(Bitmap::ERGB, Bitmap::EUInt8, size);
     std::uint8_t* output_image = output_bitmap->getUInt8Data();
+    memset(output_image, 0, output_bitmap->getBytesPerPixel() * size.x * size.y);
 
     std::cout << "constructing kd tree" << std::endl;
     auto kdt_root = constructKDTree(scene, slice_size_, samples_, min_dist_);
 
-    std::cout << "getting slices" << std::endl;
     std::vector<KDTNode<ReconstructionSample>*> slices;
     getSlices(kdt_root.get(), slices);
 
-    float step_size = 1.5f;//step_size_factor * (float)(lighting_matrix.rows() * lighting_matrix.cols()) / 
-        //(float)(indices_to_compute.size() * 3); 
-
     std::cout << "reconstructing slices" << std::endl;
-    std::mutex mutex;
+
+    /*std::vector<std::thread> slice_threads;
+    for(std::uint32_t i = 0; i < slices.size(); ++i){
+        slice_threads.emplace_back(processSlice, scene, slices[i], vpls, sample_percentage_, min_dist_, tolerance_, tau_,
+            max_iterations_, output_image, size);
+    }
+
+    for(std::uint32_t i = 0; i < slice_threads.size(); ++i){
+        std::cout << "joining slice " << i << std::endl;
+        slice_threads[i].join();
+    }*/
+
     #pragma omp parallel for
     for(std::uint32_t i = 0; i < slices.size(); ++i){
-        Eigen::MatrixXf lighting_matrix = Eigen::MatrixXf::Zero(slices[i]->sample_indices.size(), vpls.size() * 3);
+        Eigen::MatrixXf rmat = Eigen::MatrixXf::Zero(slices[i]->sample_indices.size(), vpls.size());
+        Eigen::MatrixXf gmat = Eigen::MatrixXf::Zero(slices[i]->sample_indices.size(), vpls.size());
+        Eigen::MatrixXf bmat = Eigen::MatrixXf::Zero(slices[i]->sample_indices.size(), vpls.size());
+
         std::mt19937 rng(std::chrono::high_resolution_clock::now().time_since_epoch().count() * i);
-
         std::uint32_t num_samples = slices[i]->sample_indices.size() * vpls.size() * sample_percentage_;
-        auto indices = calculateSparseSamples(scene, slices[i], vpls, lighting_matrix, num_samples, min_dist_, rng);
+        auto indices = calculateSparseSamples(scene, slices[i], vpls, rmat, gmat, bmat, num_samples, min_dist_, rng);
 
-        Eigen::MatrixXf reconstructed_matrix;
-        svt(reconstructed_matrix, lighting_matrix, step_size, tolerance_, tau_, max_iterations_, indices, mutex);
+        float step_size = 1.9f;//(1.2f * lighting_matrix.rows() * lighting_matrix.cols()) / (indices.size() * 3.f); 
 
-        copyMatrixToBuffer(output_image, reconstructed_matrix, slices[i], size);
+        Eigen::MatrixXf reconstructed_r, reconstructed_b, reconstructed_g;
+        svt(reconstructed_r, rmat, step_size, tolerance_, tau_, max_iterations_, indices);
+        svt(reconstructed_g, gmat, step_size, tolerance_, tau_, max_iterations_, indices);
+        svt(reconstructed_b, bmat, step_size, tolerance_, tau_, max_iterations_, indices);
+        copyMatrixToBuffer(output_image, reconstructed_r, reconstructed_g, reconstructed_b, slices[i], size);
     }
 
     film->setBitmap(output_bitmap);
