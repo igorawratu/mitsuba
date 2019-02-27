@@ -10,6 +10,7 @@
 #include <utility>
 #include <eigen3/Eigen/Dense>
 #include <thread>
+#include <random>
 
 #include "common.h"
 
@@ -124,9 +125,6 @@ std::vector<std::uint32_t> calculateSparseSamples(Scene* scene, KDTNode<Reconstr
         indices.pop_back();
     }
 
-    ref<Sensor> sensor = scene->getSensor();
-	ref<Film> film = sensor->getFilm();
-
     Properties props("independent");
 	Sampler *sampler = static_cast<Sampler*>(PluginManager::getInstance()->createObject(MTS_CLASS(Sampler), props));
 	sampler->configure();
@@ -173,9 +171,38 @@ void copyMatrixToBuffer(std::uint8_t* output_image, const Eigen::MatrixXf& rmat,
 
         std::uint32_t buffer_pos = sample.image_x + sample.image_y * image_size.x;
 
-        output_image[buffer_pos*3] = std::min(1.f, r) * 255 + 0.5f;
-        output_image[buffer_pos*3 + 1] = std::min(1.f, g) * 255 + 0.5f;
-        output_image[buffer_pos*3 + 2] = std::min(1.f, b) * 255 + 0.5f;
+        output_image[buffer_pos*3] = std::max(0.f, std::min(1.f, r)) * 255 + 0.5f;
+        output_image[buffer_pos*3 + 1] = std::max(0.f, std::min(1.f, g)) * 255 + 0.5f;
+        output_image[buffer_pos*3 + 2] = std::max(0.f, std::min(1.f, b)) * 255 + 0.5f;
+    }
+}
+
+void copyMatrixToBuffer(std::uint8_t* output_image, const Eigen::MatrixXf& mat, KDTNode<ReconstructionSample>* slice, 
+    Vector2i image_size){
+    for(std::uint32_t i = 0; i < mat.rows() / 3; ++i){
+        float r = 0, g = 0, b = 0;
+        if(slice->sample(i).its.isEmitter()){
+            slice->sample(i).emitter_color.toSRGB(r, g, b);
+        }
+        else{
+            for(int j = 0; j < mat.cols(); ++j){
+                r += mat(i * 3, j);
+                g += mat(i * 3 + 1, j);
+                b += mat(i * 3 + 2, j);
+            }
+
+            Spectrum converter;
+            converter.fromLinearRGB(r, g, b);
+            converter.toSRGB(r, g, b);
+        }
+        
+        ReconstructionSample& sample = slice->sample(i);
+
+        std::uint32_t buffer_pos = sample.image_x + sample.image_y * image_size.x;
+
+        output_image[buffer_pos*3] = std::max(0.f, std::min(1.f, r)) * 255 + 0.5f;
+        output_image[buffer_pos*3 + 1] = std::max(0.f, std::min(1.f, g)) * 255 + 0.5f;
+        output_image[buffer_pos*3 + 2] = std::max(0.f, std::min(1.f, b)) * 255 + 0.5f;
     }
 }
 
@@ -200,17 +227,144 @@ void printToFile(const std::vector<float>& vals, std::string filename, std::ios_
     output_file.close();
 }
 
+std::vector<std::uint32_t> sampleRow(Scene* scene, KDTNode<ReconstructionSample>* slice, const VPL& vpl, 
+    float min_dist, std::uint32_t num_samples, std::mt19937& rng, Eigen::MatrixXf& mat, 
+    const std::vector<std::uint32_t>& sample_set, bool resample){
+    
+    assert((size_t)mat.rows() == num_samples * 3 && mat.cols() == 1 && 
+        num_samples <= slice->sample_indices.size());
+
+    std::vector<std::uint32_t> sampled_indices;
+    if(resample){
+        sampled_indices.resize(num_samples);
+
+        if(num_samples == slice->sample_indices.size()){
+            std::iota(sampled_indices.begin(), sampled_indices.end(), 0);
+        }
+        else{
+            std::vector<std::uint32_t> indices(slice->sample_indices.size());
+            std::iota(indices.begin(), indices.end(), 0);
+
+            for(std::uint32_t i = 0; i < sampled_indices.size(); ++i){
+                std::uniform_int_distribution<std::uint32_t> gen(0, indices.size() - 1);
+                std::uint32_t idx = gen(rng);
+                sampled_indices[i] = indices[idx];
+                indices[idx] = indices.back();
+                indices.pop_back();
+            }
+
+            std::sort(sampled_indices.begin(), sampled_indices.end());
+        }
+    }
+    else{
+        sampled_indices = sample_set;
+    }
+
+    Properties props("independent");
+	Sampler *sampler = static_cast<Sampler*>(PluginManager::getInstance()->createObject(MTS_CLASS(Sampler), props));
+	sampler->configure();
+	sampler->generate(Point2i(0));
+
+    for(size_t i = 0; i < sampled_indices.size(); ++i){
+        Spectrum lightContribution = sample(scene, sampler, slice->sample(sampled_indices[i]).its, vpl, min_dist, true);
+
+        Float r, g, b;
+        lightContribution.toLinearRGB(r, g, b);
+        mat(i * 3, 0) = r;
+        mat(i * 3 + 1, 0) = g;
+        mat(i * 3 + 2, 0) = b;
+    }
+
+    return sampled_indices;
+}
+
+std::uint32_t adaptiveMatrixReconstruction(Eigen::MatrixXf& mat, Scene* scene,
+    KDTNode<ReconstructionSample>* slice, const std::vector<VPL>& vpls, float min_dist, float sample_perc,
+    std::mt19937& rng){
+    assert(sample_perc > 0.f && slice->sample_indices.size() > 0 && vpls.size() > 0);
+
+    if((size_t)mat.cols() != vpls.size() || (size_t)mat.rows() != (slice->sample_indices.size() * 3u)){
+        mat = Eigen::MatrixXf(slice->sample_indices.size() * 3, vpls.size());
+    }
+
+    std::uint32_t num_samples = slice->sample_indices.size() * sample_perc * 0.5f;
+
+    Eigen::MatrixXf reconstructed(slice->sample_indices.size() * 3, 1);
+    std::vector<std::uint32_t> sampled;
+    sampled = sampleRow(scene, slice, vpls[0], min_dist, slice->sample_indices.size(), rng, reconstructed, 
+        sampled, true);
+    mat.col(0) = reconstructed.col(0);
+
+    float norm = reconstructed.norm();
+    Eigen::MatrixXf q;
+    if(norm == 0.f){
+        q = Eigen::MatrixXf::Zero(reconstructed.rows(), 1);
+    }
+    else{
+        q = reconstructed / reconstructed.norm();
+    }
+    Eigen::MatrixXf sample_omega(num_samples * 3, 1);
+    Eigen::MatrixXf q_omega;
+
+    for(std::uint32_t i = 1; i < vpls.size(); ++i){
+        sample_omega.setZero();
+        //previous full sample was used, which means that there is now a need to regenerate the sample indices and 
+        //the omega matrices
+        if(num_samples != sampled.size()){
+            sampled = sampleRow(scene, slice, vpls[i], min_dist, num_samples, rng, sample_omega, sampled, true);
+            q_omega.resize(num_samples * 3, q.cols());
+
+            for(std::uint32_t j = 0; j < sampled.size(); ++j){
+                q_omega.row(j * 3) = q.row(sampled[j] * 3);
+                q_omega.row(j * 3 + 1) = q.row(sampled[j] * 3 + 1);
+                q_omega.row(j * 3 + 2) = q.row(sampled[j] * 3 + 2);
+            }
+        }
+        //no new direction was added so no need to regenerate sample indices
+        else{
+            sampled = sampleRow(scene, slice, vpls[i], min_dist, num_samples, rng, sample_omega, sampled, false);
+        }
+        
+        reconstructed = q * q_omega.transpose() * sample_omega;
+        float d = 0.f;
+        for(std::uint32_t j = 0; j < sampled.size(); ++j){
+            d += fabs(reconstructed(sampled[j], 0) - sample_omega(j, 0));
+        }
+
+        if(d > 1e-5f){
+            sampled = sampleRow(scene, slice, vpls[i], min_dist, slice->sample_indices.size(), rng, 
+                reconstructed, sampled, true);
+
+            Eigen::MatrixXf new_dir = reconstructed;
+            for(std::uint32_t j = 0; j < q.cols(); ++j){
+                new_dir -= (reconstructed.transpose() * q.col(j))(0, 0) * q.col(j);
+            }
+
+            if(new_dir.norm() > 0){
+                new_dir = new_dir / new_dir.norm();
+            }
+
+            q.conservativeResize(q.rows(), q.cols() + 1);
+            q.col(q.cols() - 1) = new_dir.col(0);
+        }
+
+        mat.col(i) = reconstructed.col(0);
+    }
+
+    return q.rows() * q.cols() / 3 + (mat.cols() - q.cols()) * num_samples;
+}
+
 void svt(Eigen::MatrixXf& reconstructed_matrix, const Eigen::MatrixXf& lighting_matrix, float step_size, 
     float tolerance, float tau, std::uint32_t max_iterations, const std::vector<std::uint32_t>& sampled_indices){
 
     std::uint32_t k0 = tau / (step_size * lighting_matrix.norm()) + 1.5f; //extra .5 for rounding in case of float error
     Eigen::MatrixXf y = step_size * (float)k0 * lighting_matrix;
     for(std::uint32_t i = 0; i < max_iterations; ++i){
-        std::uint32_t max_possible_rank = std::min(y.cols(), y.rows());
+        /*std::uint32_t max_possible_rank = std::min(y.cols(), y.rows());
         std::uint32_t initial_sv = std::max(1u, max_possible_rank / 10u);
         std::uint32_t increment = std::max(1u, max_possible_rank / 20u);
 
-        //reconstructed_matrix = softThreshRank(y, tau, initial_sv, increment);
+        reconstructed_matrix = softThreshRank(y, tau, initial_sv, increment);*/
         reconstructed_matrix = softThreshRankNoTrunc(y, tau);
 
         float numer_total_dist = 0.f;
@@ -239,24 +393,7 @@ void svt(Eigen::MatrixXf& reconstructed_matrix, const Eigen::MatrixXf& lighting_
     }
 }
 
-/*void processSlice(Scene* scene, KDTNode<ReconstructionSample>* slice, const std::vector<VPL>& vpls, 
-    float sample_percentage, float min_dist, float tolerance, float tau, std::uint32_t max_iterations, 
-    std::uint8_t* output_image, Vector2i size){
-    Eigen::MatrixXf lighting_matrix = Eigen::MatrixXf::Zero(slice->sample_indices.size(), vpls.size() * 3);
-
-    float step_size = 1.5f;//step_size_factor * (float)(lighting_matrix.rows() * lighting_matrix.cols()) / 
-        //(float)(indices_to_compute.size() * 3); 
-
-    std::mt19937 rng(std::chrono::high_resolution_clock::now().time_since_epoch().count());
-
-    std::uint32_t num_samples = slice->sample_indices.size() * vpls.size() * sample_percentage;
-    auto indices = calculateSparseSamples(scene, slice, vpls, lighting_matrix, num_samples, min_dist, rng);
-
-    Eigen::MatrixXf reconstructed_matrix;
-    svt(reconstructed_matrix, lighting_matrix, step_size, tolerance, tau, max_iterations, indices);
-
-    copyMatrixToBuffer(output_image, reconstructed_matrix, slice, size);
-}*/
+std::mutex mutex;
 
 bool MatrixReconstructionRenderer::render(Scene* scene){
     Intersection its;
@@ -291,16 +428,7 @@ bool MatrixReconstructionRenderer::render(Scene* scene){
 
     std::cout << "reconstructing slices" << std::endl;
 
-    /*std::vector<std::thread> slice_threads;
-    for(std::uint32_t i = 0; i < slices.size(); ++i){
-        slice_threads.emplace_back(processSlice, scene, slices[i], vpls, sample_percentage_, min_dist_, tolerance_, tau_,
-            max_iterations_, output_image, size);
-    }
-
-    for(std::uint32_t i = 0; i < slice_threads.size(); ++i){
-        std::cout << "joining slice " << i << std::endl;
-        slice_threads[i].join();
-    }*/
+    std::uint32_t total_samples = 0;
 
     #pragma omp parallel for
     for(std::uint32_t i = 0; i < slices.size(); ++i){
@@ -309,7 +437,7 @@ bool MatrixReconstructionRenderer::render(Scene* scene){
         Eigen::MatrixXf bmat = Eigen::MatrixXf::Zero(slices[i]->sample_indices.size(), vpls.size());
 
         std::mt19937 rng(std::chrono::high_resolution_clock::now().time_since_epoch().count() * i);
-        std::uint32_t num_samples = slices[i]->sample_indices.size() * vpls.size() * sample_percentage_;
+        /*std::uint32_t num_samples = slices[i]->sample_indices.size() * vpls.size() * sample_percentage_;
         auto indices = calculateSparseSamples(scene, slices[i], vpls, rmat, gmat, bmat, num_samples, min_dist_, rng);
 
         float step_size = 1.9f;//(1.2f * lighting_matrix.rows() * lighting_matrix.cols()) / (indices.size() * 3.f); 
@@ -318,8 +446,20 @@ bool MatrixReconstructionRenderer::render(Scene* scene){
         svt(reconstructed_r, rmat, step_size, tolerance_, tau_, max_iterations_, indices);
         svt(reconstructed_g, gmat, step_size, tolerance_, tau_, max_iterations_, indices);
         svt(reconstructed_b, bmat, step_size, tolerance_, tau_, max_iterations_, indices);
-        copyMatrixToBuffer(output_image, reconstructed_r, reconstructed_g, reconstructed_b, slices[i], size);
+        copyMatrixToBuffer(output_image, reconstructed_r, reconstructed_g, reconstructed_b, slices[i], size);*/
+
+        Eigen::MatrixXf mat = Eigen::MatrixXf::Zero(slices[i]->sample_indices.size() * 3, vpls.size());
+        std::uint32_t samples = adaptiveMatrixReconstruction(mat, scene, slices[i], vpls, min_dist_, sample_percentage_, rng);
+        copyMatrixToBuffer(output_image, mat, slices[i], size);
+
+        {
+            std::lock_guard<std::mutex> lock(mutex);
+            total_samples += samples;
+        }
     }
+
+    float sample_perc = (float)total_samples / (vpls.size() * size.x * size.y);
+    std::cout << "Sample percentage: " << sample_perc << std::endl;
 
     film->setBitmap(output_bitmap);
 

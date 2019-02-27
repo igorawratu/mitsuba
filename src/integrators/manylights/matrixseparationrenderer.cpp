@@ -453,8 +453,8 @@ void matrixToSlice(KDTNode<RowSample>* node, const Eigen::MatrixXf& mat){
 }
 
 std::tuple<Eigen::MatrixXf, Eigen::MatrixXf> separate(const Eigen::MatrixXf& mat, const Eigen::MatrixXf& two_q,
-    const std::uint32_t max_iterations, float beta, float step, float theta, const Eigen::MatrixXf& sampled,
-    bool show_rank){
+    const std::uint32_t max_iterations, float beta, float step, float theta, float rank_increase_threshold, 
+    const Eigen::MatrixXf& sampled, bool show_rank){
 
     std::mt19937 rng(std::chrono::high_resolution_clock::now().time_since_epoch().count());
     std::normal_distribution<float> dist(0.f, 0.1f);
@@ -477,10 +477,10 @@ std::tuple<Eigen::MatrixXf, Eigen::MatrixXf> separate(const Eigen::MatrixXf& mat
     float c = mat.rows() * mat.cols();
 
     std::uint32_t max_rank = std::min(mat.rows(), mat.cols());
-    std::uint32_t rank_estimate = std::min(max_rank, 10u);
+    std::uint32_t rank_estimate = std::max(max_rank / 20, 1u);
 
-    float prev_lambda_norm = 1.f;
-    float prev_pi_norm = 1.f;
+    float prev_err_norm = 0.f;
+    float mat_norm = mat.norm();
 
     for(std::uint32_t i = 0; i < max_iterations; ++i){
         //u and v update
@@ -491,7 +491,7 @@ std::tuple<Eigen::MatrixXf, Eigen::MatrixXf> separate(const Eigen::MatrixXf& mat
         auto qr = bvt.colPivHouseholderQr();
 
         x = qr.householderQ();
-        //rank_estimate = qr.rank();
+
         x.conservativeResize(x.rows(), rank_estimate);
         y = x.transpose() * b;
 
@@ -499,15 +499,20 @@ std::tuple<Eigen::MatrixXf, Eigen::MatrixXf> separate(const Eigen::MatrixXf& mat
         xy = x * y;
         Eigen::MatrixXf pi_over_beta = pi / beta;
 
+        float conv = (mat - xy - z).norm() / mat_norm;
+
+        if(conv < theta){
+            break;
+        }
+
         for(std::uint32_t j = 0; j < z.rows(); ++j){
             for(std::uint32_t k = 0; k < z.cols(); ++k){
-                float val = mat(j, k) - xy(j, k) - lambda_over_beta(j, k);
-                //float val = mat(j, k) - xy(j, k) + h(j, k) - lambda_over_beta(j, k) - pi_over_beta(j, k);
+                float val = mat(j, k) - xy(j, k) + h(j, k) - lambda_over_beta(j, k) - pi_over_beta(j, k);
                 if(val > 0){
-                    z(j, k) = /*0.5f * */std::max(0.f, val - 1.f / beta);
+                    z(j, k) = 0.5f * std::max(0.f, val - 1.f / beta);
                 }
                 else{
-                    z(j, k) = /*0.5f * */std::min(0.f, val + 1.f / beta);
+                    z(j, k) = 0.5f * std::min(0.f, val + 1.f / beta);
                 }
             }
         }
@@ -520,7 +525,6 @@ std::tuple<Eigen::MatrixXf, Eigen::MatrixXf> separate(const Eigen::MatrixXf& mat
         }
     
         float rhfrobsq = rescaled_h.norm();
-        //std::cout << rhfrobsq << " " << pi_over_beta.norm() << " " << two_q.norm() << " " << h.norm() << std::endl;
         rhfrobsq *= rhfrobsq;
         float gamma = sqrt(c / rhfrobsq);
 
@@ -533,22 +537,15 @@ std::tuple<Eigen::MatrixXf, Eigen::MatrixXf> separate(const Eigen::MatrixXf& mat
 
         lambda_dif = xy + z - mat;
         pi_dif = z - h;
-        float lc = prev_lambda_norm == 0.f ? 0.f : fabs(1.f - lambda_dif.norm() / prev_lambda_norm);
-        float pc = prev_pi_norm == 0.f ? 0.f : fabs(1.f - pi_dif.norm() / prev_pi_norm);
-        prev_lambda_norm = lambda_dif.norm();
-        prev_pi_norm = pi_dif.norm();
 
-        //std::cout << "iteration " << i << " " << rank_estimate << std::endl;
-        std::cout << i << " " << lambda_dif.norm() << " " << pi_dif.norm() << " " << z.norm() << std::endl;
+        float err_dif = prev_err_norm == 0.f ? 100.f : z.norm() / prev_err_norm;
+        err_dif = fabs(1.f - err_dif);
+        prev_err_norm = z.norm();
 
-        /*if((lc < theta && pc < theta) && (lambda_dif.norm() < theta && pi_dif.norm() < theta)){
-            break;
-        }
-
-        if(lc < theta * 10.f && pc < theta * 10.f){
-            rank_estimate += max_rank < 50 ? 5 : 10;//std::max(max_rank / 10u, 1u);
+        if(err_dif < rank_increase_threshold){
+            rank_estimate += 5;
             rank_estimate = std::min(rank_estimate, max_rank);
-        }*/
+        }
 
         lambda = lambda + beta * lambda_dif;
         pi = pi + beta * pi_dif;
@@ -671,13 +668,14 @@ MatrixSeparationRenderer::MatrixSeparationRenderer(std::unique_ptr<ManyLightsClu
         float min_dist, float sample_percentage, float error_threshold, float reincorporation_density_threshold,
         std::uint32_t slice_size, std::uint32_t max_prediction_iterations, std::uint32_t max_separation_iterations,
         std::uint32_t show_slices, std::uint32_t only_directsamples, bool separate, bool show_error, bool show_sparse,
-        std::uint32_t predictor_mask, bool show_rank, bool show_predictors) : 
+        std::uint32_t predictor_mask, bool show_rank, bool show_predictors, float rank_increase_threshold, float theta) : 
         clusterer_(std::move(clusterer)), min_dist_(min_dist), sample_percentage_(sample_percentage),
         error_threshold_(error_threshold), reincorporation_density_threshold_(reincorporation_density_threshold),
         slice_size_(slice_size), max_prediction_iterations_(max_prediction_iterations), 
         max_separation_iterations_(max_separation_iterations), show_slices_(show_slices > 0),
         show_only_directsamples_(only_directsamples > 0), cancel_(false), separate_(separate), show_error_(show_error),
-        show_sparse_(show_sparse), predictor_mask_(predictor_mask), show_rank_(show_rank), show_predictors_(show_predictors){
+        show_sparse_(show_sparse), predictor_mask_(predictor_mask), show_rank_(show_rank), show_predictors_(show_predictors),
+        rank_increase_threshold_(rank_increase_threshold), theta_(theta){
 
 }
 
@@ -688,7 +686,8 @@ MatrixSeparationRenderer::MatrixSeparationRenderer(MatrixSeparationRenderer&& ot
         max_separation_iterations_(other.max_separation_iterations_), show_slices_(other.show_slices_), 
         show_only_directsamples_(other.show_only_directsamples_), cancel_(false), samples_(std::move(other.samples_)),
         separate_(other.separate_), show_error_(other.show_error_), show_sparse_(other.show_sparse_),
-        predictor_mask_(other.predictor_mask_), show_rank_(other.show_rank_), show_predictors_(other.show_predictors_){
+        predictor_mask_(other.predictor_mask_), show_rank_(other.show_rank_), show_predictors_(other.show_predictors_),
+        rank_increase_threshold_(other.rank_increase_threshold_), theta_(other.theta_){
     
 }
 
@@ -712,6 +711,8 @@ MatrixSeparationRenderer& MatrixSeparationRenderer::operator = (MatrixSeparation
         predictor_mask_ = other.predictor_mask_;
         show_rank_ = other.show_rank_;
         show_predictors_ = other.show_predictors_;
+        rank_increase_threshold_ = other.rank_increase_threshold_;
+        theta_ = other.theta_;
     }
     
     return *this;
@@ -783,7 +784,7 @@ bool MatrixSeparationRenderer::render(Scene* scene){
 
     std::cout << "processing slices..." << std::endl;
     if(!show_slices_){
-        //#pragma omp parallel for
+        #pragma omp parallel for
         for(std::uint32_t i = 0; i < slices.size(); ++i){
             std::mt19937 rng(seed * i);
 
@@ -816,12 +817,12 @@ bool MatrixSeparationRenderer::render(Scene* scene){
             }
 
             if(separate_){
-                float beta = 5000.f / d.norm();
+                float beta = 500.f / d.norm();
                 float step = 0.1f;
-                float theta = 0.01f;
                 
                 Eigen::MatrixXf l, s;
-                std::tie(l, s) = separate(d, two_q, max_separation_iterations_, beta, step, theta, sampled, show_rank_);
+                std::tie(l, s) = separate(d, two_q, max_separation_iterations_, beta, step, theta_, 
+                    rank_increase_threshold_, sampled, show_rank_);
 
                 auto gaussian_kernel = createGaussianKernel(7);
 
@@ -937,9 +938,9 @@ bool MatrixSeparationRenderer::render(Scene* scene){
             float r, g, b;
             s.toSRGB(r, g, b);
 
-            output_image[offset] = std::min(1.f, r) * 255 + 0.5f;
-            output_image[offset + 1] = std::min(1.f, g) * 255 + 0.5f;
-            output_image[offset + 2] = std::min(1.f, b) * 255 + 0.5f;
+            output_image[offset] = std::max(0.f, std::min(1.f, r)) * 255 + 0.5f;
+            output_image[offset + 1] = std::max(0.f, std::min(1.f, g)) * 255 + 0.5f;
+            output_image[offset + 2] = std::max(0.f, std::min(1.f, b)) * 255 + 0.5f;
         }
     }
 

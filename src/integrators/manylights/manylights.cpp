@@ -230,12 +230,12 @@ class ManyLightsIntegrator : public Integrator {
 public:
 	ManyLightsIntegrator(const Properties &props) : 
 		Integrator(props),
-		max_depth_(props.getInteger("maxDepth", 5)),
+		max_depth_(props.getInteger("max_depth", 5)),
 		properties_(props),
 		clamping_(props.getFloat("clamping", 0.1f)),
 		clustering_strategy_(NONE), 
 		renderer_(nullptr){
-		int strategy = props.getInteger("clusteringStrategy", 0);
+		int strategy = props.getInteger("clustering_strat", 0);
 		clustering_strategy_ = strategy < CLUSTER_STRATEGY_MIN || strategy > CLUSTER_STRATEGY_MAX ? 
 			NONE : (CLUSTERING_STRATEGY)strategy;
 	}
@@ -295,15 +295,15 @@ private:
 			}
 			case LIGHTCUTS:
 			{
-				int max_lights = props.getInteger("numClusters", 64);
-				float error_threshold = props.getFloat("error_threshold", 0.02);
+				int max_lights = props.getInteger("lightcuts-num_clusters", 64);
+				float error_threshold = props.getFloat("lightcuts-error_threshold", 0.02);
 				std::unique_ptr<ManyLightsClusterer> clusterer(new LightTree(vpls_, min_dist_, max_lights, error_threshold));
 				return std::unique_ptr<ManyLightsRenderer>(new LightClustererRenderer(std::move(clusterer), min_dist_));
 			}
 			case ROWCOLSAMPLING:
 			{
-				int rows = props.getInteger("rows", 300);
-				int cols = props.getInteger("numClusters", 64);
+				int rows = props.getInteger("rowcol-rows", 300);
+				int cols = props.getInteger("rowcol-num_clusters", 64);
 
 				std::unique_ptr<ManyLightsClusterer> clusterer(new RowColumnSampling(vpls_, rows, cols, std::make_tuple(scene->getFilm()->getSize().x, scene->getFilm()->getSize().y),
 					scene, min_dist_));
@@ -312,12 +312,12 @@ private:
 			}
 			case MATRIXRECONSTRUCTION:
 			{
-				float sample_percentage = props.getFloat("sample_perc", 0.1);
-				float step_size_factor = props.getFloat("stepSizeFactor", 1.5);
-				float tolerance = props.getFloat("tolerance", 0.01);
-				float tau = props.getFloat("tau", 5);
-				int max_iterations = props.getInteger("reconstruction_iterations", 20);
-				std::uint32_t slice_size = props.getInteger("slice_size", 1024);
+				float sample_percentage = props.getFloat("completion-sample_perc", 0.1);
+				float step_size_factor = props.getFloat("completion-step_factor", 1.5);
+				float tolerance = props.getFloat("completion-tolerance", 0.01);
+				float tau = props.getFloat("completion-tau", 5);
+				int max_iterations = props.getInteger("completion-reconstruction_iterations", 20);
+				std::uint32_t slice_size = props.getInteger("completion-slice_size", 1024);
 
 				std::unique_ptr<ManyLightsClusterer> clusterer(new PassthroughClusterer(vpls_));
 				return std::unique_ptr<ManyLightsRenderer>(new MatrixReconstructionRenderer(std::move(clusterer), 
@@ -325,26 +325,29 @@ private:
 			}
 			case MATRIXSEPARATION:
 			{
-				float sample_percentage = props.getFloat("sample_perc", 0.05);
-				float error_threshold = props.getFloat("prediction_error_thresh", 0.1);
-				float reincorporation_density_threshold = props.getFloat("density_thresh", 0.2);
-        		std::uint32_t slice_size = props.getInteger("slice_size", 1024);
-				std::uint32_t max_prediction_iterations = props.getInteger("prediction_iter", 10);
-				std::uint32_t max_separation_iterations = props.getInteger("separation_iter", 20);
-				std::uint32_t show_slices = props.getInteger("show_slices", 0);
-				std::uint32_t only_directsamples = props.getInteger("only_direct_samples", 0);
-				bool separate = props.getInteger("separate", 1) > 0;
-				bool show_error = props.getInteger("show_error", 0) > 0;
-				bool show_sparse = props.getInteger("show_sparse", 0) > 0;
-				std::uint32_t predictor_mask = (std::uint32_t)props.getInteger("predictor_mask", 7);
-				bool show_rank = props.getInteger("show_rank", 0) > 0;
-				bool show_predictors = props.getInteger("show_predictors", 0) > 0;
+				float sample_percentage = props.getFloat("separation-sample_perc", 0.05);
+				float error_threshold = props.getFloat("separation-prediction_error_thresh", 0.1);
+				float reincorporation_density_threshold = props.getFloat("separation-density_thresh", 0.2);
+        		std::uint32_t slice_size = props.getInteger("separation-slice_size", 1024);
+				std::uint32_t max_prediction_iterations = props.getInteger("separation-prediction_iter", 10);
+				std::uint32_t max_separation_iterations = props.getInteger("separation-separation_iter", 20);
+				std::uint32_t show_slices = props.getInteger("separation-show_slices", 0);
+				std::uint32_t only_directsamples = props.getInteger("separation-only_direct_samples", 0);
+				bool separate = props.getInteger("separation-separate", 1) > 0;
+				bool show_error = props.getInteger("separation-show_error", 0) > 0;
+				bool show_sparse = props.getInteger("separation-show_sparse", 0) > 0;
+				std::uint32_t predictor_mask = (std::uint32_t)props.getInteger("separation-predictor_mask", 7);
+				bool show_rank = props.getInteger("separation-show_rank", 0) > 0;
+				bool show_predictors = props.getInteger("separation-show_predictors", 0) > 0;
+				float rank_increase_threshold = props.getFloat("separation-rank_increase_threshold", 0.1);
+				float theta = props.getFloat("separation-theta", 0.01);
 
 				std::unique_ptr<ManyLightsClusterer> clusterer(new PassthroughClusterer(vpls_));
 				return std::unique_ptr<MatrixSeparationRenderer>(new MatrixSeparationRenderer(std::move(clusterer), 
 					min_dist_, sample_percentage, error_threshold, reincorporation_density_threshold, slice_size, 
 					max_prediction_iterations, max_separation_iterations, show_slices, only_directsamples, separate,
-					show_error, show_sparse, predictor_mask, show_rank, show_predictors));
+					show_error, show_sparse, predictor_mask, show_rank, show_predictors, rank_increase_threshold,
+					theta));
 			}
 			default:
 				return nullptr;
