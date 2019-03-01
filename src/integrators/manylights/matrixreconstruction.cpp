@@ -18,15 +18,16 @@ MTS_NAMESPACE_BEGIN
 
 MatrixReconstructionRenderer::MatrixReconstructionRenderer(std::unique_ptr<ManyLightsClusterer> clusterer,
     float sample_percentage, float min_dist, float step_size_factor, float tolerance, float tau, 
-    std::uint32_t max_iterations, std::uint32_t slice_size) : clusterer_(std::move(clusterer)), 
+    std::uint32_t max_iterations, std::uint32_t slice_size, bool visibility_only) : clusterer_(std::move(clusterer)), 
     sample_percentage_(sample_percentage), min_dist_(min_dist), step_size_factor_(step_size_factor), 
-    tolerance_(tolerance), tau_(tau), max_iterations_(max_iterations), slice_size_(slice_size), cancel_(false){
+    tolerance_(tolerance), tau_(tau), max_iterations_(max_iterations), slice_size_(slice_size), 
+    visibility_only_(visibility_only), cancel_(false){
 }
 
 MatrixReconstructionRenderer::MatrixReconstructionRenderer(MatrixReconstructionRenderer&& other) : 
     clusterer_(std::move(other.clusterer_)), sample_percentage_(other.sample_percentage_), min_dist_(other.min_dist_), 
     step_size_factor_(other.step_size_factor_), tolerance_(other.tolerance_), tau_(other.tau_), max_iterations_(other.max_iterations_), 
-    slice_size_(other.slice_size_), cancel_(other.cancel_){
+    slice_size_(other.slice_size_), visibility_only_(other.visibility_only_), cancel_(other.cancel_){
 }
 
 MatrixReconstructionRenderer& MatrixReconstructionRenderer::operator = (MatrixReconstructionRenderer&& other){
@@ -39,6 +40,7 @@ MatrixReconstructionRenderer& MatrixReconstructionRenderer::operator = (MatrixRe
         tau_ = other.tau_;
         max_iterations_ = other.max_iterations_;
         slice_size_ = other.slice_size_;
+        visibility_only_ = other.visibility_only_;
         cancel_ = other.cancel_;
     }
     return *this;
@@ -510,8 +512,8 @@ bool MatrixReconstructionRenderer::render(Scene* scene){
         copyMatrixToBuffer(output_image, reconstructed_r, reconstructed_g, reconstructed_b, slices[i], size);*/
 
         Eigen::MatrixXd mat = Eigen::MatrixXd::Zero(slices[i]->sample_indices.size() * 3, vpls.size());
-        std::uint32_t samples = adaptiveMatrixReconstruction(mat, scene, slices[i], vpls, min_dist_, sample_percentage_, rng, true);
-        copyMatrixToBuffer(output_image, mat, slices[i], size, true);
+        std::uint32_t samples = adaptiveMatrixReconstruction(mat, scene, slices[i], vpls, min_dist_, sample_percentage_, rng, visibility_only_);
+        copyMatrixToBuffer(output_image, mat, slices[i], size, visibility_only_);
 
         {
             std::lock_guard<std::mutex> lock(mutex);

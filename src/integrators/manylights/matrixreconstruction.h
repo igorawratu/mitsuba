@@ -49,7 +49,7 @@ public:
     MatrixReconstructionRenderer() = delete;
     MatrixReconstructionRenderer(std::unique_ptr<ManyLightsClusterer> clusterer, float sample_percentage_, 
         float min_dist, float step_size_factor, float tolerance, float tau, std::uint32_t max_iterations,
-        std::uint32_t slice_size);
+        std::uint32_t slice_size, bool visibility_only);
     MatrixReconstructionRenderer(const MatrixReconstructionRenderer& other) = delete;
     MatrixReconstructionRenderer(MatrixReconstructionRenderer&& other);
     MatrixReconstructionRenderer& operator = (const MatrixReconstructionRenderer& other) = delete;
@@ -68,6 +68,7 @@ private:
     std::unique_ptr<ManyLightsClusterer> clusterer_;
     float sample_percentage_, min_dist_, step_size_factor_, tolerance_, tau_;
     std::uint32_t max_iterations_, slice_size_;
+    bool visibility_only_;
     bool output_stats_;
     std::mutex cancel_lock_;
     bool cancel_;
