@@ -20,7 +20,8 @@ struct ReconstructionSample{
     }
 
     ReconstructionSample(ReconstructionSample&& other) : image_x(other.image_x), image_y(other.image_y), 
-        intersected_scene(other.intersected_scene), its(other.its), emitter_color(other.emitter_color){
+        intersected_scene(other.intersected_scene), its(other.its), emitter_color(other.emitter_color),
+        unoccluded_samples(std::move(other.unoccluded_samples)){
     }
 
     ReconstructionSample& operator = (ReconstructionSample&& other){
@@ -30,6 +31,7 @@ struct ReconstructionSample{
             intersected_scene = other.intersected_scene;
             its = other.its;
             emitter_color = other.emitter_color;
+            unoccluded_samples = std::move(other.unoccluded_samples);
         }
 
         return *this;
@@ -39,6 +41,7 @@ struct ReconstructionSample{
     bool intersected_scene;
     Intersection its;
     Spectrum emitter_color;
+    std::vector<Spectrum> unoccluded_samples;
 };
 
 class MatrixReconstructionRenderer : public ManyLightsRenderer{

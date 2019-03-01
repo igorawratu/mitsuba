@@ -49,7 +49,8 @@ MatrixReconstructionRenderer::~MatrixReconstructionRenderer(){
 }
 
 std::unique_ptr<KDTNode<ReconstructionSample>> constructKDTree(Scene* scene, std::uint32_t size_threshold, 
-    std::vector<ReconstructionSample>& samples, float min_dist){
+    std::vector<ReconstructionSample>& samples, float min_dist, bool calc_unoccluded_samples,
+    const std::vector<VPL>& vpls){
 
     auto kdt_root = std::unique_ptr<KDTNode<ReconstructionSample>>(new KDTNode<ReconstructionSample>(&samples));
 
@@ -82,7 +83,15 @@ std::unique_ptr<KDTNode<ReconstructionSample>> constructKDTree(Scene* scene, std
                 continue;
             }
 
-            ReconstructionSample curr_sample(x, y, intersected, its);;
+            ReconstructionSample curr_sample(x, y, intersected, its);
+
+            if(calc_unoccluded_samples){
+                curr_sample.unoccluded_samples.resize(vpls.size());
+
+                for(std::uint32_t i = 0; i < vpls.size(); ++i){
+                    curr_sample.unoccluded_samples[i] = sample(scene, sampler, its, vpls[i], min_dist, false);
+                }
+            }
 
             if(its.isEmitter()){
                 curr_sample.emitter_color = its.Le(-ray.d);
@@ -287,7 +296,10 @@ std::uint32_t adaptiveMatrixReconstruction(Eigen::MatrixXf& mat, Scene* scene,
         mat = Eigen::MatrixXf(slice->sample_indices.size() * 3, vpls.size());
     }
 
-    std::uint32_t num_samples = slice->sample_indices.size() * sample_perc * 0.5f;
+    std::uint32_t num_samples = slice->sample_indices.size() * sample_perc + 0.5f;
+    if(num_samples == 0){
+        num_samples = slice->sample_indices.size();
+    }
 
     Eigen::MatrixXf reconstructed(slice->sample_indices.size() * 3, 1);
     std::vector<std::uint32_t> sampled;
@@ -301,7 +313,7 @@ std::uint32_t adaptiveMatrixReconstruction(Eigen::MatrixXf& mat, Scene* scene,
         q = Eigen::MatrixXf::Zero(reconstructed.rows(), 1);
     }
     else{
-        q = reconstructed / reconstructed.norm();
+        q = reconstructed;// / reconstructed.norm();
     }
     Eigen::MatrixXf sample_omega(num_samples * 3, 1);
     Eigen::MatrixXf q_omega;
@@ -310,7 +322,7 @@ std::uint32_t adaptiveMatrixReconstruction(Eigen::MatrixXf& mat, Scene* scene,
         sample_omega.setZero();
         //previous full sample was used, which means that there is now a need to regenerate the sample indices and 
         //the omega matrices
-        if(num_samples != sampled.size()){
+        if(num_samples != sampled.size() || num_samples == slice->sample_indices.size()){
             sampled = sampleRow(scene, slice, vpls[i], min_dist, num_samples, rng, sample_omega, sampled, true);
             q_omega.resize(num_samples * 3, q.cols());
 
@@ -324,28 +336,34 @@ std::uint32_t adaptiveMatrixReconstruction(Eigen::MatrixXf& mat, Scene* scene,
         else{
             sampled = sampleRow(scene, slice, vpls[i], min_dist, num_samples, rng, sample_omega, sampled, false);
         }
+
+        if(num_samples == slice->sample_indices.size()){
+            reconstructed = q * q_omega.transpose() * sample_omega;
+        }
+        else{
+            //std::cout << q_omega.rows() << " " << q_omega.cols() << std::endl;
+            auto svd = q_omega.jacobiSvd(Eigen::ComputeThinU | Eigen::ComputeThinV);
+            auto sv = svd.singularValues();
+            Eigen::MatrixXf singular_val_inv = Eigen::MatrixXf::Zero(sv.size(), sv.size());
+            for(std::uint32_t i = 0; i < sv.size(); ++i){
+                singular_val_inv(i, i) = sv(i) < 1e-10f ? 0.f : 1.f / sv(i);
+            }
+
+            Eigen::MatrixXf q_omega_pseudoInverse = svd.matrixV() * singular_val_inv * svd.matrixU().transpose();
+            reconstructed = q * q_omega_pseudoInverse * sample_omega;
+        }
         
-        reconstructed = q * q_omega.transpose() * sample_omega;
         float d = 0.f;
         for(std::uint32_t j = 0; j < sampled.size(); ++j){
             d += fabs(reconstructed(sampled[j], 0) - sample_omega(j, 0));
         }
 
-        if(d > 1e-5f){
+        if(d > 1e-10f){
             sampled = sampleRow(scene, slice, vpls[i], min_dist, slice->sample_indices.size(), rng, 
                 reconstructed, sampled, true);
 
-            Eigen::MatrixXf new_dir = reconstructed;
-            for(std::uint32_t j = 0; j < q.cols(); ++j){
-                new_dir -= (reconstructed.transpose() * q.col(j))(0, 0) * q.col(j);
-            }
-
-            if(new_dir.norm() > 0){
-                new_dir = new_dir / new_dir.norm();
-            }
-
             q.conservativeResize(q.rows(), q.cols() + 1);
-            q.col(q.cols() - 1) = new_dir.col(0);
+            q.col(q.cols() - 1) = reconstructed.col(0);
         }
 
         mat.col(i) = reconstructed.col(0);
@@ -421,7 +439,7 @@ bool MatrixReconstructionRenderer::render(Scene* scene){
     memset(output_image, 0, output_bitmap->getBytesPerPixel() * size.x * size.y);
 
     std::cout << "constructing kd tree" << std::endl;
-    auto kdt_root = constructKDTree(scene, slice_size_, samples_, min_dist_);
+    auto kdt_root = constructKDTree(scene, slice_size_, samples_, min_dist_, true, vpls);
 
     std::vector<KDTNode<ReconstructionSample>*> slices;
     getSlices(kdt_root.get(), slices);
