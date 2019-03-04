@@ -318,10 +318,13 @@ private:
 				float tau = props.getFloat("completion-tau", 5);
 				int max_iterations = props.getInteger("completion-reconstruction_iterations", 20);
 				std::uint32_t slice_size = props.getInteger("completion-slice_size", 1024);
+				bool visibility_only = props.getInteger("completion-visibility_only", 0) > 0;
+				bool adaptive_col_sampling = props.getInteger("completion-adaptive_col_sampling", 0) > 0;
 
 				std::unique_ptr<ManyLightsClusterer> clusterer(new PassthroughClusterer(vpls_));
 				return std::unique_ptr<ManyLightsRenderer>(new MatrixReconstructionRenderer(std::move(clusterer), 
-					sample_percentage, min_dist_, step_size_factor, tolerance, tau, max_iterations, slice_size));
+					sample_percentage, min_dist_, step_size_factor, tolerance, tau, max_iterations, slice_size,
+					visibility_only, adaptive_col_sampling));
 			}
 			case MATRIXSEPARATION:
 			{
