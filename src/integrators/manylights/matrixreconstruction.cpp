@@ -18,16 +18,17 @@ MTS_NAMESPACE_BEGIN
 
 MatrixReconstructionRenderer::MatrixReconstructionRenderer(std::unique_ptr<ManyLightsClusterer> clusterer,
     float sample_percentage, float min_dist, float step_size_factor, float tolerance, float tau, 
-    std::uint32_t max_iterations, std::uint32_t slice_size, bool visibility_only) : clusterer_(std::move(clusterer)), 
-    sample_percentage_(sample_percentage), min_dist_(min_dist), step_size_factor_(step_size_factor), 
-    tolerance_(tolerance), tau_(tau), max_iterations_(max_iterations), slice_size_(slice_size), 
-    visibility_only_(visibility_only), cancel_(false){
+    std::uint32_t max_iterations, std::uint32_t slice_size, bool visibility_only, bool adaptive_col) : 
+    clusterer_(std::move(clusterer)), sample_percentage_(sample_percentage), min_dist_(min_dist), 
+    step_size_factor_(step_size_factor), tolerance_(tolerance), tau_(tau), max_iterations_(max_iterations), 
+    slice_size_(slice_size), visibility_only_(visibility_only), adaptive_col_sampling_(adaptive_col), cancel_(false){
 }
 
 MatrixReconstructionRenderer::MatrixReconstructionRenderer(MatrixReconstructionRenderer&& other) : 
     clusterer_(std::move(other.clusterer_)), sample_percentage_(other.sample_percentage_), min_dist_(other.min_dist_), 
     step_size_factor_(other.step_size_factor_), tolerance_(other.tolerance_), tau_(other.tau_), max_iterations_(other.max_iterations_), 
-    slice_size_(other.slice_size_), visibility_only_(other.visibility_only_), cancel_(other.cancel_){
+    slice_size_(other.slice_size_), visibility_only_(other.visibility_only_), adaptive_col_sampling_(other.adaptive_col_sampling_),
+    cancel_(other.cancel_){
 }
 
 MatrixReconstructionRenderer& MatrixReconstructionRenderer::operator = (MatrixReconstructionRenderer&& other){
@@ -41,6 +42,7 @@ MatrixReconstructionRenderer& MatrixReconstructionRenderer::operator = (MatrixRe
         max_iterations_ = other.max_iterations_;
         slice_size_ = other.slice_size_;
         visibility_only_ = other.visibility_only_;
+        adaptive_col_sampling_ = other.adaptive_col_sampling_;
         cancel_ = other.cancel_;
     }
     return *this;
@@ -116,7 +118,7 @@ std::unique_ptr<KDTNode<ReconstructionSample>> constructKDTree(Scene* scene, std
 }
 
 std::vector<std::uint32_t> calculateSparseSamples(Scene* scene, KDTNode<ReconstructionSample>* slice, 
-    const std::vector<VPL>& vpls, Eigen::MatrixXd& rmat, Eigen::MatrixXd& gmat, Eigen::MatrixXd& bmat,
+    const std::vector<VPL>& vpls, Eigen::MatrixXf& rmat, Eigen::MatrixXf& gmat, Eigen::MatrixXf& bmat,
     std::uint32_t num_samples, float min_dist, std::mt19937& rng){
     assert(rmat.rows() * rmat.cols() > 0 && gmat.rows() * gmat.cols() > 0 && bmat.rows() * bmat.cols() > 0);
 
@@ -160,8 +162,8 @@ std::vector<std::uint32_t> calculateSparseSamples(Scene* scene, KDTNode<Reconstr
     return indices_to_compute;
 }
 
-void copyMatrixToBuffer(std::uint8_t* output_image, const Eigen::MatrixXd& rmat, const Eigen::MatrixXd& gmat,
-    const Eigen::MatrixXd& bmat, KDTNode<ReconstructionSample>* slice, Vector2i image_size){
+void copyMatrixToBuffer(std::uint8_t* output_image, const Eigen::MatrixXf& rmat, const Eigen::MatrixXf& gmat,
+    const Eigen::MatrixXf& bmat, KDTNode<ReconstructionSample>* slice, Vector2i image_size){
     for(std::uint32_t i = 0; i < rmat.rows(); ++i){
         float r = 0, g = 0, b = 0;
         if(slice->sample(i).its.isEmitter()){
@@ -385,7 +387,7 @@ std::uint32_t adaptiveMatrixReconstruction(Eigen::MatrixXd& mat, Scene* scene,
         auto sv = svd.singularValues();
         Eigen::MatrixXd singular_val_inv = Eigen::MatrixXd::Zero(sv.size(), sv.size());
         for(std::uint32_t i = 0; i < sv.size(); ++i){
-            singular_val_inv(i, i) = sv(i) < 1e-5f ? 0.f : 1.f / sv(i);
+            singular_val_inv(i, i) = sv(i) < 1e-10f ? 0.f : 1.f / sv(i);
         }
 
         Eigen::MatrixXd q_omega_pseudoInverse = svd.matrixV() * singular_val_inv * svd.matrixU().transpose();
@@ -495,35 +497,41 @@ bool MatrixReconstructionRenderer::render(Scene* scene){
 
     #pragma omp parallel for
     for(std::uint32_t i = 0; i < slices.size(); ++i){
-        Eigen::MatrixXd rmat = Eigen::MatrixXd::Zero(slices[i]->sample_indices.size(), vpls.size());
-        Eigen::MatrixXd gmat = Eigen::MatrixXd::Zero(slices[i]->sample_indices.size(), vpls.size());
-        Eigen::MatrixXd bmat = Eigen::MatrixXd::Zero(slices[i]->sample_indices.size(), vpls.size());
-
         std::mt19937 rng(std::chrono::high_resolution_clock::now().time_since_epoch().count() * i);
-        /*std::uint32_t num_samples = slices[i]->sample_indices.size() * vpls.size() * sample_percentage_;
-        auto indices = calculateSparseSamples(scene, slices[i], vpls, rmat, gmat, bmat, num_samples, min_dist_, rng);
+        
+        if(adaptive_col_sampling_){
+            Eigen::MatrixXd mat = Eigen::MatrixXd::Zero(slices[i]->sample_indices.size() * 3, vpls.size());
+            std::uint32_t samples = adaptiveMatrixReconstruction(mat, scene, slices[i], vpls, min_dist_, sample_percentage_, rng, visibility_only_);
+            copyMatrixToBuffer(output_image, mat, slices[i], size, visibility_only_);
 
-        float step_size = 1.9f;//(1.2f * lighting_matrix.rows() * lighting_matrix.cols()) / (indices.size() * 3.f); 
+            {
+                std::lock_guard<std::mutex> lock(mutex);
+                amount_sampled += samples;
+                total_samples += slices[i]->sample_indices.size() * vpls.size();
+            }
+        }
+        else{
+            Eigen::MatrixXf rmat = Eigen::MatrixXf::Zero(slices[i]->sample_indices.size(), vpls.size());
+            Eigen::MatrixXf gmat = Eigen::MatrixXf::Zero(slices[i]->sample_indices.size(), vpls.size());
+            Eigen::MatrixXf bmat = Eigen::MatrixXf::Zero(slices[i]->sample_indices.size(), vpls.size());
 
-        Eigen::MatrixXd reconstructed_r, reconstructed_b, reconstructed_g;
-        svt(reconstructed_r, rmat, step_size, tolerance_, tau_, max_iterations_, indices);
-        svt(reconstructedexpected_row_size_g, gmat, step_size, tolerance_, tau_, max_iterations_, indices);
-        svt(reconstructed_b, bmat, step_size, tolerance_, tau_, max_iterations_, indices);
-        copyMatrixToBuffer(output_image, reconstructed_r, reconstructed_g, reconstructed_b, slices[i], size);*/
+            std::uint32_t num_samples = slices[i]->sample_indices.size() * vpls.size() * sample_percentage_;
+            auto indices = calculateSparseSamples(scene, slices[i], vpls, rmat, gmat, bmat, num_samples, min_dist_, rng);
 
-        Eigen::MatrixXd mat = Eigen::MatrixXd::Zero(slices[i]->sample_indices.size() * 3, vpls.size());
-        std::uint32_t samples = adaptiveMatrixReconstruction(mat, scene, slices[i], vpls, min_dist_, sample_percentage_, rng, visibility_only_);
-        copyMatrixToBuffer(output_image, mat, slices[i], size, visibility_only_);
+            float step_size = 1.9f;//(1.2f * lighting_matrix.rows() * lighting_matrix.cols()) / (indices.size() * 3.f); 
 
-        {
-            std::lock_guard<std::mutex> lock(mutex);
-            amount_sampled += samples;
-            total_samples += slices[i]->sample_indices.size() * vpls.size();
+            Eigen::MatrixXf reconstructed_r, reconstructed_b, reconstructed_g;
+            svt(reconstructed_r, rmat, step_size, tolerance_, tau_, max_iterations_, indices);
+            svt(reconstructed_g, gmat, step_size, tolerance_, tau_, max_iterations_, indices);
+            svt(reconstructed_b, bmat, step_size, tolerance_, tau_, max_iterations_, indices);
+            copyMatrixToBuffer(output_image, reconstructed_r, reconstructed_g, reconstructed_b, slices[i], size);
         }
     }
 
-    float sample_perc = (float)amount_sampled / total_samples;
-    std::cout << "Sample percentage: " << sample_perc << std::endl;
+    if(adaptive_col_sampling_){
+        float sample_perc = (float)amount_sampled / total_samples;
+        std::cout << "Sample percentage: " << sample_perc << std::endl;
+    }
 
     film->setBitmap(output_bitmap);
 
