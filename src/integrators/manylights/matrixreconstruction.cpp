@@ -118,7 +118,7 @@ std::unique_ptr<KDTNode<ReconstructionSample>> constructKDTree(Scene* scene, std
 }
 
 std::vector<std::uint32_t> calculateSparseSamples(Scene* scene, KDTNode<ReconstructionSample>* slice, 
-    const std::vector<VPL>& vpls, Eigen::MatrixXf& rmat, Eigen::MatrixXf& gmat, Eigen::MatrixXf& bmat,
+    const std::vector<VPL>& vpls, Eigen::MatrixXd& rmat, Eigen::MatrixXd& gmat, Eigen::MatrixXd& bmat,
     std::uint32_t num_samples, float min_dist, std::mt19937& rng){
     assert(rmat.rows() * rmat.cols() > 0 && gmat.rows() * gmat.cols() > 0 && bmat.rows() * bmat.cols() > 0);
 
@@ -162,8 +162,8 @@ std::vector<std::uint32_t> calculateSparseSamples(Scene* scene, KDTNode<Reconstr
     return indices_to_compute;
 }
 
-void copyMatrixToBuffer(std::uint8_t* output_image, const Eigen::MatrixXf& rmat, const Eigen::MatrixXf& gmat,
-    const Eigen::MatrixXf& bmat, KDTNode<ReconstructionSample>* slice, Vector2i image_size){
+void copyMatrixToBuffer(std::uint8_t* output_image, const Eigen::MatrixXd& rmat, const Eigen::MatrixXd& gmat,
+    const Eigen::MatrixXd& bmat, KDTNode<ReconstructionSample>* slice, Vector2i image_size){
     for(std::uint32_t i = 0; i < rmat.rows(); ++i){
         float r = 0, g = 0, b = 0;
         if(slice->sample(i).its.isEmitter()){
@@ -418,18 +418,19 @@ std::uint32_t adaptiveMatrixReconstruction(Eigen::MatrixXd& mat, Scene* scene,
     return slice->sample_indices.size() * q.cols() + (mat.cols() - q.cols()) * num_samples;
 }
 
-void svt(Eigen::MatrixXf& reconstructed_matrix, const Eigen::MatrixXf& lighting_matrix, float step_size, 
+void svt(Eigen::MatrixXd& reconstructed_matrix, const Eigen::MatrixXd& lighting_matrix, float step_size, 
     float tolerance, float tau, std::uint32_t max_iterations, const std::vector<std::uint32_t>& sampled_indices){
 
     std::uint32_t k0 = tau / (step_size * lighting_matrix.norm()) + 1.5f; //extra .5 for rounding in case of float error
-    Eigen::MatrixXf y = step_size * (float)k0 * lighting_matrix;
+    Eigen::MatrixXd y = step_size * (float)k0 * lighting_matrix;
     for(std::uint32_t i = 0; i < max_iterations; ++i){
-        /*std::uint32_t max_possible_rank = std::min(y.cols(), y.rows());
+        std::uint32_t max_possible_rank = std::min(y.cols(), y.rows());
         std::uint32_t initial_sv = std::max(1u, max_possible_rank / 10u);
         std::uint32_t increment = std::max(1u, max_possible_rank / 20u);
 
-        reconstructed_matrix = softThreshRank(y, tau, initial_sv, increment);*/
-        reconstructed_matrix = softThreshRankNoTrunc(y, tau);
+        reconstructed_matrix = softThreshRank(y, tau, initial_sv, increment);
+        
+        //reconstructed_matrix = softThreshRankNoTrunc(y, tau);
 
         float numer_total_dist = 0.f;
 
@@ -511,16 +512,16 @@ bool MatrixReconstructionRenderer::render(Scene* scene){
             }
         }
         else{
-            Eigen::MatrixXf rmat = Eigen::MatrixXf::Zero(slices[i]->sample_indices.size(), vpls.size());
-            Eigen::MatrixXf gmat = Eigen::MatrixXf::Zero(slices[i]->sample_indices.size(), vpls.size());
-            Eigen::MatrixXf bmat = Eigen::MatrixXf::Zero(slices[i]->sample_indices.size(), vpls.size());
+            Eigen::MatrixXd rmat = Eigen::MatrixXd::Zero(slices[i]->sample_indices.size(), vpls.size());
+            Eigen::MatrixXd gmat = Eigen::MatrixXd::Zero(slices[i]->sample_indices.size(), vpls.size());
+            Eigen::MatrixXd bmat = Eigen::MatrixXd::Zero(slices[i]->sample_indices.size(), vpls.size());
 
             std::uint32_t num_samples = slices[i]->sample_indices.size() * vpls.size() * sample_percentage_;
             auto indices = calculateSparseSamples(scene, slices[i], vpls, rmat, gmat, bmat, num_samples, min_dist_, rng);
 
             float step_size = 1.9f;//(1.2f * lighting_matrix.rows() * lighting_matrix.cols()) / (indices.size() * 3.f); 
 
-            Eigen::MatrixXf reconstructed_r, reconstructed_b, reconstructed_g;
+            Eigen::MatrixXd reconstructed_r, reconstructed_b, reconstructed_g;
             svt(reconstructed_r, rmat, step_size, tolerance_, tau_, max_iterations_, indices);
             svt(reconstructed_g, gmat, step_size, tolerance_, tau_, max_iterations_, indices);
             svt(reconstructed_b, bmat, step_size, tolerance_, tau_, max_iterations_, indices);

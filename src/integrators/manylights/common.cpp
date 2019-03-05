@@ -1,7 +1,5 @@
 #include "common.h"
 
-#include "arpaca.hpp"
-
 MTS_NAMESPACE_BEGIN
 
 std::tuple<float, float, float> floatToRGB(float v){
@@ -136,86 +134,6 @@ float calculateError(Scene* scene, const std::vector<VPL>& vpls, float min_dist,
     return tot_error;
 }
 
-std::tuple<Eigen::MatrixXf, Eigen::MatrixXf, Eigen::MatrixXf> partialSvd(const Eigen::MatrixXf& mat, 
-    const std::uint32_t num_singular_values){
-    assert(num_singular_values < std::min(mat.rows(), mat.cols()));
-
-    std::uint32_t dim = std::max(mat.rows(), mat.cols());
-    Eigen::MatrixXf jordan_wielandt = Eigen::MatrixXf::Zero(dim * 2, dim * 2);
-    jordan_wielandt.block(0, dim, mat.rows(), mat.cols()) = mat;
-    jordan_wielandt.block(dim, 0, mat.cols(), mat.rows()) = mat.transpose();
-
-    const arpaca::EigenvalueType type = arpaca::ALGEBRAIC_LARGEST;
-    arpaca::SymmetricEigenSolver<float> solver = arpaca::Solve(jordan_wielandt, num_singular_values, type);
-    const Eigen::MatrixXf& eigenvectors = solver.eigenvectors();
-    const Eigen::VectorXf& eigenvalues = solver.eigenvalues();
-
-    Eigen::MatrixXf singular_values = Eigen::MatrixXf::Zero(mat.rows(), mat.cols());
-    Eigen::MatrixXf u = Eigen::MatrixXf::Zero(mat.rows(), mat.rows());
-    Eigen::MatrixXf v = Eigen::MatrixXf::Zero(mat.cols(), mat.cols());
-
-    float scale = sqrt(2.f);
-
-    for(int i = 0; i < eigenvalues.size(); ++i){
-        singular_values(i, i) = eigenvalues(i);
-        u.col(i) = scale * eigenvectors.block(0, i, mat.rows(), 1);
-        v.col(i) = scale * eigenvectors.block(dim, i, mat.cols(), 1);
-    }
-
-    return std::make_tuple(u, singular_values, v);
-}
-
-Eigen::MatrixXf softThreshRankNoTrunc(const Eigen::MatrixXf& mat, float theta){
-    auto svd = mat.jacobiSvd(Eigen::ComputeFullU | Eigen::ComputeFullV);
-    auto singular_values = svd.singularValues();
-    Eigen::MatrixXf diagonal_singular = Eigen::MatrixXf::Zero(svd.matrixU().rows(), svd.matrixV().rows());
-    
-    for(std::uint32_t j = 0; j < singular_values.rows(); ++j){
-        diagonal_singular(j, j) = std::max(0.f, singular_values(j, 0) - theta);
-    }
-
-    return svd.matrixU() * diagonal_singular * svd.matrixV().transpose();
-}
-
-Eigen::MatrixXf softThreshRank(const Eigen::MatrixXf& mat, float theta, const std::uint32_t initial, 
-    const std::uint32_t step_size){
-    std::uint32_t max_rank = std::min(mat.rows(), mat.cols());
-    std::uint32_t curr_step_size = std::min(max_rank, initial);
-
-    std::uint32_t dim = std::max(mat.rows(), mat.cols());
-    Eigen::MatrixXf jordan_wielandt = Eigen::MatrixXf::Zero(dim * 2, dim * 2);
-
-    {
-        jordan_wielandt.block(0, dim, mat.rows(), mat.cols()) = mat;
-        jordan_wielandt.block(dim, 0, mat.cols(), mat.rows()) = mat.transpose();
-    }
-    
-    arpaca::SymmetricEigenSolver<float> solver;
-    while(true){
-        solver = arpaca::Solve(jordan_wielandt, curr_step_size, arpaca::ALGEBRAIC_LARGEST);
-        if(curr_step_size == max_rank || solver.eigenvalues()(0) < theta){
-            break;
-        }
-        curr_step_size = std::min(max_rank, curr_step_size + step_size);
-    }
-
-    const Eigen::MatrixXf& eigenvectors = solver.eigenvectors();
-    const Eigen::VectorXf& eigenvalues = solver.eigenvalues();
-
-    Eigen::MatrixXf singular_values = Eigen::MatrixXf::Zero(mat.rows(), mat.cols());
-    Eigen::MatrixXf u = Eigen::MatrixXf::Zero(mat.rows(), mat.rows());
-    Eigen::MatrixXf v = Eigen::MatrixXf::Zero(mat.cols(), mat.cols());
-
-    float scale = sqrt(2.f);
-    for(int i = 0; i < eigenvalues.size(); ++i){
-        singular_values(i, i) = std::max(0.f, eigenvalues(i) - theta);
-        u.col(i) = scale * eigenvectors.block(0, i, mat.rows(), 1);
-        v.col(i) = scale * eigenvectors.block(dim, i, mat.cols(), 1);
-    }
-
-    return u * singular_values * v.transpose();
-}
-
 Spectrum sample(Scene* scene, Sampler* sampler, const Intersection& its, const VPL& vpl, float min_dist, 
     bool check_occlusion){
 
@@ -252,18 +170,6 @@ Spectrum sample(Scene* scene, Sampler* sampler, const Intersection& its, const V
     float ln_dot_ldir = std::max(0.f, dot(normalize(vpl.its.shFrame.n), normalize(its.p - vpl.its.p)));
 
     return (vpl.P * ln_dot_ldir * attenuation * n_dot_ldir * albedo) / PI;
-}
-
-Eigen::MatrixXf computeMoorePenroseInverse(const Eigen::MatrixXf& m){
-    auto svd = m.jacobiSvd(Eigen::ComputeFullV | Eigen::ComputeFullU);
-    auto singular_values = svd.singularValues();
-    Eigen::MatrixXf svmat = Eigen::MatrixXf::Zero(m.cols(), m.rows());
-    for(auto i = 0; i < singular_values.size(); ++i){
-        if(fabs(singular_values(i)) > 0.000001f){
-            svmat(i, i) = 1.f / singular_values(i);
-        }
-    }
-    return svd.matrixV() * svmat * svd.matrixU().adjoint();
 }
 
 MTS_NAMESPACE_END
