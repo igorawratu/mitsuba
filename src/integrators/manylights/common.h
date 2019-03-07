@@ -30,25 +30,22 @@ std::tuple<Eigen::Matrix<typename MatrixType::Scalar, Eigen::Dynamic, Eigen::Dyn
     typedef typename Eigen::Matrix<Scalar, Eigen::Dynamic, Eigen::Dynamic> DenseMatrix;
     typedef typename Eigen::Matrix<Scalar, Eigen::Dynamic, 1> ScalarVector;
 
-    assert(num_singular_values < std::min(mat.rows(), mat.cols()));
+    Index max_rank = std::min(mat.rows(), mat.cols());
+    num_singular_values = std::min(num_singular_values, max_rank);
 
-    DenseMatrix mmt = mat * mat.transpose();
-    DenseMatrix mtm = mat.transpose() * mat;
-
-    const arpaca::EigenvalueType type = arpaca::ALGEBRAIC_LARGEST;
-    arpaca::SymmetricEigenSolver<Scalar> mmtsolver = arpaca::Solve(mmt, num_singular_values, type);
-    arpaca::SymmetricEigenSolver<Scalar> mtmsolver = arpaca::Solve(mtm, num_singular_values, type);
-
-    const DenseMatrix& uvectors = mmtsolver.eigenvectors();
-    const DenseMatrix& vvectors = mtmsolver.eigenvectors();
-    const ScalarVector& eigenvalues = mmtsolver.eigenvalues();
+    RedSVD::RedSVD<DenseMatrix> svd;
+    svd.compute(mat, num_singular_values);
 
     DenseMatrix singular_values = DenseMatrix::Zero(mat.rows(), mat.cols());
     DenseMatrix u = DenseMatrix::Zero(mat.rows(), mat.rows());
     DenseMatrix v = DenseMatrix::Zero(mat.cols(), mat.cols());
 
-    for(Index i = 0; i < eigenvalues.size(); ++i){
-        singular_values(i, i) = sqrt(eigenvalues(i));
+    const DenseMatrix uvectors = svd.matrixU();
+    const DenseMatrix vvectors = svd.matrixV();
+    const ScalarVector svs = svd.singularValues();
+
+    for(Index i = 0; i < svs.size(); ++i){
+        singular_values(i, i) = svs(i);
         u.col(i) = uvectors.col(i);
         v.col(i) = vvectors.col(i);
     }
@@ -58,7 +55,7 @@ std::tuple<Eigen::Matrix<typename MatrixType::Scalar, Eigen::Dynamic, Eigen::Dyn
 
 template<typename MatrixType>
 Eigen::Matrix<typename MatrixType::Scalar, Eigen::Dynamic, Eigen::Dynamic> 
-    softThreshRankNoTrunc(const MatrixType& mat, float theta){
+    softThreshRankNoTrunc(const MatrixType& mat, typename MatrixType::Scalar theta){
     typedef typename MatrixType::Scalar Scalar;
     typedef typename MatrixType::Index Index;
     typedef typename Eigen::Matrix<Scalar, Eigen::Dynamic, Eigen::Dynamic> DenseMatrix;
@@ -68,7 +65,7 @@ Eigen::Matrix<typename MatrixType::Scalar, Eigen::Dynamic, Eigen::Dynamic>
     DenseMatrix diagonal_singular = DenseMatrix::Zero(svd.matrixU().rows(), svd.matrixV().rows());
     
     for(Index j = 0; j < singular_values.rows(); ++j){
-        diagonal_singular(j, j) = std::max(0.f, singular_values(j, 0) - theta);
+        diagonal_singular(j, j) = std::max(Scalar(0), singular_values(j, 0) - theta);
     }
 
     return svd.matrixU() * diagonal_singular * svd.matrixV().transpose();
@@ -86,11 +83,6 @@ Eigen::Matrix<typename MatrixType::Scalar, Eigen::Dynamic, Eigen::Dynamic>
     Index max_rank = std::min(mat.rows(), mat.cols());
     Index curr_step_size = std::min(max_rank, initial);
 
-    /*Eigen::MatrixXf mmt = mat * mat.transpose();
-    Eigen::MatrixXf mtm = mat.transpose() * mat;
-    
-    arpaca::SymmetricEigenSolver<float> mmtsolver;*/
-
     RedSVD::RedSVD<DenseMatrix> svd;
 
     while(true){
@@ -98,33 +90,13 @@ Eigen::Matrix<typename MatrixType::Scalar, Eigen::Dynamic, Eigen::Dynamic>
         if(curr_step_size == max_rank || svd.singularValues()(svd.singularValues().size() - 1) < theta){
             break;
         }
-        
-        /*mmtsolver = arpaca::Solve(mmt, curr_step_size, arpaca::ALGEBRAIC_LARGEST);
-        if(curr_step_size == max_rank || mmtsolver.eigenvalues()(0) < theta){
-            break;
-        }*/
-
-        
 
         curr_step_size = std::min(max_rank, curr_step_size + step_size);
-        
     }
 
     DenseMatrix singular_values = DenseMatrix::Zero(mat.rows(), mat.cols());
     DenseMatrix u = DenseMatrix::Zero(mat.rows(), mat.rows());
     DenseMatrix v = DenseMatrix::Zero(mat.cols(), mat.cols());
-
-    /*arpaca::SymmetricEigenSolver<float> mtmsolver = arpaca::Solve(mtm, curr_step_size, arpaca::ALGEBRAIC_LARGEST);;
-
-    const Eigen::MatrixXf& uvectors = mmtsolver.eigenvectors();
-    const Eigen::VectorXf& eigenvalues = mmtsolver.eigenvalues();
-    const Eigen::MatrixXf& vvectors = mtmsolver.eigenvectors();
-
-    for(int i = 0; i < eigenvalues.size(); ++i){
-        singular_values(i, i) = sqrt(eigenvalues(i));
-        u.col(i) = uvectors.col(i);
-        v.col(i) = vvectors.col(i);
-    }*/
 
     const DenseMatrix uvectors = svd.matrixU();
     const DenseMatrix vvectors = svd.matrixV();

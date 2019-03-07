@@ -32,37 +32,44 @@
 
 #include <cstdlib>
 #include <cmath>
+#include <random>
+#include <chrono>
 
 namespace RedSVD
 {
 	template<typename Scalar>
-	inline void sample_gaussian(Scalar& x, Scalar& y)
+	inline void sample_gaussian(Scalar& x, Scalar& y, std::mt19937& rng)
 	{
-		using std::sqrt;
+		/*using std::sqrt;
 		using std::log;
 		using std::cos;
 		using std::sin;
 		
 		const Scalar PI(3.1415926535897932384626433832795028841971693993751);
+		std::uniform_real_distribution<Scalar> gen(Scalar(0), Scalar(1));
 		
-		Scalar v1 = (Scalar)(std::rand() + Scalar(1)) / ((Scalar)RAND_MAX+Scalar(2));
-		Scalar v2 = (Scalar)(std::rand() + Scalar(1)) / ((Scalar)RAND_MAX+Scalar(2));
+		Scalar v1 = gen(rng);
+		Scalar v2 = gen(rng);
 		Scalar len = sqrt(Scalar(-2) * log(v1));
 		x = len * cos(Scalar(2) * PI * v2);
-		y = len * sin(Scalar(2) * PI * v2);
+		y = len * sin(Scalar(2) * PI * v2);*/
+		std::normal_distribution<Scalar> gen(Scalar(0), Scalar(1));
+
+		x = gen(rng);
+		y = gen(rng);
 	}
 	
 	template<typename MatrixType>
-	inline void sample_gaussian(MatrixType& mat)
+	inline void sample_gaussian(MatrixType& mat, std::mt19937& rng)
 	{
 		typedef typename MatrixType::Index Index;
 		
 		for(Index i = 0; i < mat.rows(); ++i)
 		{
 			for(Index j = 0; j+1 < mat.cols(); j += 2)
-				sample_gaussian(mat(i, j), mat(i, j+1));
+				sample_gaussian(mat(i, j), mat(i, j+1), rng);
 			if(mat.cols() % 2)
-				sample_gaussian(mat(i, mat.cols()-1), mat(i, mat.cols()-1));
+				sample_gaussian(mat(i, mat.cols()-1), mat(i, mat.cols()-1), rng);
 		}
 	}
 	
@@ -104,7 +111,9 @@ namespace RedSVD
 		typedef typename Eigen::Matrix<Scalar, Eigen::Dynamic, Eigen::Dynamic> DenseMatrix;
 		typedef typename Eigen::Matrix<Scalar, Eigen::Dynamic, 1> ScalarVector;
 		
-		RedSVD() {}
+		std::mt19937 rng;
+
+		RedSVD() : rng(std::chrono::high_resolution_clock::now().time_since_epoch().count()){}
 		
 		RedSVD(const MatrixType& A)
 		{
@@ -128,7 +137,7 @@ namespace RedSVD
 			
 			// Gaussian Random Matrix for A^T
 			DenseMatrix O(A.rows(), r);
-			sample_gaussian(O);
+			sample_gaussian(O, rng);
 			
 			// Compute Sample Matrix of A^T
 			DenseMatrix Y = A.transpose() * O;
@@ -141,7 +150,7 @@ namespace RedSVD
 			
 			// Gaussian Random Matrix
 			DenseMatrix P(B.cols(), r);
-			sample_gaussian(P);
+			sample_gaussian(P, rng);
 			
 			// Compute Sample Matrix of B
 			DenseMatrix Z = B * P;
@@ -191,8 +200,10 @@ namespace RedSVD
 		typedef typename MatrixType::Index Index;
 		typedef typename Eigen::Matrix<Scalar, Eigen::Dynamic, Eigen::Dynamic> DenseMatrix;
 		typedef typename Eigen::Matrix<Scalar, Eigen::Dynamic, 1> ScalarVector;
+
+		std::mt19937 rng;
 		
-		RedSymEigen() {}
+		RedSymEigen() : rng(std::chrono::high_resolution_clock::now().time_since_epoch().count()){}
 		
 		RedSymEigen(const MatrixType& A)
 		{
@@ -216,7 +227,7 @@ namespace RedSVD
 			
 			// Gaussian Random Matrix
 			DenseMatrix O(A.rows(), r);
-			sample_gaussian(O);
+			sample_gaussian(O, rng);
 			
 			// Compute Sample Matrix of A
 			DenseMatrix Y = A.transpose() * O;
