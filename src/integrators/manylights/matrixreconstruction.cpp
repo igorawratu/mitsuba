@@ -263,12 +263,14 @@ void printToFile(const std::vector<float>& vals, std::string filename, std::ios_
     output_file.close();
 }
 
-std::vector<std::uint32_t> importanceSampleLights(KDTNode<ReconstructionSample>* slice, std::uint32_t sample_index, 
-    std::uint32_t num_samples, std::mt19937& rng){
-    const ReconstructionSample& slice_sample = slice->sample(sample_index);
-    assert(slice_sample.unoccluded_samples.size() > 0);
+std::vector<std::uint32_t> importanceSample(KDTNode<ReconstructionSample>* slice, std::uint32_t sample_index, 
+    std::uint32_t num_samples, std::mt19937& rng, bool lights){
+    assert((lights && slice->sample(sample_index).unoccluded_samples.size() > 0) ||
+        (!lights && slice->sample_indices.size()) > 0);
     
-    std::vector<std::uint32_t> available(slice_sample.unoccluded_samples.size());
+    std::uint32_t total_vals = lights ? slice->sample(sample_index).unoccluded_samples.size() : 
+        slice->sample_indices.size();
+    std::vector<std::uint32_t> available(total_vals);
     std::iota(available.begin(), available.end(), 0);
 
     num_samples = std::min((size_t)num_samples, available.size());
@@ -280,7 +282,8 @@ std::vector<std::uint32_t> importanceSampleLights(KDTNode<ReconstructionSample>*
     for(std::uint32_t i = 0; i < num_samples; ++i){
         double total_contrib = 0.;
         for(std::uint32_t j = 0; j < available.size(); ++j){
-            total_contrib += slice_sample.unoccluded_samples[available[j]].getLuminance();
+            total_contrib += lights ? slice->sample(sample_index).unoccluded_samples[available[j]].getLuminance() :
+                slice->sample(available[j]).unoccluded_samples[sample_index].getLuminance();
         }
 
         std::uniform_real_distribution<double> gen(0., total_contrib);
@@ -288,7 +291,8 @@ std::vector<std::uint32_t> importanceSampleLights(KDTNode<ReconstructionSample>*
 
         std::uint32_t idx = 0;
         for(; idx < available.size(); ++idx){
-            selection -= slice_sample.unoccluded_samples[available[idx]].getLuminance();
+            selection -= lights ? slice->sample(sample_index).unoccluded_samples[available[idx]].getLuminance() :
+                slice->sample(available[idx]).unoccluded_samples[sample_index].getLuminance();
             if(selection <= 0.){
                 break;
             }
@@ -315,12 +319,13 @@ std::vector<std::uint32_t> sampleRow(Scene* scene, KDTNode<ReconstructionSample>
         num_samples <= max_samples);
 
     std::vector<std::uint32_t> sampled_indices;
-    if(resample){
+    //if(resample){
         if(recover_transpose){
-            sampled_indices = importanceSampleLights(slice, col, num_samples, rng);
+            sampled_indices = importanceSample(slice, col, num_samples, rng, true);
         }
         else{
-            sampled_indices.resize(num_samples);
+            sampled_indices = importanceSample(slice, col, num_samples, rng, false);
+            /*sampled_indices.resize(num_samples);
 
             if(num_samples == max_samples){
                 std::iota(sampled_indices.begin(), sampled_indices.end(), 0);
@@ -338,12 +343,12 @@ std::vector<std::uint32_t> sampleRow(Scene* scene, KDTNode<ReconstructionSample>
                 }
 
                 std::sort(sampled_indices.begin(), sampled_indices.end());
-            }    
+            }  */  
         }
-    }
+    /*}
     else{
         sampled_indices = sample_set;
-    }
+    }*/
 
     Properties props("independent");
 	Sampler *sampler = static_cast<Sampler*>(PluginManager::getInstance()->createObject(MTS_CLASS(Sampler), props));
