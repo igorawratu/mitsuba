@@ -86,8 +86,9 @@ Eigen::Matrix<typename MatrixType::Scalar, Eigen::Dynamic, Eigen::Dynamic>
     RedSVD::RedSVD<DenseMatrix> svd;
 
     while(true){
-        svd.compute(mat, curr_step_size);
-        if(curr_step_size == max_rank || svd.singularValues()(svd.singularValues().size() - 1) < theta){
+        Index actual_dim_to_compute = std::min(max_rank, curr_step_size + max_rank / 10);
+        svd.compute(mat, std::min(max_rank, actual_dim_to_compute));
+        if(curr_step_size == max_rank || svd.singularValues()(curr_step_size - 1) < theta){
             break;
         }
 
@@ -102,7 +103,7 @@ Eigen::Matrix<typename MatrixType::Scalar, Eigen::Dynamic, Eigen::Dynamic>
     const DenseMatrix vvectors = svd.matrixV();
     const ScalarVector svs = svd.singularValues();
 
-    for(Index i = 0; i < svs.size(); ++i){
+    for(Index i = 0; i < curr_step_size; ++i){
         singular_values(i, i) = std::max((Scalar)0, svs(i) - theta);
         u.col(i) = uvectors.col(i);
         v.col(i) = vvectors.col(i);

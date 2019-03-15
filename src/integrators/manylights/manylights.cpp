@@ -320,11 +320,15 @@ private:
 				std::uint32_t slice_size = props.getInteger("completion-slice_size", 1024);
 				bool visibility_only = props.getInteger("completion-visibility_only", 0) > 0;
 				bool adaptive_col_sampling = props.getInteger("completion-adaptive_col_sampling", 0) > 0;
+				bool adaptive_importance_sampling = props.getInteger("completion-adaptive_importance_sampling", 0) > 0;
+				bool adaptive_force_resample = props.getInteger("completion-adaptive_force_resample", 0) > 0;
+				bool adaptive_recover_transpose = props.getInteger("completion-adaptive_recover_transpose", 0) > 0;
 
 				std::unique_ptr<ManyLightsClusterer> clusterer(new PassthroughClusterer(vpls_));
 				return std::unique_ptr<ManyLightsRenderer>(new MatrixReconstructionRenderer(std::move(clusterer), 
 					sample_percentage, min_dist_, step_size_factor, tolerance, tau, max_iterations, slice_size,
-					visibility_only, adaptive_col_sampling));
+					visibility_only, adaptive_col_sampling, adaptive_importance_sampling, adaptive_force_resample,
+					adaptive_recover_transpose));
 			}
 			case MATRIXSEPARATION:
 			{
