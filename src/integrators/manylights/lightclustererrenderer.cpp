@@ -27,7 +27,6 @@ LightClustererRenderer::~LightClustererRenderer(){
 }
 
 bool LightClustererRenderer::render(Scene* scene){
-    std::cout << "hello" << std::endl;
     {
         std::lock_guard<std::mutex> lock(cancel_lock_);
         cancel_ = false;
