@@ -19,7 +19,8 @@ MTS_NAMESPACE_BEGIN
 MatrixReconstructionRenderer::MatrixReconstructionRenderer(std::unique_ptr<ManyLightsClusterer> clusterer,
     float sample_percentage, float min_dist, float step_size_factor, float tolerance, float tau, 
     std::uint32_t max_iterations, std::uint32_t slice_size, bool visibility_only, bool adaptive_col, 
-    bool adaptive_importance_sampling, bool adaptive_force_resample, bool adaptive_recover_transpose) : 
+    bool adaptive_importance_sampling, bool adaptive_force_resample, bool adaptive_recover_transpose,
+    bool truncated) : 
         clusterer_(std::move(clusterer)), 
         sample_percentage_(sample_percentage), 
         min_dist_(min_dist), 
@@ -33,6 +34,7 @@ MatrixReconstructionRenderer::MatrixReconstructionRenderer(std::unique_ptr<ManyL
         adaptive_importance_sampling_(adaptive_importance_sampling),
         adaptive_force_resample_(adaptive_force_resample),
         adaptive_recover_transpose_(adaptive_recover_transpose),
+        truncated_(truncated),
         cancel_(false){
 }
 
@@ -49,6 +51,7 @@ MatrixReconstructionRenderer::MatrixReconstructionRenderer(MatrixReconstructionR
     adaptive_col_sampling_(other.adaptive_col_sampling_),
     adaptive_importance_sampling_(other.adaptive_importance_sampling_),
     adaptive_force_resample_(other.adaptive_force_resample_),
+    truncated_(other.truncated_),
     cancel_(other.cancel_){
 }
 
@@ -67,6 +70,7 @@ MatrixReconstructionRenderer& MatrixReconstructionRenderer::operator = (MatrixRe
         adaptive_importance_sampling_ = other.adaptive_importance_sampling_;
         adaptive_force_resample_ = other.adaptive_force_resample_;
         adaptive_recover_transpose_ = other.adaptive_recover_transpose_;
+        truncated_ = other.truncated_;
         cancel_ = other.cancel_;
     }
     return *this;
@@ -495,7 +499,8 @@ std::uint32_t adaptiveMatrixReconstruction(Eigen::MatrixXd& mat, Scene* scene,
 }
 
 void svt(Eigen::MatrixXd& reconstructed_matrix, const Eigen::MatrixXd& lighting_matrix, float step_size, 
-    float tolerance, float tau, std::uint32_t max_iterations, const std::vector<std::uint32_t>& sampled_indices){
+    float tolerance, float tau, std::uint32_t max_iterations, const std::vector<std::uint32_t>& sampled_indices,
+    bool truncated){
 
     std::uint32_t k0 = tau / (step_size * lighting_matrix.norm()) + 1.5f; //extra .5 for rounding in case of float error
     Eigen::MatrixXd y = step_size * (float)k0 * lighting_matrix;
@@ -504,9 +509,12 @@ void svt(Eigen::MatrixXd& reconstructed_matrix, const Eigen::MatrixXd& lighting_
         std::uint32_t initial_sv = std::max(1u, max_possible_rank / 10u);
         std::uint32_t increment = std::max(1u, max_possible_rank / 20u);
 
-        //reconstructed_matrix = softThreshRank(y, tau, initial_sv, increment);
-        
-        reconstructed_matrix = softThreshRankNoTrunc(y, tau);
+        if(truncated){
+            reconstructed_matrix = softThreshRank(y, tau, initial_sv, increment);
+        }
+        else{
+            reconstructed_matrix = softThreshRankNoTrunc(y, tau);
+        }
 
         float numer_total_dist = 0.f;
 
@@ -599,9 +607,9 @@ bool MatrixReconstructionRenderer::render(Scene* scene){
             float step_size = 1.9f;//(1.2f * lighting_matrix.rows() * lighting_matrix.cols()) / (indices.size() * 3.f); 
 
             Eigen::MatrixXd reconstructed_r, reconstructed_b, reconstructed_g;
-            svt(reconstructed_r, rmat, step_size, tolerance_, tau_, max_iterations_, indices);
-            svt(reconstructed_g, gmat, step_size, tolerance_, tau_, max_iterations_, indices);
-            svt(reconstructed_b, bmat, step_size, tolerance_, tau_, max_iterations_, indices);
+            svt(reconstructed_r, rmat, step_size, tolerance_, tau_, max_iterations_, indices, truncated_);
+            svt(reconstructed_g, gmat, step_size, tolerance_, tau_, max_iterations_, indices, truncated_);
+            svt(reconstructed_b, bmat, step_size, tolerance_, tau_, max_iterations_, indices, truncated_);
             copyMatrixToBuffer(output_image, reconstructed_r, reconstructed_g, reconstructed_b, slices[i], size);
         }
     }
