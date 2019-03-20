@@ -49,7 +49,8 @@ public:
     MatrixReconstructionRenderer() = delete;
     MatrixReconstructionRenderer(std::unique_ptr<ManyLightsClusterer> clusterer, float sample_percentage_, 
         float min_dist, float step_size_factor, float tolerance, float tau, std::uint32_t max_iterations,
-        std::uint32_t slice_size, bool visibility_only, bool adaptive_col);
+        std::uint32_t slice_size, bool visibility_only, bool adaptive_col, bool adaptive_importance_sampling, 
+        bool adaptive_force_resample, bool adaptive_recover_transpose, bool truncated);
     MatrixReconstructionRenderer(const MatrixReconstructionRenderer& other) = delete;
     MatrixReconstructionRenderer(MatrixReconstructionRenderer&& other);
     MatrixReconstructionRenderer& operator = (const MatrixReconstructionRenderer& other) = delete;
@@ -71,6 +72,10 @@ private:
     bool output_stats_;
     bool visibility_only_;
     bool adaptive_col_sampling_;
+    bool adaptive_importance_sampling_;
+    bool adaptive_force_resample_;
+    bool adaptive_recover_transpose_;
+    bool truncated_;
     std::mutex cancel_lock_;
     bool cancel_;
 

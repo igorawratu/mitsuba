@@ -5,6 +5,7 @@
 #include <stdexcept>
 #include <vector>
 #include <eigen3/Eigen/Core>
+#include <thread>
 
 // ARPACK interface
 extern "C" {
@@ -217,20 +218,43 @@ class SymmetricEigenSolver {
                     &leading_dimension, iparam, ipntr, workd.data(),
                     workl.data(), &lworkl, &info);
 
+      auto getMiddleRows = [](const Vector& mat, int lower, int num){
+        Vector out(num);
+        for(int i = 0; i < num; ++i){
+          if(i >= out.rows() || (i + lower) >= mat.rows()){
+            std::cout << "Error: " << i << " " << lower << " " << out.rows() << " " << mat.rows() << std::endl;
+          }
+          out(i, 0) = mat(i + lower, 0);
+        }
+
+        return out;
+      };
+
+      auto assignMiddleRows = [](Vector& dest, const Vector& src, int lower, int num){
+        for(int i = 0; i < num; ++i){
+          if(i >= src.rows() || (i + lower) >= dest.rows()){
+            std::cout << "Error: " << i << " " << lower << " " << src.rows() << " " << dest.rows() << std::endl;
+          }
+          dest(lower + i, 0) = src(i, 0);
+        }
+      };
+
       switch (mode) {
         case -1:
-          op(workd.middleRows(ipntr[0] - 1, dimension),
-             workd.middleRows(ipntr[1] - 1, dimension));
+          op(getMiddleRows(workd, ipntr[0] - 1, dimension), 
+            getMiddleRows(workd, ipntr[1] - 1, dimension));
           break;
         case 1:
-          op(workd.middleRows(ipntr[2] - 1, dimension),
-             workd.middleRows(ipntr[1] - 1, dimension));
-          workd.middleRows(ipntr[2] - 1, dimension) =
-              workd.middleRows(ipntr[0] - 1, dimension);
+          op(getMiddleRows(workd, ipntr[2] - 1, dimension),
+             getMiddleRows(workd, ipntr[1] - 1, dimension));
+          assignMiddleRows(workd, 
+            getMiddleRows(workd, ipntr[0] - 1, dimension),
+            ipntr[2] - 1, dimension);
           break;
         case 2:
-          workd.middleRows(ipntr[1] - 1, dimension) =
-              workd.middleRows(ipntr[0] - 1, dimension);
+          assignMiddleRows(workd,
+            getMiddleRows(workd, ipntr[0] - 1, dimension),
+            ipntr[1] - 1, dimension);
           break;
       }
     }
