@@ -31,7 +31,9 @@ std::unique_ptr<LightTreeNode> createLightTree(const std::vector<VPL>& vpls, EVP
 		}
 		
 		nodes[current_level][i]->vpl = vpls[i];
-		nodes[current_level][i]->emission_scale = 1.f;
+		float r, g, b;
+		vpls[i].P.toLinearRGB(r, g, b);
+		nodes[current_level][i]->emission_scale = Vector3f(r, g, b).length();
 	}
 
 	typedef std::tuple<float, std::uint32_t, std::uint32_t> SimEntry;
@@ -121,19 +123,19 @@ std::unique_ptr<LightTreeNode> createLightTree(const std::vector<VPL>& vpls, EVP
 						std::max(c1->max_bounds[2], c2->max_bounds[2]));
 				}
 				
-				float c1_intensity = c1->vpl.P.getLuminance() * c1->emission_scale;
-				float c2_intensity = c2->vpl.P.getLuminance() * c2->emission_scale;
+				float c1_intensity = c1->emission_scale;
+				float c2_intensity = c2->emission_scale;
 
 				float sample = sampler->next1D();
 
 				if (sample < c1_intensity / (c1_intensity + c2_intensity)) {
 					nodes[next_level].back()->vpl = c1->vpl;
-					nodes[next_level].back()->emission_scale = c1->emission_scale + c2_intensity / c1->vpl.P.getLuminance();
 				}
 				else {
 					nodes[next_level].back()->vpl = c2->vpl;
-					nodes[next_level].back()->emission_scale = c2->emission_scale + c1_intensity / c2->vpl.P.getLuminance();
 				}
+
+				nodes[next_level].back()->emission_scale = c1_intensity + c2_intensity;
 
 				if(vpl_type != EPointEmitterVPL){
 					nodes[next_level].back()->cone_ray = nodes[next_level].back()->vpl.its.shFrame.n;
@@ -190,7 +192,7 @@ float calculateClusterContribution(Point shading_point_position, Normal shading_
 	switch(vpl_type){
 		case EPointEmitterVPL:
 			d = std::max(min_dist, boxUDF(shading_point_position, 
-										light_tree_node->min_bounds, light_tree_node->max_bounds));
+				light_tree_node->min_bounds, light_tree_node->max_bounds));
 			geometric = 1.f / (d * d);
 			break;
 		case ESurfaceVPL:
@@ -224,7 +226,7 @@ float calculateClusterContribution(Point shading_point_position, Normal shading_
 
 	float material = std::max(0.f, largest);
 
-	return geometric * material * light_tree_node->vpl.P.getLuminance() * light_tree_node->emission_scale;
+	return geometric * material * light_tree_node->emission_scale;
 }
 
 float calculateExactClusterContribution(Point shading_point_position, Normal shading_point_normal,
@@ -329,21 +331,17 @@ std::vector<VPL> LightTree::getClusteringForPoint(const Intersection& its) {
 	};
 
 	std::priority_queue<ClusterAndScore, std::vector<ClusterAndScore>, decltype(comparator)> pqueue(comparator);
-	std::map<LightTreeNode*, int> traversed;
-	int counter = 0;
+
 	if(point_tree_root_ != nullptr){
 		pqueue.push(std::make_tuple(point_tree_root_.get(), 1.f));
-		traversed[point_tree_root_.get()] = counter++;
 	}
 
 	if(oriented_tree_root_ != nullptr){
 		pqueue.push(std::make_tuple(oriented_tree_root_.get(), 1.f));
-		traversed[oriented_tree_root_.get()] = counter++;
 	}
 
 	if(directional_tree_root_ != nullptr){
 		pqueue.push(std::make_tuple(directional_tree_root_.get(), 1.f));
-		traversed[directional_tree_root_.get()] = counter++;
 	}
 	
 	while((pqueue.size() + lights.size()) < max_lights_ && pqueue.size() > 0){
@@ -358,36 +356,39 @@ std::vector<VPL> LightTree::getClusteringForPoint(const Intersection& its) {
 		LightTreeNode* node = std::get<0>(entry);
 		
 		if(node->left == nullptr && node->right == nullptr){
-			//emission scale is 1 for leaf nodes so no need to fix intensity
-			lights.push_back(node->vpl);
+			//std::cerr << "Should not be possible to have a leaf with nonzero error" << std::endl;
+			//exit(0);
+			lights.push_back(std::get<0>(entry)->vpl);
+			continue;
 		}
-		else{
-			if(node->left == nullptr || node->right == nullptr){
-				std::cerr << "A node in the lighttree should always have 2 children" << std::endl;
-				exit(0);
-			}
 
-			if (traversed.find(node->left.get()) == traversed.end()) {
-				float rad = calculateClusterContribution(its.p, its.geoFrame.n, node->left.get(), node->left->vpl.type, min_dist_);
-				float actual_rad = calculateExactClusterContribution(its.p, its.geoFrame.n, node->left.get(), node->left->vpl.type, min_dist_);
-				float error = actual_rad < 0.00001f ? 0.f : fabs(rad - actual_rad) / actual_rad;
-				pqueue.push(std::make_tuple(node->left.get(), error));
-				traversed[node->left.get()] = counter++;
-			}
+		if(node->left == nullptr || node->right == nullptr){
+			std::cerr << "A node in the lighttree should always have 2 children" << std::endl;
+			exit(0);
+		}
 
-			if (traversed.find(node->right.get()) == traversed.end()) {
-				float rad = calculateClusterContribution(its.p, its.geoFrame.n, node->right.get(), node->right->vpl.type, min_dist_);
-				float actual_rad = calculateExactClusterContribution(its.p, its.geoFrame.n, node->right.get(), node->right->vpl.type, min_dist_);
-				float error = actual_rad < 0.00001f ? 0.f : fabs(rad - actual_rad) / actual_rad;
-				pqueue.push(std::make_tuple(node->right.get(), error));
-				traversed[node->right.get()] = counter++;
-			}
+		{
+			float rad = calculateClusterContribution(its.p, its.geoFrame.n, node->left.get(), node->left->vpl.type, min_dist_);
+			float actual_rad = calculateExactClusterContribution(its.p, its.geoFrame.n, node->left.get(), node->left->vpl.type, min_dist_);
+			float error = actual_rad < 0.00001f ? 0.f : fabs(rad - actual_rad) / actual_rad;
+			pqueue.push(std::make_tuple(node->left.get(), error));
+		}
+
+		{
+			float rad = calculateClusterContribution(its.p, its.geoFrame.n, node->right.get(), node->right->vpl.type, min_dist_);
+			float actual_rad = calculateExactClusterContribution(its.p, its.geoFrame.n, node->right.get(), node->right->vpl.type, min_dist_);
+			float error = actual_rad < 0.00001f ? 0.f : fabs(rad - actual_rad) / actual_rad;
+			pqueue.push(std::make_tuple(node->right.get(), error));
 		}
 	}
 
 	while(pqueue.size() > 0 && lights.size() < max_lights_){
 		auto entry = pqueue.top();
 		lights.push_back(std::get<0>(entry)->vpl);
+		Vector3f col;
+		lights.back().P.toLinearRGB(col.x, col.y, col.z);
+		col = normalize(col);
+		lights.back().P.fromLinearRGB(col.x, col.y, col.z);
 		lights.back().P *= std::get<0>(entry)->emission_scale;
 		pqueue.pop();
 	}
