@@ -176,6 +176,16 @@ float calculateClusterContribution(Point shading_point_position, Normal shading_
 
 	float geometric = 0.f;
 
+	Point bounding_points[8];
+	bounding_points[0] = light_tree_node->min_bounds;
+	bounding_points[1] = Point(light_tree_node->min_bounds[0], light_tree_node->min_bounds[1], light_tree_node->max_bounds[2]);
+	bounding_points[2] = Point(light_tree_node->min_bounds[0], light_tree_node->max_bounds[1], light_tree_node->min_bounds[2]);
+	bounding_points[3] = Point(light_tree_node->max_bounds[0], light_tree_node->min_bounds[1], light_tree_node->min_bounds[2]);
+	bounding_points[4] = Point(light_tree_node->min_bounds[0], light_tree_node->max_bounds[1], light_tree_node->max_bounds[2]);
+	bounding_points[5] = Point(light_tree_node->max_bounds[0], light_tree_node->min_bounds[1], light_tree_node->max_bounds[2]);
+	bounding_points[6] = Point(light_tree_node->max_bounds[0], light_tree_node->max_bounds[1], light_tree_node->min_bounds[2]);
+	bounding_points[7] = light_tree_node->max_bounds;
+
 	float d;
 	switch(vpl_type){
 		case EPointEmitterVPL:
@@ -188,51 +198,13 @@ float calculateClusterContribution(Point shading_point_position, Normal shading_
 				d = std::max(min_dist, boxUDF(shading_point_position,
 					light_tree_node->min_bounds, light_tree_node->max_bounds));
 
-				//rotation required to transform space so that normal is pointing torwards unit z
-				Vector3f unit_z = Vector3f(0.f, 0.f, 1.f);
-				float dp = dot(unit_z, shading_point_normal);
-				float angle = acos(dp);
-				Vector3f axis = abs(1.f - abs(dp)) < 0.0001f ? Vector3f(1.f, 0.f, 0.f) : 
-					cross(unit_z, shading_point_normal);
-
-				Transform rotation = Transform::rotate(axis, angle);
-
-				//since we are rotating, the min and max points no longer specify the actual min and max, thus we need
-				//the full box
-				Point bounding_points[8];
-				bounding_points[0] = light_tree_node->min_bounds;
-				bounding_points[1] = Point(light_tree_node->min_bounds[0], light_tree_node->min_bounds[1], light_tree_node->max_bounds[2]);
-				bounding_points[2] = Point(light_tree_node->min_bounds[0], light_tree_node->max_bounds[1], light_tree_node->min_bounds[2]);
-				bounding_points[3] = Point(light_tree_node->max_bounds[0], light_tree_node->min_bounds[1], light_tree_node->min_bounds[2]);
-				bounding_points[4] = Point(light_tree_node->min_bounds[0], light_tree_node->max_bounds[1], light_tree_node->max_bounds[2]);
-				bounding_points[5] = Point(light_tree_node->max_bounds[0], light_tree_node->min_bounds[1], light_tree_node->max_bounds[2]);
-				bounding_points[6] = Point(light_tree_node->max_bounds[0], light_tree_node->max_bounds[1], light_tree_node->min_bounds[2]);
-				bounding_points[7] = light_tree_node->max_bounds;
-
-				float max_x2 = std::numeric_limits<float>::min(), max_y2 = std::numeric_limits<float>::min(),
-					max_z = std::numeric_limits<float>::min();
-
-				float min_x2 = std::numeric_limits<float>::max(), min_y2 = std::numeric_limits<float>::max();
-
-				for (int i = 0; i < 8; ++i) {
-					bounding_points[i] = rotation.transformAffine(bounding_points[i]);
-
-					float x2 = bounding_points[i][0] * bounding_points[i][0];
-					float y2 = bounding_points[i][1] * bounding_points[i][1];
-
-					max_x2 = std::max(x2, max_x2);
-					min_x2 = std::min(x2, min_x2);
-					max_y2 = std::max(y2, max_y2);
-					min_y2 = std::min(y2, min_y2);
-					max_z = std::max(bounding_points[i][2], max_z);
+				float largest = std::numeric_limits<float>::min();
+				for(std::uint8_t i = 0; i < 8; ++i){
+					float dp = dot(normalize(shading_point_position - bounding_points[i]), light_tree_node->cone_ray);
+					largest = std::max(dp, largest);
 				}
 
-				float cosine_term = max_z / sqrt(max_z >= 0 ? (min_x2 + min_y2 + max_z * max_z) :
-					(max_x2 + max_y2 + max_z * max_z));
-
-				//float cosine = dot(normalize(shading_point_position - light_tree_node->vpl.its.p), 
-				//	light_tree_node->vpl.its.shFrame.n);
-				geometric = cosine_term / (d * d);
+				geometric = std::max(0.f, largest) / (d * d);
 			}
 
 			break;
@@ -244,7 +216,13 @@ float calculateClusterContribution(Point shading_point_position, Normal shading_
 	}
 
 	//only dealing with lambertian diffuse right now
-	float material = 1.f;
+	float largest = std::numeric_limits<float>::min();
+	for(std::uint8_t i = 0; i < 8; ++i){
+		float dp = dot(normalize(bounding_points[i] - shading_point_position), shading_point_normal);
+		largest = std::max(dp, largest);
+	}
+
+	float material = std::max(0.f, largest);
 
 	return geometric * material * light_tree_node->vpl.P.getLuminance() * light_tree_node->emission_scale;
 }
@@ -392,7 +370,7 @@ std::vector<VPL> LightTree::getClusteringForPoint(const Intersection& its) {
 			if (traversed.find(node->left.get()) == traversed.end()) {
 				float rad = calculateClusterContribution(its.p, its.geoFrame.n, node->left.get(), node->left->vpl.type, min_dist_);
 				float actual_rad = calculateExactClusterContribution(its.p, its.geoFrame.n, node->left.get(), node->left->vpl.type, min_dist_);
-				float error = fabs(rad - actual_rad) / actual_rad;
+				float error = actual_rad < 0.00001f ? 0.f : fabs(rad - actual_rad) / actual_rad;
 				pqueue.push(std::make_tuple(node->left.get(), error));
 				traversed[node->left.get()] = counter++;
 			}
@@ -400,7 +378,7 @@ std::vector<VPL> LightTree::getClusteringForPoint(const Intersection& its) {
 			if (traversed.find(node->right.get()) == traversed.end()) {
 				float rad = calculateClusterContribution(its.p, its.geoFrame.n, node->right.get(), node->right->vpl.type, min_dist_);
 				float actual_rad = calculateExactClusterContribution(its.p, its.geoFrame.n, node->right.get(), node->right->vpl.type, min_dist_);
-				float error = fabs(rad - actual_rad) / actual_rad;
+				float error = actual_rad < 0.00001f ? 0.f : fabs(rad - actual_rad) / actual_rad;
 				pqueue.push(std::make_tuple(node->right.get(), error));
 				traversed[node->right.get()] = counter++;
 			}
