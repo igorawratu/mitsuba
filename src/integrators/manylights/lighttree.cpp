@@ -138,7 +138,7 @@ std::unique_ptr<LightTreeNode> createLightTree(const std::vector<VPL>& vpls, EVP
 				nodes[next_level].back()->emission_scale = c1_intensity + c2_intensity;
 
 				if(vpl_type != EPointEmitterVPL){
-					nodes[next_level].back()->cone_ray = nodes[next_level].back()->vpl.its.shFrame.n;
+					nodes[next_level].back()->cone_ray = normalize((c1->cone_ray + c2->cone_ray)  / 2.f);
 				}
 
 				nodes[next_level].back()->left = std::move(nodes[current_level][id1]);
@@ -158,19 +158,23 @@ std::unique_ptr<LightTreeNode> createLightTree(const std::vector<VPL>& vpls, EVP
 	return std::move(nodes[current_level][0]);
 }
 
-//http://iquilezles.org/www/articles/distfunctions/distfunctions.htm
-float boxUDF(Point p, Point box_min, Point box_max){
+float distToBox(Point p, Point box_min, Point box_max){
 	assert(p.dim == box_min.dim && p.dim == box_max.dim && p.dim == 3);
 
-	Point box_center = (box_min + box_max) / 2;
-	Vector3f box_half_dims = (box_max - box_min) / 2;
-	
-	Point result;
-	result[0] = std::max(0., (double)fabs(p[0] - box_center[0]) - (double)box_half_dims.x);
-	result[1] = std::max(0., (double)fabs(p[1] - box_center[1]) - (double)box_half_dims.y);
-	result[2] = std::max(0., (double)fabs(p[2] - box_center[2]) - (double)box_half_dims.z);
+	float dist = 0.f;
 
-	return distance(result, Point(0.f));
+	for(std::uint8_t i = 0; i < 3; ++i){
+		float curr_dim_d = 0.f;
+		if(p[i] < box_min[i]){
+			curr_dim_d = box_min[i] - p[i];
+		}
+		else if(p[i] > box_max[i]){
+			curr_dim_d = p[i] - box_max[i];
+		}
+		dist += curr_dim_d * curr_dim_d;
+	}
+
+	return sqrt(dist);
 };
 
 float calculateClusterContribution(Point shading_point_position, Normal shading_point_normal,
@@ -191,13 +195,13 @@ float calculateClusterContribution(Point shading_point_position, Normal shading_
 	float d;
 	switch(vpl_type){
 		case EPointEmitterVPL:
-			d = std::max(min_dist, boxUDF(shading_point_position, 
+			d = std::max(min_dist, distToBox(shading_point_position, 
 				light_tree_node->min_bounds, light_tree_node->max_bounds));
 			geometric = 1.f / (d * d);
 			break;
 		case ESurfaceVPL:
 			{
-				d = std::max(min_dist, boxUDF(shading_point_position,
+				d = std::max(min_dist, distToBox(shading_point_position,
 					light_tree_node->min_bounds, light_tree_node->max_bounds));
 
 				float largest = std::numeric_limits<float>::min();
@@ -367,18 +371,22 @@ std::vector<VPL> LightTree::getClusteringForPoint(const Intersection& its) {
 			exit(0);
 		}
 
-		{
+		if(node->left.get() != nullptr){
 			float rad = calculateClusterContribution(its.p, its.geoFrame.n, node->left.get(), node->left->vpl.type, min_dist_);
 			float actual_rad = calculateExactClusterContribution(its.p, its.geoFrame.n, node->left.get(), node->left->vpl.type, min_dist_);
-			float error = actual_rad < 0.00001f ? 0.f : fabs(rad - actual_rad) / actual_rad;
-			pqueue.push(std::make_tuple(node->left.get(), error));
+			if(actual_rad > 0.f){
+				float error = fabs(rad - actual_rad) / actual_rad;
+				pqueue.push(std::make_tuple(node->left.get(), error));
+			}
 		}
 
-		{
+		if(node->right.get() != nullptr){
 			float rad = calculateClusterContribution(its.p, its.geoFrame.n, node->right.get(), node->right->vpl.type, min_dist_);
 			float actual_rad = calculateExactClusterContribution(its.p, its.geoFrame.n, node->right.get(), node->right->vpl.type, min_dist_);
-			float error = actual_rad < 0.00001f ? 0.f : fabs(rad - actual_rad) / actual_rad;
-			pqueue.push(std::make_tuple(node->right.get(), error));
+			if(actual_rad > 0.f){
+				float error = fabs(rad - actual_rad) / actual_rad;
+				pqueue.push(std::make_tuple(node->right.get(), error));
+			}
 		}
 	}
 
