@@ -87,7 +87,7 @@ Eigen::Matrix<typename MatrixType::Scalar, Eigen::Dynamic, Eigen::Dynamic>
 
     while(true){
         Index actual_dim_to_compute = std::min(max_rank, curr_step_size + max_rank / 10);
-        svd.compute(mat, std::min(max_rank, actual_dim_to_compute));
+        svd.compute(mat, actual_dim_to_compute);
         if(curr_step_size == max_rank || svd.singularValues()(curr_step_size - 1) < theta){
             break;
         }

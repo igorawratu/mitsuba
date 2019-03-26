@@ -84,7 +84,7 @@ bool LightClustererRenderer::render(Scene* scene){
 
             float r, g, b;
             accumulator.toSRGB(r, g, b);
-
+            
             //can set the buffer directly since we have direct control over the format of the image
             std::uint32_t offset = (x + y * output_image->getSize().x) * output_image->getBytesPerPixel();
             

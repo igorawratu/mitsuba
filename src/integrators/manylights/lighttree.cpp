@@ -7,6 +7,8 @@
 #include <functional>
 #include <array>
 #include <map>
+#include <random>
+#include <chrono>
 
 MTS_NAMESPACE_BEGIN
 
@@ -34,18 +36,17 @@ std::unique_ptr<LightTreeNode> createLightTree(const std::vector<VPL>& vpls, EVP
 		float r, g, b;
 		vpls[i].P.toLinearRGB(r, g, b);
 		nodes[current_level][i]->emission_scale = Vector3f(r, g, b).length();
+		nodes[current_level][i]->vpl.P /= nodes[current_level][i]->emission_scale;
 	}
 
 	typedef std::tuple<float, std::uint32_t, std::uint32_t> SimEntry;
 
 	auto comparator = [](SimEntry l, SimEntry r){
-		return std::get<0>(l) > std::get<0>(r);
+		return std::get<0>(l) < std::get<0>(r);
 	};
 
-	Properties props("independent");
-	Sampler *sampler = static_cast<Sampler*>(PluginManager::getInstance()->createObject(MTS_CLASS(Sampler), props));
-	sampler->configure();
-	sampler->generate(Point2i(0));
+	std::mt19937 rng(std::chrono::high_resolution_clock::now().time_since_epoch().count());
+	std::uniform_real_distribution<float> gen(0, 1);
 
 	while(true){
 		if(nodes[current_level].size() == 1){
@@ -75,7 +76,7 @@ std::unique_ptr<LightTreeNode> createLightTree(const std::vector<VPL>& vpls, EVP
 
 					float v = (1.f - dot(ray1, ray2));
 
-					d += v * v * min_dist * 2.f;
+					d += v * v * min_dist * 5.f;
 				}
 
 				similarity_matrix.push(std::make_tuple(d, i, j));
@@ -126,20 +127,28 @@ std::unique_ptr<LightTreeNode> createLightTree(const std::vector<VPL>& vpls, EVP
 				float c1_intensity = c1->emission_scale;
 				float c2_intensity = c2->emission_scale;
 
-				float sample = sampler->next1D();
+				float sample = gen(rng);
 
-				if (sample < c1_intensity / (c1_intensity + c2_intensity)) {
-					nodes[next_level].back()->vpl = c1->vpl;
-				}
-				else {
-					nodes[next_level].back()->vpl = c2->vpl;
+				if(c1_intensity > 0.f || c2_intensity > 0.f){
+					if (sample < c1_intensity / (c1_intensity + c2_intensity)) {
+						nodes[next_level].back()->vpl = c1->vpl;
+						nodes[next_level].back()->cone_ray = c1->cone_ray;
+					}
+					else {
+						nodes[next_level].back()->vpl = c2->vpl;
+						nodes[next_level].back()->cone_ray = c2->cone_ray;
+					}
+
+					nodes[next_level].back()->cone_ray = c1->cone_ray + c2->cone_ray;
+					if(nodes[next_level].back()->cone_ray.length() < 1e-20f){
+						nodes[next_level].back()->cone_ray = cross(c1->cone_ray, 
+							Vector3(gen(rng), gen(rng), gen(rng)));
+					}
+					
+					nodes[next_level].back()->cone_ray = normalize(nodes[next_level].back()->cone_ray);
 				}
 
 				nodes[next_level].back()->emission_scale = c1_intensity + c2_intensity;
-
-				if(vpl_type != EPointEmitterVPL){
-					nodes[next_level].back()->cone_ray = normalize((c1->cone_ray + c2->cone_ray)  / 2.f);
-				}
 
 				nodes[next_level].back()->left = std::move(nodes[current_level][id1]);
 				nodes[next_level].back()->right = std::move(nodes[current_level][id2]);
@@ -184,13 +193,13 @@ float calculateClusterContribution(Point shading_point_position, Normal shading_
 
 	Point bounding_points[8];
 	bounding_points[0] = light_tree_node->min_bounds;
-	bounding_points[1] = Point(light_tree_node->min_bounds[0], light_tree_node->min_bounds[1], light_tree_node->max_bounds[2]);
-	bounding_points[2] = Point(light_tree_node->min_bounds[0], light_tree_node->max_bounds[1], light_tree_node->min_bounds[2]);
+	bounding_points[1] = Point(light_tree_node->min_bounds[0], light_tree_node->max_bounds[1], light_tree_node->min_bounds[2]);
+	bounding_points[2] = Point(light_tree_node->max_bounds[0], light_tree_node->max_bounds[1], light_tree_node->min_bounds[2]);
 	bounding_points[3] = Point(light_tree_node->max_bounds[0], light_tree_node->min_bounds[1], light_tree_node->min_bounds[2]);
-	bounding_points[4] = Point(light_tree_node->min_bounds[0], light_tree_node->max_bounds[1], light_tree_node->max_bounds[2]);
-	bounding_points[5] = Point(light_tree_node->max_bounds[0], light_tree_node->min_bounds[1], light_tree_node->max_bounds[2]);
-	bounding_points[6] = Point(light_tree_node->max_bounds[0], light_tree_node->max_bounds[1], light_tree_node->min_bounds[2]);
-	bounding_points[7] = light_tree_node->max_bounds;
+	bounding_points[4] = Point(light_tree_node->min_bounds[0], light_tree_node->min_bounds[1], light_tree_node->max_bounds[2]);
+	bounding_points[5] = Point(light_tree_node->min_bounds[0], light_tree_node->max_bounds[1], light_tree_node->max_bounds[2]);
+	bounding_points[6] = light_tree_node->max_bounds;
+	bounding_points[7] = Point(light_tree_node->max_bounds[0], light_tree_node->min_bounds[1], light_tree_node->max_bounds[2]);
 
 	float d;
 	switch(vpl_type){
@@ -203,14 +212,116 @@ float calculateClusterContribution(Point shading_point_position, Normal shading_
 			{
 				d = std::max(min_dist, distToBox(shading_point_position,
 					light_tree_node->min_bounds, light_tree_node->max_bounds));
-
-				float largest = std::numeric_limits<float>::min();
-				for(std::uint8_t i = 0; i < 8; ++i){
-					float dp = dot(normalize(shading_point_position - bounding_points[i]), light_tree_node->cone_ray);
-					largest = std::max(dp, largest);
+				
+				if((light_tree_node->max_bounds - light_tree_node->min_bounds).length() < 
+					std::numeric_limits<float>::epsilon()){
+					float degree = dot(normalize(shading_point_position - light_tree_node->min_bounds), light_tree_node->cone_ray);
+					geometric = std::max(0.f, degree) / (d * d);
 				}
+				else{
+					Vector3f unit_z(0.f, 0.f, 1.f);
 
-				geometric = std::max(0.f, largest) / (d * d);
+					float angle = acos(dot(normalize(light_tree_node->cone_ray), unit_z));
+					Vector3f axis = cross(light_tree_node->cone_ray, unit_z);
+
+					//zero cross product means cone is pointing either in positive or negative z. Can set axis arbitrarily
+					//as long as it is orthogonal to unit z
+					if(axis.length() < 1e-20f){
+						axis = Vector(1, 0, 0);
+					}
+					Transform rot = Transform::rotate(axis, angle);
+					
+					Point transformed_points[8];
+
+					for(std::uint8_t i = 0; i < 8; ++i){
+						Point p = Point(shading_point_position - bounding_points[i]);
+						transformed_points[i] = rot.transformAffine(p);
+					}
+
+					float min_x = std::numeric_limits<float>::max();
+					float min_y = std::numeric_limits<float>::max();
+					float max_x = std::numeric_limits<float>::min();
+					float max_y = std::numeric_limits<float>::min();
+					float max_z = std::numeric_limits<float>::min();
+
+					for(std::uint8_t i = 0; i < 8; ++i){
+						min_x = std::min((float)transformed_points[i][0], min_x);
+						min_y = std::min((float)transformed_points[i][1], min_y);
+						max_x = std::max((float)transformed_points[i][0], max_x);
+						max_y = std::max((float)transformed_points[i][1], max_y);
+						max_z = std::max((float)transformed_points[i][2], max_z);
+					}
+
+					//box is behind light and won't get affected
+					if(max_z <= 0.f){
+						geometric = 0.f;
+					}
+					else{
+						//intersecting
+						if(min_x * max_x <= 0.f && min_y * max_y <= 0.f){
+							geometric = 1.f;
+						}
+						else{
+							float min_d = std::numeric_limits<float>::max();
+							Point closest_point(0.f);
+
+							std::pair<Point, Vector3f> lines[8];
+
+							for(std::uint8_t i = 0; i < 4; ++i){
+								std::uint32_t next = (i + 1) % 4;
+								lines[i] = std::make_pair(transformed_points[i], transformed_points[next] - transformed_points[i]);
+								lines[i + 4] = std::make_pair(transformed_points[i + 4], transformed_points[next + 4] - transformed_points[i + 4]);
+							}
+
+							for(std::uint8_t i = 0; i < 8; ++i){
+								if(lines[i].second.length() <std::numeric_limits<float>::epsilon()){
+									continue;
+								}
+
+								bool parallel = fabs(dot(normalize(lines[i].second), unit_z) - 1.f) > std::numeric_limits<float>::epsilon();
+								//in the case where the line is parallel to the z axis, the closest point is one of the corners
+								//which we will deal with when dealing with the corners
+								if(parallel){
+									continue;
+								}
+
+								Vector3f n1 = cross(lines[i].second, cross(unit_z, lines[i].second));
+								Vector3f n2 = cross(unit_z, cross(lines[i].second, unit_z));
+
+								Point on_unit_z = Point((dot(Vector3f(lines[i].first), n2) / dot(unit_z, n2)) * unit_z);
+
+								float t = dot(Vector3f(-lines[i].first), n1) / dot(lines[i].second, n1);
+								Point on_cube_edge = Point(lines[i].first + t * lines[i].second);
+
+								float dist = (on_unit_z - on_cube_edge).length();
+								if(dist < min_d && t >= 0.f && t <= 1.f){
+									min_d = dist;
+									closest_point = on_cube_edge;
+								}
+							}
+							
+							for(std::uint8_t i = 0; i < 8; ++i){
+								//can just calculate distance in x, y since the projection to unit z is just setting them
+								//to zero
+								float dist = sqrt(transformed_points[i][0] * transformed_points[i][0] + 
+									transformed_points[i][1] * transformed_points[i][1]);
+
+								if(dist < min_d){
+									min_d = dist;
+									closest_point = transformed_points[i];
+								}
+							}
+
+							float degree = dot(normalize(Vector3f(closest_point)), unit_z);
+							geometric = std::max(0.f, degree);
+						}
+						
+						geometric /= (d * d);
+					}
+				}
+				
+
+				
 			}
 
 			break;
@@ -349,6 +460,7 @@ std::vector<VPL> LightTree::getClusteringForPoint(const Intersection& its) {
 	}
 	
 	while((pqueue.size() + lights.size()) < max_lights_ && pqueue.size() > 0){
+		//std::cout << lights.size() << " " << pqueue.size() << std::endl;
 		ClusterAndScore entry = pqueue.top();
 		pqueue.pop();
 		
@@ -360,9 +472,8 @@ std::vector<VPL> LightTree::getClusteringForPoint(const Intersection& its) {
 		LightTreeNode* node = std::get<0>(entry);
 		
 		if(node->left == nullptr && node->right == nullptr){
-			//std::cerr << "Should not be possible to have a leaf with nonzero error" << std::endl;
-			//exit(0);
 			lights.push_back(std::get<0>(entry)->vpl);
+			lights.back().P *= std::get<0>(entry)->emission_scale;
 			continue;
 		}
 
@@ -374,9 +485,11 @@ std::vector<VPL> LightTree::getClusteringForPoint(const Intersection& its) {
 		if(node->left.get() != nullptr){
 			float rad = calculateClusterContribution(its.p, its.geoFrame.n, node->left.get(), node->left->vpl.type, min_dist_);
 			float actual_rad = calculateExactClusterContribution(its.p, its.geoFrame.n, node->left.get(), node->left->vpl.type, min_dist_);
+			
 			if(actual_rad > 0.f){
 				float error = fabs(rad - actual_rad) / actual_rad;
 				pqueue.push(std::make_tuple(node->left.get(), error));
+				//std::cout << rad << " " << actual_rad << " " << error << std::endl;
 			}
 		}
 
@@ -393,14 +506,11 @@ std::vector<VPL> LightTree::getClusteringForPoint(const Intersection& its) {
 	while(pqueue.size() > 0 && lights.size() < max_lights_){
 		auto entry = pqueue.top();
 		lights.push_back(std::get<0>(entry)->vpl);
-		Vector3f col;
-		lights.back().P.toLinearRGB(col.x, col.y, col.z);
-		col = normalize(col);
-		lights.back().P.fromLinearRGB(col.x, col.y, col.z);
 		lights.back().P *= std::get<0>(entry)->emission_scale;
+		//std::cout << std::get<1>(entry) << " ";
 		pqueue.pop();
 	}
-
+	//std::cout << std::endl;
 	//should be moved so it should be ok
 	return lights;
 }
