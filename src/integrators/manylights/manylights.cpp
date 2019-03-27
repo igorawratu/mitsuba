@@ -174,7 +174,7 @@ size_t generateVPLs(const Scene *scene, size_t offset, size_t count, int max_dep
 		Ray ray(point_sample.p, direction_sample.d, time);
 		Intersection its;
 		//generates vpls from additional bounces
-		while (!weight.isZero() && (depth < max_depth || max_depth == -1)) {
+		while (!weight.isZero() && (depth < max_depth || max_depth == -1) && vpls.size() < count) {
 			if (!scene->rayIntersect(ray, its))
 				break;
 
