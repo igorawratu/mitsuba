@@ -342,9 +342,6 @@ float calculateClusterContribution(Point shading_point_position, Normal shading_
 						geometric /= (d * d);
 					}
 				}
-				
-
-				
 			}
 
 			break;
@@ -471,15 +468,15 @@ std::vector<VPL> LightTree::getClusteringForPoint(const Intersection& its) {
 	std::priority_queue<ClusterAndScore, std::vector<ClusterAndScore>, decltype(comparator)> pqueue(comparator);
 
 	if(point_tree_root_ != nullptr){
-		pqueue.push(std::make_tuple(point_tree_root_.get(), 1.f));
+		pqueue.push(std::make_tuple(point_tree_root_.get(), std::numeric_limits<float>::max()));
 	}
 
 	if(oriented_tree_root_ != nullptr){
-		pqueue.push(std::make_tuple(oriented_tree_root_.get(), 1.f));
+		pqueue.push(std::make_tuple(oriented_tree_root_.get(), std::numeric_limits<float>::max()));
 	}
 
 	if(directional_tree_root_ != nullptr){
-		pqueue.push(std::make_tuple(directional_tree_root_.get(), 1.f));
+		pqueue.push(std::make_tuple(directional_tree_root_.get(), std::numeric_limits<float>::max()));
 	}
 	
 	while((pqueue.size() + lights.size()) < max_lights_ && pqueue.size() > 0){
@@ -535,6 +532,86 @@ std::vector<VPL> LightTree::getClusteringForPoint(const Intersection& its) {
 	}
 	//std::cout << std::endl;
 	//should be moved so it should be ok
+	return lights;
+}
+
+std::vector<VPL> LightTree::getClusteringForPoints(const std::vector<Intersection>& points){
+	std::vector<VPL> lights;
+
+	typedef std::tuple<LightTreeNode*, float> ClusterAndScore;
+	//largest first, but front of the queue is last out
+	auto comparator = [](ClusterAndScore l, ClusterAndScore r){
+		return std::get<1>(l) < std::get<1>(r);
+	};
+
+	std::priority_queue<ClusterAndScore, std::vector<ClusterAndScore>, decltype(comparator)> pqueue(comparator);
+
+	if(point_tree_root_ != nullptr){
+		pqueue.push(std::make_tuple(point_tree_root_.get(), std::numeric_limits<float>::max()));
+	}
+
+	if(oriented_tree_root_ != nullptr){
+		pqueue.push(std::make_tuple(oriented_tree_root_.get(), std::numeric_limits<float>::max()));
+	}
+
+	if(directional_tree_root_ != nullptr){
+		pqueue.push(std::make_tuple(directional_tree_root_.get(), std::numeric_limits<float>::max()));
+	}
+	
+	while((pqueue.size() + lights.size()) < max_lights_ && pqueue.size() > 0){
+		//std::cout << lights.size() << " " << pqueue.size() << std::endl;
+		ClusterAndScore entry = pqueue.top();
+		pqueue.pop();
+
+		LightTreeNode* node = std::get<0>(entry);
+		
+		if(node->left == nullptr && node->right == nullptr){
+			lights.push_back(std::get<0>(entry)->vpl);
+			lights.back().P *= std::get<0>(entry)->emission_scale;
+			continue;
+		}
+
+		if(node->left == nullptr || node->right == nullptr){
+			std::cerr << "A node in the lighttree should always have 2 children" << std::endl;
+			exit(0);
+		}
+
+		if(node->left.get() != nullptr){
+			float rad = 0.f;
+			float actual_rad = 0.f;
+			for(std::uint32_t i = 0; i < points.size(); ++i){
+				rad += calculateClusterContribution(points[i].p, points[i].geoFrame.n, node->left.get(), node->left->vpl.type, min_dist_);
+				actual_rad = calculateExactClusterContribution(points[i].p, points[i].geoFrame.n, node->left.get(), node->left->vpl.type, min_dist_);
+			}
+
+			if(actual_rad > 0.f){
+				float error = fabs(rad - actual_rad) / actual_rad;
+				pqueue.push(std::make_tuple(node->left.get(), error));
+			}
+		}
+
+		if(node->right.get() != nullptr){
+			float rad = 0.f;
+			float actual_rad = 0.f;
+			for(std::uint32_t i = 0; i < points.size(); ++i){
+				rad += calculateClusterContribution(points[i].p, points[i].geoFrame.n, node->right.get(), node->right->vpl.type, min_dist_);
+				actual_rad += calculateExactClusterContribution(points[i].p, points[i].geoFrame.n, node->right.get(), node->right->vpl.type, min_dist_);
+			}
+
+			if(actual_rad > 0.f){
+				float error = fabs(rad - actual_rad) / actual_rad;
+				pqueue.push(std::make_tuple(node->right.get(), error));
+			}
+		}
+	}
+
+	while(pqueue.size() > 0 && lights.size() < max_lights_){
+		auto entry = pqueue.top();
+		lights.push_back(std::get<0>(entry)->vpl);
+		lights.back().P *= std::get<0>(entry)->emission_scale;
+		pqueue.pop();
+	}
+
 	return lights;
 }
 
