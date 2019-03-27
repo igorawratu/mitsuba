@@ -9,6 +9,7 @@
 #include <map>
 #include <random>
 #include <chrono>
+#include <math.h>
 
 MTS_NAMESPACE_BEGIN
 
@@ -30,6 +31,7 @@ std::unique_ptr<LightTreeNode> createLightTree(const std::vector<VPL>& vpls, EVP
 		
 		if(vpl_type != EPointEmitterVPL){
 			nodes[current_level][i]->cone_ray = vpls[i].its.shFrame.n;
+			nodes[current_level][i]->cone_halfangle = 0.f;
 		}
 		
 		nodes[current_level][i]->vpl = vpls[i];
@@ -39,7 +41,7 @@ std::unique_ptr<LightTreeNode> createLightTree(const std::vector<VPL>& vpls, EVP
 		nodes[current_level][i]->vpl.P /= nodes[current_level][i]->emission_scale;
 	}
 
-	typedef std::tuple<float, std::uint32_t, std::uint32_t> SimEntry;
+	typedef std::tuple<float, std::uint32_t, std::uint32_t, Vector3f, float> SimEntry;
 
 	auto comparator = [](SimEntry l, SimEntry r){
 		return std::get<0>(l) < std::get<0>(r);
@@ -58,6 +60,8 @@ std::unique_ptr<LightTreeNode> createLightTree(const std::vector<VPL>& vpls, EVP
 		for(size_t i = 0; i < nodes[current_level].size(); ++i){
 			for(size_t j = i + 1; j < nodes[current_level].size(); ++j){
 				float d = 0.f;
+				float union_angle_span = 0.f;
+				Vector3f bcone(0.f);
 
 				if(vpl_type != EDirectionalEmitterVPL){
 					Point min(std::min(nodes[current_level][i]->min_bounds[0], nodes[current_level][j]->min_bounds[0]), 
@@ -69,17 +73,41 @@ std::unique_ptr<LightTreeNode> createLightTree(const std::vector<VPL>& vpls, EVP
 					
 					d += (max - min).length();
 				}
-				
+
 				if(vpl_type != EPointEmitterVPL){
-					Vector3 ray1 = nodes[current_level][j]->cone_ray;
-					Vector3 ray2 = nodes[current_level][i]->cone_ray;
+					Vector3 ray1 = nodes[current_level][i]->cone_ray;
+					Vector3 ray2 = nodes[current_level][j]->cone_ray;
+					float ha1 = nodes[current_level][i]->cone_halfangle;
+					float ha2 = nodes[current_level][j]->cone_halfangle;
 
-					float v = (1.f - dot(ray1, ray2));
+					float angle = acos(dot(ray1, ray2));
+					float max_child_half = std::max(ha1, ha2);
+					float min_child_half = std::min(ha1, ha2);
+					
+					if((angle < max_child_half && (max_child_half - angle) > min_child_half) || (ray1 - ray2).length() < std::numeric_limits<float>::epsilon()){
+						union_angle_span = max_child_half;
+						bcone = ha1 > ha2 ? ray1 : ray2;
+					}
+					else{
+						union_angle_span = angle + ha1 + ha2;
+						union_angle_span = union_angle_span > M_PI ? 2 * M_PI : union_angle_span;
+						union_angle_span = std::min(union_angle_span / 2.f, M_PI);
 
-					d += v * v * min_dist * 5.f;
+						Vector3f axis = cross(ray1, ray2);
+						if(axis.length() < std::numeric_limits<float>::epsilon()){
+							axis = cross(ray1, Vector3f(gen(rng), gen(rng), gen(rng)));
+						}
+
+						Point new_coneray = Transform::rotate(axis, -ha1).transformAffine(Point(ray1));
+						bcone = Vector(Transform::rotate(axis, union_angle_span).transformAffine(new_coneray));
+					}
+
+					
+
+					d += union_angle_span * union_angle_span * min_dist * 2.f;
 				}
 
-				similarity_matrix.push(std::make_tuple(d, i, j));
+				similarity_matrix.push(std::make_tuple(d, i, j, bcone, union_angle_span));
 			}
 		}
 
@@ -132,20 +160,13 @@ std::unique_ptr<LightTreeNode> createLightTree(const std::vector<VPL>& vpls, EVP
 				if(c1_intensity > 0.f || c2_intensity > 0.f){
 					if (sample < c1_intensity / (c1_intensity + c2_intensity)) {
 						nodes[next_level].back()->vpl = c1->vpl;
-						nodes[next_level].back()->cone_ray = c1->cone_ray;
 					}
 					else {
 						nodes[next_level].back()->vpl = c2->vpl;
-						nodes[next_level].back()->cone_ray = c2->cone_ray;
 					}
 
-					nodes[next_level].back()->cone_ray = c1->cone_ray + c2->cone_ray;
-					if(nodes[next_level].back()->cone_ray.length() < 1e-20f){
-						nodes[next_level].back()->cone_ray = cross(c1->cone_ray, 
-							Vector3(gen(rng), gen(rng), gen(rng)));
-					}
-					
-					nodes[next_level].back()->cone_ray = normalize(nodes[next_level].back()->cone_ray);
+					nodes[next_level].back()->cone_ray = std::get<3>(entry);
+					nodes[next_level].back()->cone_halfangle = std::get<4>(entry);
 				}
 
 				nodes[next_level].back()->emission_scale = c1_intensity + c2_intensity;
@@ -163,7 +184,6 @@ std::unique_ptr<LightTreeNode> createLightTree(const std::vector<VPL>& vpls, EVP
 		nodes[current_level].clear();
 		current_level = next_level;
 	}
-
 	return std::move(nodes[current_level][0]);
 }
 
@@ -213,7 +233,10 @@ float calculateClusterContribution(Point shading_point_position, Normal shading_
 				d = std::max(min_dist, distToBox(shading_point_position,
 					light_tree_node->min_bounds, light_tree_node->max_bounds));
 				
-				if((light_tree_node->max_bounds - light_tree_node->min_bounds).length() < 
+				if(fabs(light_tree_node->cone_halfangle - M_PI) < std::numeric_limits<float>::epsilon()){
+					geometric = 1.f / d * d;
+				}
+				else if((light_tree_node->max_bounds - light_tree_node->min_bounds).length() < 
 					std::numeric_limits<float>::epsilon()){
 					float degree = dot(normalize(shading_point_position - light_tree_node->min_bounds), light_tree_node->cone_ray);
 					geometric = std::max(0.f, degree) / (d * d);
