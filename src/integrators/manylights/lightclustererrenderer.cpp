@@ -81,6 +81,11 @@ bool LightClustererRenderer::render(Scene* scene){
                     accumulator += sample(scene, sampler, its, vpls[i], min_dist_, true);
                 }
             }
+            else{
+                if(scene->hasEnvironmentEmitter()){
+                    accumulator = scene->evalEnvironment(RayDifferential(ray));
+                }
+            }
 
             float r, g, b;
             accumulator.toSRGB(r, g, b);

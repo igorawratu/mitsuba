@@ -137,15 +137,18 @@ size_t generateVPLs(const Scene *scene, size_t offset, size_t count, int max_dep
 
 		//samples an emitter, adds it to the vpl vector, and then extracts a point and direction sample to be used later for additional
 		//vpl generation
-		if (!emitter->isEnvironmentEmitter() && emitter->needsDirectionSample()) {
-			VPL vpl(ESurfaceVPL, weight);
+		if (!emitter->isEnvironmentEmitter()) {
+			EVPLType type = emitter->needsDirectionSample() ? ESurfaceVPL : EPointEmitterVPL;
+			VPL vpl(type, weight);
 			vpl.its.p = point_sample.p;
 			vpl.its.time = time;
 			vpl.its.shFrame = point_sample.n.isZero() ? standard_frame : Frame(point_sample.n);
 			vpl.emitter = emitter;
 			vpls.push_back(vpl);
 
-			weight *= emitter->sampleDirection(direction_sample, point_sample, sampler->next2D());
+			if(type == ESurfaceVPL){
+				weight *= emitter->sampleDirection(direction_sample, point_sample, sampler->next2D());
+			}
 		}
 		else {
 			DirectSamplingRecord direct_sample(scene->getKDTree()->getAABB().getCenter(), point_sample.time);

@@ -85,19 +85,22 @@ float calculateError(Scene* scene, const std::vector<VPL>& vpls, float min_dist,
                         bsdf_sample_record.wo = its.toLocal(n);
 
                         albedo = its.getBSDF()->eval(bsdf_sample_record);
+                        float n_dot_ldir = std::max(0.f, dot(normalize(n), normalize(vpls[i].its.p - its.p)));
 
-                        //only dealing with emitter and surface VPLs curently.
-                        if (vpls[i].type != EPointEmitterVPL && vpls[i].type != ESurfaceVPL){
-                            continue;
+                        Spectrum c = (vpls[i].P * n_dot_ldir * albedo) / PI;
+
+                        if(vpls[i].type != EPointEmitterVPL){
+                            float ln_dot_ldir = std::max(0.f, dot(normalize(vpls[i].its.shFrame.n), normalize(its.p - vpls[i].its.p)));
+                            c *= ln_dot_ldir;
                         }
 
-                        float d = std::max((its.p - vpls[i].its.p).length(), min_dist);
-                        float attenuation = 1.f / (d * d);
+                        if(vpls[i].type != EDirectionalEmitterVPL){
+                            float d = std::max((its.p - vpls[i].its.p).length(), min_dist);
+                            float attenuation = 1.f / (d * d);
+                            c *= attenuation;
+                        }
 
-                        float n_dot_ldir = std::max(0.f, dot(normalize(n), normalize(vpls[i].its.p - its.p)));
-                        float ln_dot_ldir = std::max(0.f, dot(normalize(vpls[i].its.shFrame.n), normalize(its.p - vpls[i].its.p)));
-
-                        accumulator += (vpls[i].P * ln_dot_ldir * attenuation * n_dot_ldir * albedo) / PI;
+                        accumulator += c;
                     }
                 }
             }
@@ -137,39 +140,49 @@ float calculateError(Scene* scene, const std::vector<VPL>& vpls, float min_dist,
 Spectrum sample(Scene* scene, Sampler* sampler, const Intersection& its, const VPL& vpl, float min_dist, 
     bool check_occlusion){
 
-    //only dealing with emitter and surface VPLs curently.
-    if (vpl.type != EPointEmitterVPL && vpl.type != ESurfaceVPL){
-        return Spectrum(0.f);
-    }
-
+    Vector3f wi = vpl.type == EDirectionalEmitterVPL ? -Vector3f(vpl.its.shFrame.n) : normalize(vpl.its.p - its.p);
     if(check_occlusion){
-        Ray shadow_ray(its.p, normalize(vpl.its.p - its.p), 0.f);
-
+        
+        Ray shadow_ray(its.p, wi, 0.f);
         Float t;
         ConstShapePtr shape;
         Normal norm;
         Point2 uv;
 
         if(scene->rayIntersect(shadow_ray, t, shape, norm, uv)){
-            if(abs((its.p - vpl.its.p).length() - t) > 0.0001f ){
+            if(vpl.type == EDirectionalEmitterVPL){
+                return Spectrum(0.f);
+            }
+
+            else if(std::abs((its.p - vpl.its.p).length() - t) > 1e-6f * min_dist){
                 return Spectrum(0.f);
             }
         }
     }
 
     BSDFSamplingRecord bsdf_sample_record(its, sampler, ERadiance);
-        bsdf_sample_record.wi = its.toLocal(normalize(vpl.its.p - its.p));
-        bsdf_sample_record.wo = its.toLocal(its.geoFrame.n);
+    /*bsdf_sample_record.wi = its.toLocal(wi);
+    bsdf_sample_record.wo = its.toLocal(its.geoFrame.n);*/
 
-    Spectrum albedo = its.getBSDF()->eval(bsdf_sample_record);
+    Spectrum albedo = its.getBSDF()->sample(bsdf_sample_record, sampler->next2D());
 
-    float d = std::max((its.p - vpl.its.p).length(), min_dist);
-    float attenuation = 1.f / (d * d);
+    float n_dot_ldir = std::max(0.f, dot(its.geoFrame.n, wi));
 
-    float n_dot_ldir = std::max(0.f, dot(normalize(its.geoFrame.n), normalize(vpl.its.p - its.p)));
-    float ln_dot_ldir = std::max(0.f, dot(normalize(vpl.its.shFrame.n), normalize(its.p - vpl.its.p)));
+    Spectrum c = (vpl.P * n_dot_ldir * albedo) / PI;
 
-    return (vpl.P * ln_dot_ldir * attenuation * n_dot_ldir * albedo) / PI;
+    if(vpl.type != EDirectionalEmitterVPL){
+        float d = std::max((its.p - vpl.its.p).length(), min_dist);
+        float attenuation = 1.f / (d * d);
+        c *= attenuation;
+    }
+
+    if(vpl.type == ESurfaceVPL){
+        float ln_dot_ldir = std::max(0.f, dot(normalize(vpl.its.shFrame.n), normalize(its.p - vpl.its.p)));
+        c *= ln_dot_ldir;
+        
+    }
+
+    return c;
 }
 
 MTS_NAMESPACE_END
