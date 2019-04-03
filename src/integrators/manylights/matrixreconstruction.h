@@ -15,12 +15,12 @@ struct ReconstructionSample{
     ReconstructionSample() : intersected_scene(false){
     }
 
-    ReconstructionSample(std::uint32_t x, std::uint32_t y, bool in_scene, Intersection intersection) : 
-        image_x(x), image_y(y), intersected_scene(in_scene), its(intersection){
+    ReconstructionSample(std::uint32_t x, std::uint32_t y, bool in_scene, Intersection intersection, const Ray& r) : 
+        image_x(x), image_y(y), intersected_scene(in_scene), its(intersection), ray(r){
     }
 
     ReconstructionSample(ReconstructionSample&& other) : image_x(other.image_x), image_y(other.image_y), 
-        intersected_scene(other.intersected_scene), its(other.its), emitter_color(other.emitter_color),
+        intersected_scene(other.intersected_scene), its(other.its), ray(other.ray), emitter_color(other.emitter_color),
         unoccluded_samples(std::move(other.unoccluded_samples)){
     }
 
@@ -30,6 +30,7 @@ struct ReconstructionSample{
             image_y = other.image_y;
             intersected_scene = other.intersected_scene;
             its = other.its;
+            ray = other.ray;
             emitter_color = other.emitter_color;
             unoccluded_samples = std::move(other.unoccluded_samples);
         }
@@ -40,6 +41,7 @@ struct ReconstructionSample{
     std::uint32_t image_x, image_y;
     bool intersected_scene;
     Intersection its;
+    Ray ray;
     Spectrum emitter_color;
     std::vector<Spectrum> unoccluded_samples;
 };

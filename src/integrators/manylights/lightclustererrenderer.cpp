@@ -42,6 +42,9 @@ bool LightClustererRenderer::render(Scene* scene){
     sampler->configure();
     sampler->generate(Point2i(0));
 
+    std::uint64_t total_lights = 0;
+    std::mutex light_counter_mutex;
+
     for (std::int32_t y = 0; y < output_image->getSize().y; ++y) {
         {
             std::lock_guard<std::mutex> lock(cancel_lock_);
@@ -76,9 +79,14 @@ bool LightClustererRenderer::render(Scene* scene){
                 }
 
                 std::vector<VPL> vpls = clusterer_->getClusteringForPoint(its);
+                {
+                    std::lock_guard<std::mutex> counter_lock(light_counter_mutex);
+                    total_lights += vpls.size();
+                }
+                
 
                 for (std::uint32_t i = 0; i < vpls.size(); ++i) {
-                    accumulator += sample(scene, sampler, its, vpls[i], min_dist_, true);
+                    accumulator += sample(scene, sampler, its, ray, vpls[i], min_dist_, true);
                 }
             }
             else{
@@ -98,6 +106,8 @@ bool LightClustererRenderer::render(Scene* scene){
             image_buffer[offset + 2] = std::min(1.f, b) * 255 + 0.5f;
         }
     }
+
+    std::cout << (float)total_lights / (output_image->getSize().y * output_image->getSize().x) << std::endl;
 
     film->setBitmap(output_image);
 

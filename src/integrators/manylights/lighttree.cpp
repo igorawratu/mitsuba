@@ -154,6 +154,7 @@ std::unique_ptr<LightTreeNode> createLightTree(const std::vector<VPL>& vpls, EVP
 				
 				float c1_intensity = c1->emission_scale;
 				float c2_intensity = c2->emission_scale;
+				float ratio = c1_intensity / (c1_intensity + c2_intensity);
 
 				float sample = gen(rng);
 
@@ -167,6 +168,13 @@ std::unique_ptr<LightTreeNode> createLightTree(const std::vector<VPL>& vpls, EVP
 
 					nodes[next_level].back()->cone_ray = std::get<3>(entry);
 					nodes[next_level].back()->cone_halfangle = std::get<4>(entry);
+					nodes[next_level].back()->vpl.its.p = Point(ratio * Vector3f(c1->vpl.its.p) + (1.f - ratio) * Vector3f(c2->vpl.its.p));
+					Vector3f new_n = ratio * Vector3f(c1->vpl.its.shFrame.n) + (1.f - ratio) * Vector3f(c2->vpl.its.shFrame.n);
+					if(new_n.length() < 1e-10f){
+						new_n = cross(Vector3f(c1->vpl.its.shFrame.n), Vector3f(gen(rng), gen(rng), gen(rng)));
+					}
+					nodes[next_level].back()->vpl.its.shFrame = Frame(normalize(new_n));
+					nodes[next_level].back()->vpl.P = ratio * c1->vpl.P + (1.f - ratio) * c2->vpl.P;
 				}
 
 				nodes[next_level].back()->emission_scale = c1_intensity + c2_intensity;
@@ -509,7 +517,6 @@ std::vector<VPL> LightTree::getClusteringForPoint(const Intersection& its) {
 			if(actual_rad > 0.f){
 				float error = fabs(rad - actual_rad) / actual_rad;
 				pqueue.push(std::make_tuple(node->left.get(), error));
-				//std::cout << rad << " " << actual_rad << " " << error << std::endl;
 			}
 		}
 

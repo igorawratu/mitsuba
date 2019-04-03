@@ -131,7 +131,7 @@ Eigen::Matrix<typename MatrixType::Scalar, Eigen::Dynamic, Eigen::Dynamic>
 }
 
 
-Spectrum sample(Scene* scene, Sampler* sampler, const Intersection& its, const VPL& vpl, 
+Spectrum sample(Scene* scene, Sampler* sampler, Intersection& its, const Ray& ray, const VPL& vpl, 
     float min_dist, bool check_occlusion);
 
 
