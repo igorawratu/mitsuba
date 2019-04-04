@@ -181,7 +181,7 @@ Spectrum sample(Scene* scene, Sampler* sampler, Intersection& its, const Ray& ra
     }
     else{
         BSDFSamplingRecord bsdf_sample_record(its, its.toLocal(wi));
-        c = vpl.P * bsdf->eval(bsdf_sample_record) / PI;
+        c = vpl.P * bsdf->eval(bsdf_sample_record);
     }
     
 
