@@ -115,13 +115,13 @@ std::unique_ptr<KDTNode<ReconstructionSample>> constructKDTree(Scene* scene, std
                 continue;
             }
 
-            ReconstructionSample curr_sample(x, y, intersected, its);
+            ReconstructionSample curr_sample(x, y, intersected, its, ray);
 
             if(calc_unoccluded_samples){
                 curr_sample.unoccluded_samples.resize(vpls.size());
 
                 for(std::uint32_t i = 0; i < vpls.size(); ++i){
-                    curr_sample.unoccluded_samples[i] = sample(scene, sampler, its, vpls[i], min_dist, false);
+                    curr_sample.unoccluded_samples[i] = sample(scene, sampler, its, ray, vpls[i], min_dist, false);
                 }
             }
 
@@ -178,7 +178,7 @@ std::vector<std::uint32_t> calculateSparseSamples(Scene* scene, KDTNode<Reconstr
         ReconstructionSample& sample_to_compute = slice->sample(sample_index);
 
 
-        Spectrum lightContribution = sample(scene, sampler, sample_to_compute.its, vpl, min_dist, true);
+        Spectrum lightContribution = sample(scene, sampler, sample_to_compute.its, sample_to_compute.ray, vpl, min_dist, true);
 
         Float r, g, b;
         lightContribution.toLinearRGB(r, g, b);
@@ -377,7 +377,7 @@ std::vector<std::uint32_t> sampleRow(Scene* scene, KDTNode<ReconstructionSample>
 
     for(size_t i = 0; i < sampled_indices.size(); ++i){
         const VPL& vpl = recover_transpose ? vpls[sampled_indices[i]] : vpls[col];
-        const ReconstructionSample& scene_sample = recover_transpose ? slice->sample(col) : slice->sample(sampled_indices[i]);
+        ReconstructionSample& scene_sample = recover_transpose ? slice->sample(col) : slice->sample(sampled_indices[i]);
 
         if(visibility_only){
             Point ray_origin = scene_sample.its.p;
@@ -397,7 +397,7 @@ std::vector<std::uint32_t> sampleRow(Scene* scene, KDTNode<ReconstructionSample>
             }
         }
         else{
-            Spectrum lightContribution = sample(scene, sampler, scene_sample.its, vpl, min_dist, true);
+            Spectrum lightContribution = sample(scene, sampler, scene_sample.its, scene_sample.ray, vpl, min_dist, true);
 
             Float r, g, b;
             lightContribution.toLinearRGB(r, g, b);

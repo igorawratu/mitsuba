@@ -75,30 +75,44 @@ float calculateError(Scene* scene, const std::vector<VPL>& vpls, float min_dist,
                         Point2 uv;
 
                         if(scene->rayIntersect(shadow_ray, t, shape, norm, uv)){
+                            if(vpls[i].type == EDirectionalEmitterVPL){
+                                continue;
+                            }
+
                             if(abs((ray_origin - vpls[i].its.p).length() - t) > 0.0001f ){
                                 continue;
                             }
                         }
 
                         BSDFSamplingRecord bsdf_sample_record(its, sampler, ERadiance);
-                        bsdf_sample_record.wi = its.toLocal(normalize(vpls[i].its.p - its.p));
-                        bsdf_sample_record.wo = its.toLocal(n);
+                        Spectrum albedo(0.f);
+                        for(std::uint8_t i = 0; i < 10; ++i){
+                            albedo += its.getBSDF()->sample(bsdf_sample_record, sampler->next2D());
+                        }
+                        albedo /= 10.f;
 
-                        albedo = its.getBSDF()->eval(bsdf_sample_record);
+                        float n_dot_ldir = std::max(0.f, dot(n, normalize(vpls[i].its.p - its.p)));
 
-                        //only dealing with emitter and surface VPLs curently.
-                        if (vpls[i].type != EPointEmitterVPL && vpls[i].type != ESurfaceVPL){
-                            continue;
+                        Spectrum c = (vpls[i].P * n_dot_ldir * albedo) / PI;
+
+                        if(vpls[i].type == ESurfaceVPL){
+                            float ln_dot_ldir = std::max(0.f, dot(vpls[i].its.shFrame.n, normalize(its.p - vpls[i].its.p)));
+                            c *= ln_dot_ldir;
                         }
 
-                        float d = std::max((its.p - vpls[i].its.p).length(), min_dist);
-                        float attenuation = 1.f / (d * d);
+                        if(vpls[i].type != EDirectionalEmitterVPL){
+                            float d = std::max((its.p - vpls[i].its.p).length(), min_dist);
+                            float attenuation = 1.f / (d * d);
+                            c *= attenuation;
+                        }
 
-                        float n_dot_ldir = std::max(0.f, dot(normalize(n), normalize(vpls[i].its.p - its.p)));
-                        float ln_dot_ldir = std::max(0.f, dot(normalize(vpls[i].its.shFrame.n), normalize(its.p - vpls[i].its.p)));
-
-                        accumulator += (vpls[i].P * ln_dot_ldir * attenuation * n_dot_ldir * albedo) / PI;
+                        accumulator += c;
                     }
+                }
+            }
+            else{
+                if(scene->hasEnvironmentEmitter()){
+                    accumulator = scene->evalEnvironment(RayDifferential(ray));
                 }
             }
 
@@ -134,42 +148,55 @@ float calculateError(Scene* scene, const std::vector<VPL>& vpls, float min_dist,
     return tot_error;
 }
 
-Spectrum sample(Scene* scene, Sampler* sampler, const Intersection& its, const VPL& vpl, float min_dist, 
+Spectrum sample(Scene* scene, Sampler* sampler, Intersection& its, const Ray& ray, const VPL& vpl, float min_dist, 
     bool check_occlusion){
 
-    //only dealing with emitter and surface VPLs curently.
-    if (vpl.type != EPointEmitterVPL && vpl.type != ESurfaceVPL){
-        return Spectrum(0.f);
-    }
-
+    Vector3f wi = vpl.type == EDirectionalEmitterVPL ? -Vector3f(vpl.its.shFrame.n) : 
+        normalize(vpl.its.p - its.p);
     if(check_occlusion){
-        Ray shadow_ray(its.p, normalize(vpl.its.p - its.p), 0.f);
-
+        Ray shadow_ray(its.p, wi, 0.f);
         Float t;
         ConstShapePtr shape;
         Normal norm;
         Point2 uv;
 
         if(scene->rayIntersect(shadow_ray, t, shape, norm, uv)){
-            if(abs((its.p - vpl.its.p).length() - t) > 0.0001f ){
+            if(vpl.type == EDirectionalEmitterVPL || 
+                ((its.p - vpl.its.p).length() - t) > 1e-6f * min_dist){
                 return Spectrum(0.f);
             }
         }
     }
 
-    BSDFSamplingRecord bsdf_sample_record(its, sampler, ERadiance);
-        bsdf_sample_record.wi = its.toLocal(normalize(vpl.its.p - its.p));
-        bsdf_sample_record.wo = its.toLocal(its.geoFrame.n);
+    RayDifferential rd(ray);
 
-    Spectrum albedo = its.getBSDF()->eval(bsdf_sample_record);
+    const BSDF *bsdf = its.getBSDF(rd);
 
-    float d = std::max((its.p - vpl.its.p).length(), min_dist);
-    float attenuation = 1.f / (d * d);
+    Spectrum c(0.f);
 
-    float n_dot_ldir = std::max(0.f, dot(normalize(its.geoFrame.n), normalize(vpl.its.p - its.p)));
-    float ln_dot_ldir = std::max(0.f, dot(normalize(vpl.its.shFrame.n), normalize(its.p - vpl.its.p)));
+    //only care about non-specular surfaces for now, just return specular reflectance
+    if(!(bsdf->getType() & BSDF::EDiffuse) && !(bsdf->getType() & BSDF::EGlossy)){
+        BSDFSamplingRecord bsdf_sample_record(its, sampler);
+        c = vpl.P * bsdf->sample(bsdf_sample_record, sampler->next2D()) * dot(its.shFrame.n, wi) / PI;
+    }
+    else{
+        BSDFSamplingRecord bsdf_sample_record(its, its.toLocal(wi));
+        c = vpl.P * bsdf->eval(bsdf_sample_record);
+    }
+    
 
-    return (vpl.P * ln_dot_ldir * attenuation * n_dot_ldir * albedo) / PI;
+    if(vpl.type != EDirectionalEmitterVPL){
+        float d = std::max((its.p - vpl.its.p).length(), min_dist);
+        float attenuation = 1.f / (d * d);
+        c *= attenuation;
+    }
+
+    if(vpl.type == ESurfaceVPL){
+        float ln_dot_ldir = std::max(0.f, dot(vpl.its.shFrame.n, normalize(its.p - vpl.its.p)));
+        c *= ln_dot_ldir;    
+    }
+
+    return c;
 }
 
 MTS_NAMESPACE_END
