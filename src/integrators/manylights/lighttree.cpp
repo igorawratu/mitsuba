@@ -10,6 +10,7 @@
 #include <random>
 #include <chrono>
 #include <math.h>
+#include <unordered_map>
 
 MTS_NAMESPACE_BEGIN
 
@@ -80,7 +81,7 @@ std::unique_ptr<LightTreeNode> createLightTree(const std::vector<VPL>& vpls, EVP
 					float ha1 = nodes[current_level][i]->cone_halfangle;
 					float ha2 = nodes[current_level][j]->cone_halfangle;
 
-					float angle = acos(dot(ray1, ray2));
+					float angle = atan2(cross(ray1, ray2).length(), dot(ray1, ray2));
 					float max_child_half = std::max(ha1, ha2);
 					float min_child_half = std::min(ha1, ha2);
 					
@@ -154,7 +155,7 @@ std::unique_ptr<LightTreeNode> createLightTree(const std::vector<VPL>& vpls, EVP
 				
 				float c1_intensity = c1->emission_scale;
 				float c2_intensity = c2->emission_scale;
-				float ratio = c1_intensity / (c1_intensity + c2_intensity);
+				//float ratio = c1_intensity / (c1_intensity + c2_intensity);
 
 				float sample = gen(rng);
 
@@ -168,13 +169,13 @@ std::unique_ptr<LightTreeNode> createLightTree(const std::vector<VPL>& vpls, EVP
 
 					nodes[next_level].back()->cone_ray = std::get<3>(entry);
 					nodes[next_level].back()->cone_halfangle = std::get<4>(entry);
-					nodes[next_level].back()->vpl.its.p = Point(ratio * Vector3f(c1->vpl.its.p) + (1.f - ratio) * Vector3f(c2->vpl.its.p));
+					/*nodes[next_level].back()->vpl.its.p = Point(ratio * Vector3f(c1->vpl.its.p) + (1.f - ratio) * Vector3f(c2->vpl.its.p));
 					Vector3f new_n = ratio * Vector3f(c1->vpl.its.shFrame.n) + (1.f - ratio) * Vector3f(c2->vpl.its.shFrame.n);
 					if(new_n.length() < 1e-10f){
 						new_n = cross(Vector3f(c1->vpl.its.shFrame.n), Vector3f(gen(rng), gen(rng), gen(rng)));
 					}
 					nodes[next_level].back()->vpl.its.shFrame = Frame(normalize(new_n));
-					nodes[next_level].back()->vpl.P = ratio * c1->vpl.P + (1.f - ratio) * c2->vpl.P;
+					nodes[next_level].back()->vpl.P = ratio * c1->vpl.P + (1.f - ratio) * c2->vpl.P;*/
 				}
 
 				nodes[next_level].back()->emission_scale = c1_intensity + c2_intensity;
@@ -215,7 +216,12 @@ float distToBox(Point p, Point box_min, Point box_max){
 };
 
 float calculateClusterContribution(Point shading_point_position, Normal shading_point_normal,
-	LightTreeNode* light_tree_node, EVPLType vpl_type, float min_dist){
+	LightTreeNode* light_tree_node, EVPLType vpl_type, float min_dist, 
+	std::unordered_map<LightTreeNode*, float>& contribution_cache){
+
+	if(contribution_cache.find(light_tree_node) != contribution_cache.end()){
+		return contribution_cache[light_tree_node];
+	}
 
 	float geometric = 0.f;
 
@@ -251,13 +257,13 @@ float calculateClusterContribution(Point shading_point_position, Normal shading_
 				}
 				else{
 					Vector3f unit_z(0.f, 0.f, 1.f);
-
-					float angle = acos(dot(normalize(light_tree_node->cone_ray), unit_z));
+					Vector3f normalized_cone_ray = normalize(light_tree_node->cone_ray);
+					float angle = atan2(cross(normalized_cone_ray, unit_z).length(), dot(normalized_cone_ray, unit_z));
 					Vector3f axis = cross(light_tree_node->cone_ray, unit_z);
 
 					//zero cross product means cone is pointing either in positive or negative z. Can set axis arbitrarily
 					//as long as it is orthogonal to unit z
-					if(axis.length() < 1e-20f){
+					if(axis.lengthSquared() < 1e-20f){
 						axis = Vector(1, 0, 0);
 					}
 					Transform rot = Transform::rotate(axis, angle);
@@ -369,11 +375,13 @@ float calculateClusterContribution(Point shading_point_position, Normal shading_
 
 	float material = std::max(0.f, largest);
 
-	return geometric * material * light_tree_node->emission_scale;
+	contribution_cache[light_tree_node] = geometric * material * light_tree_node->emission_scale;
+	return contribution_cache[light_tree_node];
 }
 
 float calculateExactClusterContribution(Point shading_point_position, Normal shading_point_normal,
-	LightTreeNode* light_tree_node, EVPLType vpl_type, float min_dist){
+	LightTreeNode* light_tree_node, EVPLType vpl_type, float min_dist, 
+	std::unordered_map<LightTreeNode*, float>& contribution_cache){
 	
 	if(light_tree_node == nullptr){
 		return 0.f;
@@ -381,13 +389,13 @@ float calculateExactClusterContribution(Point shading_point_position, Normal sha
 
 	if(light_tree_node->left == nullptr && light_tree_node->right == nullptr){
 		return calculateClusterContribution(shading_point_position, shading_point_normal, light_tree_node, 
-			vpl_type, min_dist);
+			vpl_type, min_dist, contribution_cache);
 	}
 	else{
 		return calculateExactClusterContribution(shading_point_position, shading_point_normal,
-			light_tree_node->left.get(), vpl_type, min_dist) + 
+			light_tree_node->left.get(), vpl_type, min_dist, contribution_cache) + 
 		calculateExactClusterContribution(shading_point_position, shading_point_normal,
-			light_tree_node->right.get(), vpl_type, min_dist);
+			light_tree_node->right.get(), vpl_type, min_dist, contribution_cache);
 	}
 }
 
@@ -416,6 +424,8 @@ LightTree::LightTree(const std::vector<VPL>& vpls, float min_dist, std::uint32_t
 	point_tree_root_ = createLightTree(point_vpls_, EPointEmitterVPL, min_dist_);
 	oriented_tree_root_ = createLightTree(oriented_vpls_, ESurfaceVPL, min_dist_);
 	directional_tree_root_ = createLightTree(directional_vpls_, EDirectionalEmitterVPL, min_dist_);
+
+	std::cout << "Light trees created" << std::endl;
 }
 
 LightTree::LightTree(const LightTree& other) : point_vpls_(other.point_vpls_), directional_vpls_(other.directional_vpls_),
@@ -486,7 +496,10 @@ std::vector<VPL> LightTree::getClusteringForPoint(const Intersection& its) {
 	if(directional_tree_root_ != nullptr){
 		pqueue.push(std::make_tuple(directional_tree_root_.get(), std::numeric_limits<float>::max()));
 	}
-	
+
+	std::unordered_map<LightTreeNode*, float> contribution_cache;
+	contribution_cache.reserve((point_vpls_.size() + directional_vpls_.size() + oriented_vpls_.size()) * 3);
+
 	while((pqueue.size() + lights.size()) < max_lights_ && pqueue.size() > 0){
 		//std::cout << lights.size() << " " << pqueue.size() << std::endl;
 		ClusterAndScore entry = pqueue.top();
@@ -511,8 +524,8 @@ std::vector<VPL> LightTree::getClusteringForPoint(const Intersection& its) {
 		}
 
 		if(node->left.get() != nullptr){
-			float rad = calculateClusterContribution(its.p, its.geoFrame.n, node->left.get(), node->left->vpl.type, min_dist_);
-			float actual_rad = calculateExactClusterContribution(its.p, its.geoFrame.n, node->left.get(), node->left->vpl.type, min_dist_);
+			float actual_rad = calculateExactClusterContribution(its.p, its.geoFrame.n, node->left.get(), node->left->vpl.type, min_dist_, contribution_cache);
+			float rad = calculateClusterContribution(its.p, its.geoFrame.n, node->left.get(), node->left->vpl.type, min_dist_, contribution_cache);
 			
 			if(actual_rad > 0.f){
 				float error = fabs(rad - actual_rad) / actual_rad;
@@ -521,8 +534,9 @@ std::vector<VPL> LightTree::getClusteringForPoint(const Intersection& its) {
 		}
 
 		if(node->right.get() != nullptr){
-			float rad = calculateClusterContribution(its.p, its.geoFrame.n, node->right.get(), node->right->vpl.type, min_dist_);
-			float actual_rad = calculateExactClusterContribution(its.p, its.geoFrame.n, node->right.get(), node->right->vpl.type, min_dist_);
+			float actual_rad = calculateExactClusterContribution(its.p, its.geoFrame.n, node->right.get(), node->right->vpl.type, min_dist_, contribution_cache);
+			float rad = calculateClusterContribution(its.p, its.geoFrame.n, node->right.get(), node->right->vpl.type, min_dist_, contribution_cache);
+			
 			if(actual_rad > 0.f){
 				float error = fabs(rad - actual_rad) / actual_rad;
 				pqueue.push(std::make_tuple(node->right.get(), error));
@@ -564,6 +578,8 @@ std::vector<VPL> LightTree::getClusteringForPoints(const std::vector<Intersectio
 	if(directional_tree_root_ != nullptr){
 		pqueue.push(std::make_tuple(directional_tree_root_.get(), std::numeric_limits<float>::max()));
 	}
+
+	std::unordered_map<LightTreeNode*, float> contribution_cache;
 	
 	while((pqueue.size() + lights.size()) < max_lights_ && pqueue.size() > 0){
 		//std::cout << lights.size() << " " << pqueue.size() << std::endl;
@@ -587,8 +603,8 @@ std::vector<VPL> LightTree::getClusteringForPoints(const std::vector<Intersectio
 			float rad = 0.f;
 			float actual_rad = 0.f;
 			for(std::uint32_t i = 0; i < points.size(); ++i){
-				rad += calculateClusterContribution(points[i].p, points[i].geoFrame.n, node->left.get(), node->left->vpl.type, min_dist_);
-				actual_rad = calculateExactClusterContribution(points[i].p, points[i].geoFrame.n, node->left.get(), node->left->vpl.type, min_dist_);
+				rad += calculateClusterContribution(points[i].p, points[i].geoFrame.n, node->left.get(), node->left->vpl.type, min_dist_, contribution_cache);
+				actual_rad = calculateExactClusterContribution(points[i].p, points[i].geoFrame.n, node->left.get(), node->left->vpl.type, min_dist_, contribution_cache);
 			}
 
 			if(actual_rad > 0.f){
@@ -601,8 +617,8 @@ std::vector<VPL> LightTree::getClusteringForPoints(const std::vector<Intersectio
 			float rad = 0.f;
 			float actual_rad = 0.f;
 			for(std::uint32_t i = 0; i < points.size(); ++i){
-				rad += calculateClusterContribution(points[i].p, points[i].geoFrame.n, node->right.get(), node->right->vpl.type, min_dist_);
-				actual_rad += calculateExactClusterContribution(points[i].p, points[i].geoFrame.n, node->right.get(), node->right->vpl.type, min_dist_);
+				rad += calculateClusterContribution(points[i].p, points[i].geoFrame.n, node->right.get(), node->right->vpl.type, min_dist_, contribution_cache);
+				actual_rad += calculateExactClusterContribution(points[i].p, points[i].geoFrame.n, node->right.get(), node->right->vpl.type, min_dist_, contribution_cache);
 			}
 
 			if(actual_rad > 0.f){
