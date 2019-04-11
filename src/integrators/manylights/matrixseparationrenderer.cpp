@@ -50,22 +50,25 @@ std::unique_ptr<KDTNode<RowSample>> constructKDTree(Scene* scene, const std::vec
 
             sensor->sampleRay(ray, sample_position, aperture_sample, time_sample);
 
-            Intersection its;
-
-            bool intersected = scene->rayIntersect(ray, its);
-
-            if(!intersected){
-                continue;
-            }
-
-            RowSample curr_sample(x, y, vpls.size(), intersected, its, ray);
-
-            if(its.isEmitter()){
-                curr_sample.emitter_color = its.Le(-ray.d);
-            }
+            RowSample curr_sample;
+            curr_sample.image_x = x;
+            curr_sample.image_y = y;
+            curr_sample.col_samples.resize(vpls.size());
+            curr_sample.visibility.resize(vpls.size());
+            curr_sample.predictors.resize(vpls.size());
+            curr_sample.ray = ray;
 
             for (std::uint32_t i = 0; i < vpls.size(); ++i) {
-                curr_sample.col_samples[i] = sample(scene, sampler, its, ray, vpls[i], min_dist, false);
+                curr_sample.col_samples[i] = sample(scene, sampler, curr_sample.its, ray, vpls[i], min_dist, false, 
+                    10, i == 0, curr_sample.intersected_scene, true);
+
+                if(!curr_sample.intersected_scene || curr_sample.its.isEmitter()){
+                    break;
+                }
+            }
+
+            if(curr_sample.intersected_scene && curr_sample.its.isEmitter()){
+                curr_sample.emitter_color = curr_sample.its.Le(-ray.d);
             }
 
             samples[y * film->getSize().x + x] = std::move(curr_sample);
@@ -650,7 +653,7 @@ void reincorporateDenseHighRank(Eigen::MatrixXf& low_rank, const Eigen::MatrixXf
 
             if(requires_direct_sample){
                 Spectrum col = sample(scene, sampler, slice->sample(row).its, slice->sample(row).ray, vpls[light], 
-                    min_dist, true);
+                    min_dist, true, 10, false, slice->sample(row).intersected_scene, true);
 
                 float r, g, b;
                 col.toLinearRGB(r, g, b);

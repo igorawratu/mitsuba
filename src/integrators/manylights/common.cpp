@@ -149,10 +149,49 @@ float calculateError(Scene* scene, const std::vector<VPL>& vpls, float min_dist,
 }
 
 Spectrum sample(Scene* scene, Sampler* sampler, Intersection& its, const Ray& ray, const VPL& vpl, float min_dist, 
-    bool check_occlusion){
+    bool check_occlusion, std::uint32_t max_specular_bounces, bool perform_ray_intersection, bool& intersected,
+    bool show_emitter){
 
+    if(perform_ray_intersection){
+        std::uint32_t num_bounces = 0;
+
+        Ray r = ray;
+
+        while(true){
+            intersected = scene->rayIntersect(r, its);
+            if(!intersected){
+                break;
+            }
+
+            if(its.getBSDF()->getType() & BSDF::ESmooth){
+                break;
+            }
+
+            if(++num_bounces > max_specular_bounces){
+                break;
+            }
+
+            BSDFSamplingRecord bsdf_sample_record(its, sampler);
+            its.getBSDF()->sample(bsdf_sample_record, sampler->next2D());
+
+            r = Ray(its.p, bsdf_sample_record.its.toWorld(bsdf_sample_record.wo), ray.time);
+        }
+    }
+
+    if(!intersected){
+        if(scene->hasEnvironmentEmitter()){
+            return scene->evalEnvironment(RayDifferential(ray));
+        }
+        else return Spectrum(0.f);
+    }
+
+    if(show_emitter && its.isEmitter()){
+        return its.Le(-ray.d);
+    }
+    
     Vector3f wi = vpl.type == EDirectionalEmitterVPL ? -Vector3f(vpl.its.shFrame.n) : 
         normalize(vpl.its.p - its.p);
+
     if(check_occlusion){
         Ray shadow_ray(its.p, wi, 0.f);
         Float t;
@@ -175,7 +214,7 @@ Spectrum sample(Scene* scene, Sampler* sampler, Intersection& its, const Ray& ra
     Spectrum c(0.f);
 
     //only care about non-specular surfaces for now, just return specular reflectance
-    if(!(bsdf->getType() & BSDF::EDiffuse) && !(bsdf->getType() & BSDF::EGlossy)){
+    if(!(bsdf->getType() & BSDF::ESmooth)){
         BSDFSamplingRecord bsdf_sample_record(its, sampler);
         c = vpl.P * bsdf->sample(bsdf_sample_record, sampler->next2D()) * dot(its.shFrame.n, wi) / PI;
     }

@@ -108,25 +108,30 @@ std::unique_ptr<KDTNode<ReconstructionSample>> constructKDTree(Scene* scene, std
 
             sensor->sampleRay(ray, sample_position, aperture_sample, time_sample);
 
-            Intersection its;
-
-            bool intersected = scene->rayIntersect(ray, its);
-            if(!intersected){
-                continue;
-            }
-
-            ReconstructionSample curr_sample(x, y, intersected, its, ray);
+            ReconstructionSample curr_sample;
+            curr_sample.image_x = x;
+            curr_sample.image_y = y;
+            curr_sample.ray = ray;
 
             if(calc_unoccluded_samples){
                 curr_sample.unoccluded_samples.resize(vpls.size());
 
                 for(std::uint32_t i = 0; i < vpls.size(); ++i){
-                    curr_sample.unoccluded_samples[i] = sample(scene, sampler, its, ray, vpls[i], min_dist, false);
+                    curr_sample.unoccluded_samples[i] = sample(scene, sampler, curr_sample.its, ray, vpls[i], min_dist, false, 
+                        10, i == 0, curr_sample.intersected_scene, true);
+
+                    if(!curr_sample.intersected_scene || curr_sample.its.isEmitter()){
+                        break;
+                    }
                 }
             }
+            else{
+                //call to sample primarily to get intersection details
+                sample(scene, sampler, curr_sample.its, ray, vpls[0], min_dist, false, 10, true, curr_sample.intersected_scene, true);
+            }
 
-            if(its.isEmitter()){
-                curr_sample.emitter_color = its.Le(-ray.d);
+            if(curr_sample.intersected_scene && curr_sample.its.isEmitter()){
+                curr_sample.emitter_color = curr_sample.its.Le(-ray.d);
             }
 
             samples[y * film->getSize().x + x] = std::move(curr_sample);
@@ -178,7 +183,8 @@ std::vector<std::uint32_t> calculateSparseSamples(Scene* scene, KDTNode<Reconstr
         ReconstructionSample& sample_to_compute = slice->sample(sample_index);
 
 
-        Spectrum lightContribution = sample(scene, sampler, sample_to_compute.its, sample_to_compute.ray, vpl, min_dist, true);
+        Spectrum lightContribution = sample(scene, sampler, sample_to_compute.its, sample_to_compute.ray, vpl, 
+            min_dist, true, 10, false, sample_to_compute.intersected_scene, true);
 
         Float r, g, b;
         lightContribution.toLinearRGB(r, g, b);
@@ -397,7 +403,8 @@ std::vector<std::uint32_t> sampleRow(Scene* scene, KDTNode<ReconstructionSample>
             }
         }
         else{
-            Spectrum lightContribution = sample(scene, sampler, scene_sample.its, scene_sample.ray, vpl, min_dist, true);
+            Spectrum lightContribution = sample(scene, sampler, scene_sample.its, scene_sample.ray, vpl, 
+                min_dist, true, 10, false, scene_sample.intersected_scene, true);
 
             Float r, g, b;
             lightContribution.toLinearRGB(r, g, b);

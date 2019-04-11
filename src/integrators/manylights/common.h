@@ -132,7 +132,8 @@ Eigen::Matrix<typename MatrixType::Scalar, Eigen::Dynamic, Eigen::Dynamic>
 
 
 Spectrum sample(Scene* scene, Sampler* sampler, Intersection& its, const Ray& ray, const VPL& vpl, 
-    float min_dist, bool check_occlusion);
+    float min_dist, bool check_occlusion, std::uint32_t max_specular_bounces, 
+    bool perform_ray_intersection, bool& intersected, bool show_emitter);
 
 
 

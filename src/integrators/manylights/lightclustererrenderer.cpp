@@ -68,32 +68,22 @@ bool LightClustererRenderer::render(Scene* scene){
 
             Intersection its;
 
-            Point2i curr_pixel(x, y);
             Spectrum accumulator(0.f);
 
-            if (scene->rayIntersect(ray, its)) {
-                Spectrum albedo(0.f);
+            std::vector<VPL> vpls = clusterer_->getClusteringForPoint(its);
+            {
+                std::lock_guard<std::mutex> counter_lock(light_counter_mutex);
+                total_lights += vpls.size();
+                total_rendered_pixels++;
+            }
+            
+            bool intersected;
+            for (std::uint32_t i = 0; i < vpls.size(); ++i) {
+                accumulator += sample(scene, sampler, its, ray, vpls[i], min_dist_, true, 
+                    10, i == 0, intersected, true);
 
                 if(its.isEmitter()){
-                    output_image->setPixel(curr_pixel, its.Le(-ray.d));
-                    continue;
-                }
-
-                std::vector<VPL> vpls = clusterer_->getClusteringForPoint(its);
-                {
-                    std::lock_guard<std::mutex> counter_lock(light_counter_mutex);
-                    total_lights += vpls.size();
-                    total_rendered_pixels++;
-                }
-                
-
-                for (std::uint32_t i = 0; i < vpls.size(); ++i) {
-                    accumulator += sample(scene, sampler, its, ray, vpls[i], min_dist_, true);
-                }
-            }
-            else{
-                if(scene->hasEnvironmentEmitter()){
-                    accumulator = scene->evalEnvironment(RayDifferential(ray));
+                    break;
                 }
             }
 
