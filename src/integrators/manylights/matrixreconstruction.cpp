@@ -118,7 +118,7 @@ std::unique_ptr<KDTNode<ReconstructionSample>> constructKDTree(Scene* scene, std
 
                 for(std::uint32_t i = 0; i < vpls.size(); ++i){
                     curr_sample.unoccluded_samples[i] = sample(scene, sampler, curr_sample.its, ray, vpls[i], min_dist, false, 
-                        10, i == 0, curr_sample.intersected_scene, true);
+                        10, i == 0, curr_sample.intersected_scene, true, true);
 
                     if(!curr_sample.intersected_scene || curr_sample.its.isEmitter()){
                         break;
@@ -127,7 +127,8 @@ std::unique_ptr<KDTNode<ReconstructionSample>> constructKDTree(Scene* scene, std
             }
             else{
                 //call to sample primarily to get intersection details
-                sample(scene, sampler, curr_sample.its, ray, vpls[0], min_dist, false, 10, true, curr_sample.intersected_scene, true);
+                sample(scene, sampler, curr_sample.its, ray, vpls[0], min_dist, false, 10, true, 
+                    curr_sample.intersected_scene, true, true);
             }
 
             if(curr_sample.intersected_scene && curr_sample.its.isEmitter()){
@@ -184,7 +185,7 @@ std::vector<std::uint32_t> calculateSparseSamples(Scene* scene, KDTNode<Reconstr
 
 
         Spectrum lightContribution = sample(scene, sampler, sample_to_compute.its, sample_to_compute.ray, vpl, 
-            min_dist, true, 10, false, sample_to_compute.intersected_scene, true);
+            min_dist, true, 10, false, sample_to_compute.intersected_scene, true, true);
 
         Float r, g, b;
         lightContribution.toLinearRGB(r, g, b);
@@ -404,7 +405,7 @@ std::vector<std::uint32_t> sampleRow(Scene* scene, KDTNode<ReconstructionSample>
         }
         else{
             Spectrum lightContribution = sample(scene, sampler, scene_sample.its, scene_sample.ray, vpl, 
-                min_dist, true, 10, false, scene_sample.intersected_scene, true);
+                min_dist, true, 10, false, scene_sample.intersected_scene, true, true);
 
             Float r, g, b;
             lightContribution.toLinearRGB(r, g, b);

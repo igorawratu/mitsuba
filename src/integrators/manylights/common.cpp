@@ -148,22 +148,22 @@ float calculateError(Scene* scene, const std::vector<VPL>& vpls, float min_dist,
     return tot_error;
 }
 
-Spectrum sample(Scene* scene, Sampler* sampler, Intersection& its, const Ray& ray, const VPL& vpl, float min_dist, 
+Spectrum sample(Scene* scene, Sampler* sampler, Intersection& its, const Ray& initial_ray, const VPL& vpl, float min_dist, 
     bool check_occlusion, std::uint32_t max_specular_bounces, bool perform_ray_intersection, bool& intersected,
-    bool show_emitter){
+    bool show_emitter, bool vsl){
+
+    Ray ray = initial_ray;
 
     if(perform_ray_intersection){
         std::uint32_t num_bounces = 0;
 
-        Ray r = ray;
-
         while(true){
-            intersected = scene->rayIntersect(r, its);
+            intersected = scene->rayIntersect(ray, its);
             if(!intersected){
                 break;
             }
 
-            if(its.getBSDF()->getType() & BSDF::ESmooth){
+            if(its.getBSDF()->getType() & BSDF::ESmooth || its.isEmitter()){
                 break;
             }
 
@@ -172,9 +172,10 @@ Spectrum sample(Scene* scene, Sampler* sampler, Intersection& its, const Ray& ra
             }
 
             BSDFSamplingRecord bsdf_sample_record(its, sampler);
+            bsdf_sample_record.typeMask = BSDF::ETransmission;
             its.getBSDF()->sample(bsdf_sample_record, sampler->next2D());
 
-            r = Ray(its.p, bsdf_sample_record.its.toWorld(bsdf_sample_record.wo), ray.time);
+            ray = Ray(its.p, bsdf_sample_record.its.toWorld(bsdf_sample_record.wo), ray.time);
         }
     }
 
@@ -213,26 +214,49 @@ Spectrum sample(Scene* scene, Sampler* sampler, Intersection& its, const Ray& ra
 
     Spectrum c(0.f);
 
-    //only care about non-specular surfaces for now, just return specular reflectance
-    if(!(bsdf->getType() & BSDF::ESmooth)){
-        BSDFSamplingRecord bsdf_sample_record(its, sampler);
-        c = vpl.P * bsdf->sample(bsdf_sample_record, sampler->next2D()) * dot(its.shFrame.n, wi) / PI;
+    
+    
+    if(vsl){
+        std::uint32_t num_samples = 1; //make this proportional to solid angle
+        Spectrum total(0.f);
+        std::uint8_t sample_type = 0;
+        for(std::uint32_t i = 0; i < num_samples; ++i){
+            if(sample_type == 0){
+                
+            }
+            else if(sample_type == 1){
+
+            }
+            else
+            {
+                
+            }
+
+            sample_type = (sample_type + 1) % 3;
+        }
     }
     else{
-        BSDFSamplingRecord bsdf_sample_record(its, its.toLocal(wi));
-        c = vpl.P * bsdf->eval(bsdf_sample_record);
-    }
-    
+        //only care about non-specular surfaces for now, just return specular reflectance
+        if(!(bsdf->getType() & BSDF::ESmooth)){
+            BSDFSamplingRecord bsdf_sample_record(its, sampler);
+            c = vpl.P * bsdf->sample(bsdf_sample_record, sampler->next2D()) * dot(its.shFrame.n, wi) / PI;
+        }
+        else{
+            BSDFSamplingRecord bsdf_sample_record(its, its.toLocal(wi));
+            bsdf_sample_record.typeMask = BSDF::ESmooth;
+            c = vpl.P * bsdf->eval(bsdf_sample_record);
+        }
 
-    if(vpl.type != EDirectionalEmitterVPL){
-        float d = std::max((its.p - vpl.its.p).length(), min_dist);
-        float attenuation = 1.f / (d * d);
-        c *= attenuation;
-    }
+        if(vpl.type != EDirectionalEmitterVPL){
+            float d = std::max((its.p - vpl.its.p).length(), min_dist);
+            float attenuation = 1.f / (d * d);
+            c *= attenuation;
+        }
 
-    if(vpl.type == ESurfaceVPL){
-        float ln_dot_ldir = std::max(0.f, dot(vpl.its.shFrame.n, normalize(its.p - vpl.its.p)));
-        c *= ln_dot_ldir;    
+        if(vpl.type == ESurfaceVPL){
+            float ln_dot_ldir = std::max(0.f, dot(vpl.its.shFrame.n, normalize(its.p - vpl.its.p)));
+            c *= ln_dot_ldir;    
+        }
     }
 
     return c;

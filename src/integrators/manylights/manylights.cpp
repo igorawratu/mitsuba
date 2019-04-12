@@ -19,6 +19,8 @@
 
 #include "definitions.h"
 
+#include <flann/flann.hpp>
+
 MTS_NAMESPACE_BEGIN
 
 enum CLUSTERING_STRATEGY{
@@ -224,6 +226,34 @@ size_t generateVPLs(const Scene *scene, size_t offset, size_t count, int max_dep
 		for (size_t i = start; i < end; ++i){
 			vpls[i].emitterScale = 1.0f / lights_added;
 		}
+	}
+
+	//radius calculation, 11 to account 10 + 1 for adding a node's self in nearest neighbours
+	std::uint32_t num_neighbours = std::min((std::uint32_t)vpls.size(), 11u);
+
+    flann::Matrix<float> dataset(new float[vpls.size() * 3], vpls.size(), 3);
+    for(std::uint32_t i = 0; i < vpls.size(); ++i){
+        float* curr = (float*)dataset[i];
+        curr[0] = vpls[i].its.p.x;
+        curr[1] = vpls[i].its.p.y;
+        curr[2] = vpls[i].its.p.z;
+    }
+
+    flann::Index<flann::L2<float>> index(dataset, flann::KDTreeIndexParams(4));
+    index.buildIndex();
+
+	std::vector<std::vector<int>> indices;
+	std::vector<std::vector<float>> distances;
+
+    index.knnSearch(dataset, indices, distances, num_neighbours, flann::SearchParams(128));
+
+	for(std::uint32_t i = 0; i < vpls.size(); ++i){
+		float max = std::numeric_limits<float>::min();
+		for(std::uint32_t j = 0; j < distances[i].size(); ++j){
+			max = std::max(distances[i][j], max);
+		}
+
+		vpls[i].radius = max * 10.f;
 	}
 
 	return offset;
