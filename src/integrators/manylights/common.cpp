@@ -216,7 +216,7 @@ Spectrum sample(Scene* scene, Sampler* sampler, Intersection& its, const Ray& in
 
     
     
-    if(vsl){
+    /*if(vsl){
         std::uint32_t num_samples = 1; //make this proportional to solid angle
         Spectrum total(0.f);
         std::uint8_t sample_type = 0;
@@ -235,7 +235,7 @@ Spectrum sample(Scene* scene, Sampler* sampler, Intersection& its, const Ray& in
             sample_type = (sample_type + 1) % 3;
         }
     }
-    else{
+    else*/{
         //only care about non-specular surfaces for now, just return specular reflectance
         if(!(bsdf->getType() & BSDF::ESmooth)){
             BSDFSamplingRecord bsdf_sample_record(its, sampler);

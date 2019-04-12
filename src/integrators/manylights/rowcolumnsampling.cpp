@@ -223,7 +223,7 @@ std::vector<VPL> calculateClustering(std::vector<VPL> vpls, std::vector<float> c
         }
 
         //it's ok to move this since we won't be using it any longer in the vector
-        split_queue.push(std::make_pair(std::move(clusters[i]), total_contrib));
+        split_queue.push(std::make_pair(clusters[i], total_contrib));
     }
 
     std::uniform_real_distribution<float> gen(0, 1.f);
@@ -275,7 +275,7 @@ std::vector<VPL> calculateClustering(std::vector<VPL> vpls, std::vector<float> c
         ClusterContributionPair split_clusters[2];
 
         for(size_t i = 0; i < ordered_projections.size(); ++i){
-            if(idx == 0 && (contrib_half <= 0.f || i == ordered_projections.size() - 2)){
+            if(idx == 0 && (contrib_half <= 0.f || i == ordered_projections.size() - 1) && i > 0){
                 idx = 1;
             }
 
@@ -286,7 +286,7 @@ std::vector<VPL> calculateClustering(std::vector<VPL> vpls, std::vector<float> c
         }
 
         for(std::uint8_t i = 0; i < 2; ++i){
-            split_queue.push(std::move(split_clusters[i]));
+            split_queue.push(split_clusters[i]);
         }
     }
 
