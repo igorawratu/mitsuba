@@ -34,7 +34,7 @@ float calculateMinDistance(const Scene *scene, const std::vector<VPL>& vpls, flo
 	std::uint32_t lights_processed = 0;
 
 	for(std::uint32_t i = 0; i < vpls.size(); ++i){
-		bool surface_emitter = vpls[i].emitter->getType() & Emitter::EOnSurface;
+		bool surface_emitter = vpls[i].type == ESurfaceVPL;
 		float near = std::numeric_limits<float>::max();
 		float far = std::numeric_limits<float>::min();
 
@@ -249,8 +249,10 @@ size_t generateVPLs(const Scene *scene, size_t offset, size_t count, int max_dep
 
 	for(std::uint32_t i = 0; i < vpls.size(); ++i){
 		float max = std::numeric_limits<float>::min();
+		float min = std::numeric_limits<float>::max();
 		for(std::uint32_t j = 0; j < distances[i].size(); ++j){
 			max = std::max(distances[i][j], max);
+			min = std::min(distances[i][j], min);
 		}
 
 		vpls[i].radius = max * 10.f;
