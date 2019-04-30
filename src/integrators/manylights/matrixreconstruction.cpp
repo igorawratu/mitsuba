@@ -303,11 +303,11 @@ std::vector<std::uint32_t> sampleRow(Scene* scene, KDTNode<ReconstructionSample>
             Normal norm;
             Point2 uv;
 
-            mat(i, 0) = 1.f;
+            mat(sampled_indices[i], 0) = 1.f;
 
             if(scene->rayIntersect(shadow_ray, t, shape, norm, uv)){
                 if(abs((ray_origin - vpl.its.p).length() - t) > 0.0001f ){
-                    mat(i, 0) = 0.f;
+                    mat(sampled_indices[i], 0) = 0.f;
                 }
             }
         }
@@ -316,9 +316,9 @@ std::vector<std::uint32_t> sampleRow(Scene* scene, KDTNode<ReconstructionSample>
 
             Float r, g, b;
             lightContribution.toLinearRGB(r, g, b);
-            mat(i * 3, 0) = r;
-            mat(i * 3 + 1, 0) = g;
-            mat(i * 3 + 2, 0) = b;
+            mat(sampled_indices[i] * 3, 0) = r;
+            mat(sampled_indices[i] * 3 + 1, 0) = g;
+            mat(sampled_indices[i] * 3 + 2, 0) = b;
         }
     }
 
@@ -340,79 +340,50 @@ std::uint32_t adaptiveMatrixReconstruction(Eigen::MatrixXd& mat, Scene* scene,
     if(num_samples == 0){
         num_samples = slice->sample_indices.size();
     }
-    std::uint32_t expected_omega_rows = visibility_only ? num_samples : num_samples * 3;
 
-    Eigen::MatrixXd reconstructed(expected_row_size, 1);
-    std::vector<std::uint32_t> sampled;
-    sampled = sampleRow(scene, slice, vpls[0], min_dist, slice->sample_indices.size(), rng, reconstructed, 
-        sampled, true, visibility_only);
-    mat.col(0) = reconstructed.col(0);
-
-    float norm = reconstructed.norm();
+    Eigen::MatrixXd reconstructed_row(expected_row_size, 1);
+    Eigen::MatrixXd sampled_row(expected_row_size, 1);
     Eigen::MatrixXd q;
-    if(norm == 0.f){
-        q = Eigen::MatrixXd::Zero(reconstructed.rows(), 1);
-    }
-    else{
-        q = reconstructed.normalized();
-    }
-    Eigen::MatrixXd sample_omega(expected_omega_rows, 1);
-    Eigen::MatrixXd q_omega;
+    std::vector<std::uint32_t> sampled;
 
-    for(std::uint32_t i = 1; i < vpls.size(); ++i){
-        sample_omega.setZero();
-        //previous full sample was used, which means that there is now a need to regenerate the sample indices and 
-        //the omega matrices
-        if(num_samples != sampled.size() || num_samples == slice->sample_indices.size()){
-            sampled = sampleRow(scene, slice, vpls[i], min_dist, num_samples, rng, sample_omega, sampled, true, visibility_only);
-            q_omega.resize(expected_omega_rows, q.cols());
+    for(std::uint32_t i = 0; i < vpls.size(); ++i){
+        sampled_row.setZero();
+        reconstructed_row.setZero();
+        if(q.cols() == 0){
+            sampled = sampleRow(scene, slice, vpls[0], min_dist, slice->sample_indices.size(), rng, reconstructed_row, 
+                sampled, true, visibility_only);
 
-            for(std::uint32_t j = 0; j < sampled.size(); ++j){
-                if(visibility_only){
-                    q_omega.row(j) = q.row(sampled[j]);
-                }
-                else{
-                    q_omega.row(j * 3) = q.row(sampled[j] * 3);
-                    q_omega.row(j * 3 + 1) = q.row(sampled[j] * 3 + 1);
-                    q_omega.row(j * 3 + 2) = q.row(sampled[j] * 3 + 2);
-                }
+            float norm = reconstructed_row.norm();
+            if(norm > std::numeric_limits<float>::epsilon()){
+                q = reconstructed_row.normalized();
             }
         }
-        //no new direction was added so no need to regenerate sample indices
         else{
-            sampled = sampleRow(scene, slice, vpls[i], min_dist, num_samples, rng, sample_omega, sampled, false, visibility_only);
-        }
-
-        auto svd = q_omega.jacobiSvd(Eigen::ComputeThinU | Eigen::ComputeThinV);
-        auto sv = svd.singularValues();
-        Eigen::MatrixXd singular_val_inv = Eigen::MatrixXd::Zero(sv.size(), sv.size());
-        for(std::uint32_t i = 0; i < sv.size(); ++i){
-            singular_val_inv(i, i) = sv(i) < 1e-10f ? 0.f : 1.f / sv(i);
-        }
-
-        Eigen::MatrixXd q_omega_pseudoInverse = svd.matrixV() * singular_val_inv * svd.matrixU().transpose();
-        reconstructed = q * q_omega_pseudoInverse * sample_omega;
-        
-        float d = 0.f;
-        for(std::uint32_t j = 0; j < sampled.size(); ++j){
-            d += fabs(reconstructed(sampled[j], 0) - sample_omega(j, 0));
-        }
-
-        if(d > 1e-10f){
-            sampled = sampleRow(scene, slice, vpls[i], min_dist, slice->sample_indices.size(), rng, 
-                reconstructed, sampled, true, visibility_only);
-
-            /*Eigen::MatrixXd orthogonalized = reconstructed;
-            for(std::uint32_t j = 0; j < q.cols(); ++j){
-                orthogonalized -= orthogonalized.col(0).dot(q.col(j)) * q.col(j);
+            bool regenerate_sample_indices = num_samples != sampled.size() || num_samples == slice->sample_indices.size();
+            sampled = sampleRow(scene, slice, vpls[i], min_dist, num_samples, rng, sampled_row, sampled, regenerate_sample_indices, visibility_only);
+            reconstructed_row = q * q.transpose() * sampled_row;
+            
+            float d = 0.f;
+            for(std::uint32_t j = 0; j < sampled.size(); ++j){
+                float dif = reconstructed_row(sampled[j], 0) - sampled_row(j, 0);
+                d += dif * dif;
             }
-            orthogonalized = orthogonalized.normalized();*/
 
-            q.conservativeResize(q.rows(), q.cols() + 1);
-            q.col(q.cols() - 1) = reconstructed;
+            if(d > 1e-10f){
+                sampled = sampleRow(scene, slice, vpls[i], min_dist, slice->sample_indices.size(), rng, 
+                    reconstructed_row, sampled, true, visibility_only);
+
+                for(std::uint32_t j = 0; j < q.cols(); ++j){
+                    reconstructed_row -= reconstructed_row.col(0).dot(q.col(j)) * q.col(j);
+                }
+                reconstructed_row = reconstructed_row.normalized();
+
+                q.conservativeResize(q.rows(), q.cols() + 1);
+                q.col(q.cols() - 1) = reconstructed_row;
+            }
         }
 
-        mat.col(i) = reconstructed.col(0);
+        mat.col(i) = reconstructed_row.col(0);
     }
 
     return slice->sample_indices.size() * q.cols() + (mat.cols() - q.cols()) * num_samples;
