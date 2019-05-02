@@ -171,7 +171,7 @@ std::tuple<float, float, float> calculateMisWeight(const Vector3f& wi, const VPL
     Vector3f light_wo = -wi;
     if(vpl.emitter != nullptr){
         DirectionSamplingRecord dsr(light_wo);
-        light_prob = pdfDirection(dsr, vpl.psr);
+        light_prob = vpl.emitter->pdfDirection(dsr, vpl.psr);
     }
     else{
         BSDFSamplingRecord bsdfsr(vpl.its, light_wo);
@@ -193,7 +193,7 @@ Spectrum sampleCone(const Vector3f& wi, const VPL& vpl, const Intersection& its,
     Vector3f sample_wi = normalize(cone_sample);
 
     BSDFSamplingRecord bsdf_sample_record(its, its.toLocal(sample_wi));
-    Spectrum curr_col = vpl.P * bsdf->eval(bsdf_sample_record);
+    Spectrum curr_col = vpl.P * its.getBSDF()->eval(bsdf_sample_record);
 
     Spectrum weight(0.f);
 
@@ -207,7 +207,7 @@ Spectrum sampleCone(const Vector3f& wi, const VPL& vpl, const Intersection& its,
         curr_col *= vpl.its.getBSDF()->eval(light_sample_record);
     }
 
-    float cone_prob, brdf_prob, light_prop;
+    float cone_prob, brdf_prob, light_prob;
     std::tie(cone_prob, brdf_prob, light_prob) = calculateMisWeight(sample_wi, vpl, its);
     curr_col *= cone_prob / (cone_prob + brdf_prob + light_prob);
 
@@ -232,11 +232,11 @@ Spectrum sampleBsdf(const VPL& vpl, const Intersection& its, Sampler* sampler){
             curr_col *= vpl.its.getBSDF()->eval(light_sample_record);
         }
 
-        float cone_prob, brdf_prob, light_prop;
+        float cone_prob, brdf_prob, light_prob;
         std::tie(cone_prob, brdf_prob, light_prob) = calculateMisWeight(bsdf_sample_record.wi, vpl, its);
         curr_col *= brdf_prob / (cone_prob + brdf_prob + light_prob);
 
-        return curr_col
+        return curr_col;
     }
 
     return Spectrum(0.f);
@@ -247,7 +247,8 @@ Spectrum sampleLight(const VPL& vpl, const Intersection& its, Sampler* sampler){
     Spectrum curr_col;
     if(vpl.emitter != nullptr){
         DirectionSamplingRecord dsr;
-        curr_col = vpl.emitter->sampleDirection(dsr, vpl.psr, sampler->next2D());
+        PositionSamplingRecord psr = vpl.psr;
+        curr_col = vpl.emitter->sampleDirection(dsr, psr, sampler->next2D());
         wi = -dsr.d;
     }
     else{
@@ -259,13 +260,13 @@ Spectrum sampleLight(const VPL& vpl, const Intersection& its, Sampler* sampler){
 
     if(raySphereIntersect(its.p, wi, vpl.its.p, vpl.radius)){
         BSDFSamplingRecord bsdf_sample_record(its, its.toLocal(wi));
-        curr_col *= bsdf->eval(bsdf_sample_record);
+        curr_col *= its.getBSDF()->eval(bsdf_sample_record);
 
-        float cone_prob, brdf_prob, light_prop;
+        float cone_prob, brdf_prob, light_prob;
         std::tie(cone_prob, brdf_prob, light_prob) = calculateMisWeight(wi, vpl, its);
         curr_col *= brdf_prob / (cone_prob + brdf_prob + light_prob);
 
-        return curr_col
+        return curr_col;
     }
 
     return Spectrum(0.f);
@@ -290,7 +291,7 @@ float distFromPlane(Point p, Vector3f np, Point q, Vector3f nq)
     return sqrt( l*l / (1.f-dpq*dpq) );
 }
 
-float effectiveLightArea(float lightR, float3 lightP, float3 lightN, float3 P, float3 N)
+float effectiveLightArea(float lightR, Point lightP, Vector3f lightN, Point P, Vector3f N)
 {
     float h = distFromPlane(lightP, lightN, P, N);
     return (h<lightR) ? circleSegmentArea(h,lightR) : M_PI*lightR*lightR;
@@ -377,7 +378,7 @@ Spectrum sample(Scene* scene, Sampler* sampler, Intersection& its, const Ray& in
             total += sampleLight(vpl, its, sampler);
         }
 
-        c = solid_angle_ratio * total / (float(num_samples) * central_disc_area);
+        c = total / 2000.f;//solid_angle_ratio * total / (float(num_samples) * central_disc_area);
     }
     else{
         //only care about non-specular surfaces for now, just return specular reflectance
