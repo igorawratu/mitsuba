@@ -6,17 +6,18 @@
 
 MTS_NAMESPACE_BEGIN
 
-LightClustererRenderer::LightClustererRenderer(std::unique_ptr<ManyLightsClusterer> clusterer, float min_dist) : min_dist_(min_dist),
-    clusterer_(std::move(clusterer)), cancel_(false){
+LightClustererRenderer::LightClustererRenderer(std::unique_ptr<ManyLightsClusterer> clusterer, float min_dist, bool vsl) : 
+    min_dist_(min_dist), clusterer_(std::move(clusterer)), vsl_(vsl), cancel_(false){
 }
 
 LightClustererRenderer::LightClustererRenderer(LightClustererRenderer&& other) : clusterer_(std::move(other.clusterer_)),
-    cancel_(other.cancel_){
+    vsl_(other.vsl_), cancel_(other.cancel_){
 }
 
 LightClustererRenderer& LightClustererRenderer::operator = (LightClustererRenderer&& other){
     if(this != &other){
         this->clusterer_ = std::move(other.clusterer_);
+        this->vsl_ = other.vsl_;
         this->cancel_ = other.cancel_;
     }
 
@@ -80,7 +81,7 @@ bool LightClustererRenderer::render(Scene* scene){
             bool intersected;
             for (std::uint32_t i = 0; i < vpls.size(); ++i) {
                 accumulator += sample(scene, sampler, its, ray, vpls[i], min_dist_, true, 
-                    10, i == 0, intersected, true, true);
+                    10, i == 0, intersected, true, vsl_);
 
                 if(!intersected || its.isEmitter()){
                     break;

@@ -163,9 +163,9 @@ bool raySphereIntersect(Point ray_origin, Vector3f ray_d, Point sphere_center, f
     return dot(projection, ray_d) >= 0.f && projection.lengthSquared() >= sr2;
 }
 
-const float CONE_PROB = 1.f / (2.f * M_PI);
-
-std::tuple<float, float, float> calculateMisWeight(const Vector3f& wi, const VPL& vpl, const Intersection& its){
+std::tuple<float, float, float> calculateMisWeight(const Vector3f& wi, const VPL& vpl, const Intersection& its,
+    float solid_angle){
+    
     float light_prob;
 
     Vector3f light_wo = -wi;
@@ -181,10 +181,11 @@ std::tuple<float, float, float> calculateMisWeight(const Vector3f& wi, const VPL
     BSDFSamplingRecord bsdfsr(its, wi);
     float bsdf_prob = its.getBSDF()->pdf(bsdfsr);
 
-    return std::make_tuple(CONE_PROB, bsdf_prob, light_prob);
+    return std::make_tuple(1.f / solid_angle, bsdf_prob, light_prob);
 }
 
-Spectrum sampleCone(const Vector3f& wi, const VPL& vpl, const Intersection& its, float d, Sampler* sampler){
+Spectrum sampleCone(const Vector3f& wi, const VPL& vpl, const Intersection& its, float d, Sampler* sampler,
+    float solid_angle){
     float r = sampler->next1D() * vpl.radius;
     float theta = sampler->next1D() * 2.f * M_PI;
     Vector3f cone_sample(cos(theta) * sqrt(r), sin(theta) * sqrt(r), d);
@@ -208,33 +209,35 @@ Spectrum sampleCone(const Vector3f& wi, const VPL& vpl, const Intersection& its,
     }
 
     float cone_prob, brdf_prob, light_prob;
-    std::tie(cone_prob, brdf_prob, light_prob) = calculateMisWeight(sample_wi, vpl, its);
-    curr_col *= cone_prob / (cone_prob + brdf_prob + light_prob);
+    std::tie(cone_prob, brdf_prob, light_prob) = calculateMisWeight(sample_wi, vpl, its, solid_angle);
+    curr_col /= cone_prob;// + brdf_prob + light_prob;
 
     return curr_col;
 }
 
-Spectrum sampleBsdf(const VPL& vpl, const Intersection& its, Sampler* sampler){
+Spectrum sampleBsdf(const VPL& vpl, const Intersection& its, Sampler* sampler, float solid_angle, float cos_theta){
     BSDFSamplingRecord bsdf_sample_record(its, sampler);
     bsdf_sample_record.typeMask = BSDF::EReflection;
-    Spectrum curr_col = its.getBSDF()->sample(bsdf_sample_record, sampler->next2D());
+    Spectrum curr_col = its.getBSDF()->sample(bsdf_sample_record, sampler->next2D()) * vpl.P;
 
-    if(raySphereIntersect(its.p, bsdf_sample_record.wi, vpl.its.p, vpl.radius)){
-        curr_col *= vpl.P;
-
+    if(/*raySphereIntersect(its.p, bsdf_sample_record.wo, vpl.its.p, vpl.radius)*/
+        dot(bsdf_sample_record.wo, normalize(vpl.its.p - its.p)) < cos_theta){
         if(vpl.emitter != nullptr){
             DirectionSamplingRecord dir;
-            dir.d = -bsdf_sample_record.wi;
+            dir.d = -bsdf_sample_record.wo;
             curr_col *= vpl.emitter->evalDirection(dir, vpl.psr);
         }
         else if(vpl.its.getBSDF() != nullptr){
-            BSDFSamplingRecord light_sample_record(vpl.its, vpl.its.toLocal(-bsdf_sample_record.wi));
+            BSDFSamplingRecord light_sample_record(vpl.its, vpl.its.toLocal(-bsdf_sample_record.wo));
             curr_col *= vpl.its.getBSDF()->eval(light_sample_record);
         }
 
         float cone_prob, brdf_prob, light_prob;
-        std::tie(cone_prob, brdf_prob, light_prob) = calculateMisWeight(bsdf_sample_record.wi, vpl, its);
-        curr_col *= brdf_prob / (cone_prob + brdf_prob + light_prob);
+        std::tie(cone_prob, brdf_prob, light_prob) = calculateMisWeight(bsdf_sample_record.wo, vpl, its, solid_angle);
+        if(brdf_prob > std::numeric_limits<float>::epsilon()){
+            curr_col /= /*cone_prob + */brdf_prob/* + light_prob*/;
+        }
+        else curr_col = Spectrum(0.f);
 
         return curr_col;
     }
@@ -242,29 +245,36 @@ Spectrum sampleBsdf(const VPL& vpl, const Intersection& its, Sampler* sampler){
     return Spectrum(0.f);
 }
 
-Spectrum sampleLight(const VPL& vpl, const Intersection& its, Sampler* sampler){
+Spectrum sampleLight(const VPL& vpl, const Intersection& its, Sampler* sampler, float solid_angle, float cos_theta){
     Vector3f wi;
     Spectrum curr_col;
     if(vpl.emitter != nullptr){
         DirectionSamplingRecord dsr;
         PositionSamplingRecord psr = vpl.psr;
-        curr_col = vpl.emitter->sampleDirection(dsr, psr, sampler->next2D());
+        curr_col = vpl.emitter->sampleDirection(dsr, psr, sampler->next2D()) * vpl.P;
         wi = -dsr.d;
     }
     else{
         BSDFSamplingRecord bsdf_sample_record(vpl.its, sampler);
         bsdf_sample_record.typeMask = BSDF::EReflection;
         curr_col = vpl.its.getBSDF()->sample(bsdf_sample_record, sampler->next2D()) * vpl.P;
-        wi = -vpl.its.toWorld(bsdf_sample_record.wo);
+        wi = -bsdf_sample_record.wo;//-vpl.its.toWorld(bsdf_sample_record.wo);
     }
 
-    if(raySphereIntersect(its.p, wi, vpl.its.p, vpl.radius)){
+    if(/*raySphereIntersect(its.p, wi, vpl.its.p, vpl.radius)*/
+        dot(wi, normalize(vpl.its.p - its.p)) < cos_theta){
         BSDFSamplingRecord bsdf_sample_record(its, its.toLocal(wi));
         curr_col *= its.getBSDF()->eval(bsdf_sample_record);
 
         float cone_prob, brdf_prob, light_prob;
-        std::tie(cone_prob, brdf_prob, light_prob) = calculateMisWeight(wi, vpl, its);
-        curr_col *= brdf_prob / (cone_prob + brdf_prob + light_prob);
+        std::tie(cone_prob, brdf_prob, light_prob) = calculateMisWeight(wi, vpl, its, solid_angle);
+        if(light_prob > std::numeric_limits<float>::epsilon()){
+            curr_col /= /*cone_prob + brdf_prob + */light_prob;
+        }
+        else{
+            curr_col = Spectrum(0.f);
+        }
+        
 
         return curr_col;
     }
@@ -367,18 +377,19 @@ Spectrum sample(Scene* scene, Sampler* sampler, Intersection& its, const Ray& in
     if(vsl && vpl.type == ESurfaceVPL){
         float central_disc_area = effectiveLightArea(vpl.radius, vpl.its.p, vpl.its.shFrame.n, its.p, its.geoFrame.n);
         float d = (vpl.its.p - its.p).length();
-        float solid_angle = 2 * M_PI * (1.f - cos(asin(std::min(vpl.radius / d, 1.f))));
+        float cos_theta = cos(asin(std::min(vpl.radius / d, 1.f)));
+        float solid_angle = 2 * M_PI * (1.f - cos_theta);
         float solid_angle_ratio = solid_angle / (2.f * M_PI);
         std::uint32_t num_samples = std::max(1u, std::uint32_t(sqrt(solid_angle_ratio) * 1.f));
         Spectrum total(0.f);
 
         for(std::uint32_t i = 0; i < num_samples; ++i){
-            total += sampleCone(wi, vpl, its, d, sampler);
-            total += sampleBsdf(vpl, its, sampler);
-            total += sampleLight(vpl, its, sampler);
+            //total += sampleCone(wi, vpl, its, d, sampler, solid_angle);
+            total += sampleBsdf(vpl, its, sampler, solid_angle, cos_theta);
+            //total += sampleLight(vpl, its, sampler, solid_angle, cos_theta);
         }
 
-        c = total / 2000.f;//solid_angle_ratio * total / (float(num_samples) * central_disc_area);
+        c = total / (float(num_samples) * central_disc_area);
     }
     else{
         //only care about non-specular surfaces for now, just return specular reflectance

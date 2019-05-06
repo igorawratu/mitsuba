@@ -24,7 +24,7 @@
 MTS_NAMESPACE_BEGIN
 
 std::unique_ptr<KDTNode<RowSample>> constructKDTree(Scene* scene, const std::vector<VPL>& vpls, 
-    std::uint32_t size_threshold, float min_dist, std::vector<RowSample>& samples){
+    std::uint32_t size_threshold, float min_dist, std::vector<RowSample>& samples, bool vsl){
 
     auto kdt_root = std::unique_ptr<KDTNode<RowSample>>(new KDTNode<RowSample>(&samples));
 
@@ -60,7 +60,7 @@ std::unique_ptr<KDTNode<RowSample>> constructKDTree(Scene* scene, const std::vec
 
             for (std::uint32_t i = 0; i < vpls.size(); ++i) {
                 curr_sample.col_samples[i] = sample(scene, sampler, curr_sample.its, ray, vpls[i], min_dist, false, 
-                    10, i == 0, curr_sample.intersected_scene, true, true);
+                    10, i == 0, curr_sample.intersected_scene, true, vsl);
 
                 if(!curr_sample.intersected_scene || curr_sample.its.isEmitter()){
                     break;
@@ -627,7 +627,7 @@ void convolve(Eigen::MatrixXf& mat, const Eigen::VectorXf& row_kernel, const Eig
 
 void reincorporateDenseHighRank(Eigen::MatrixXf& low_rank, const Eigen::MatrixXf& sparse, KDTNode<RowSample>* slice,
     float sparsity_threshold, const Eigen::VectorXf& kernel, float density_threshold, Scene* scene,
-    const std::vector<VPL> vpls, float min_dist){
+    const std::vector<VPL> vpls, float min_dist, bool vsl){
 
     Eigen::MatrixXf discrete_sparse = Eigen::MatrixXf::Zero(sparse.rows(), sparse.cols());
     for(std::uint32_t row = 0; row < discrete_sparse.rows(); ++row){
@@ -653,7 +653,7 @@ void reincorporateDenseHighRank(Eigen::MatrixXf& low_rank, const Eigen::MatrixXf
 
             if(requires_direct_sample){
                 Spectrum col = sample(scene, sampler, slice->sample(row).its, slice->sample(row).ray, vpls[light], 
-                    min_dist, true, 10, false, slice->sample(row).intersected_scene, true, true);
+                    min_dist, true, 10, false, slice->sample(row).intersected_scene, true, vsl);
 
                 float r, g, b;
                 col.toLinearRGB(r, g, b);
@@ -672,14 +672,15 @@ MatrixSeparationRenderer::MatrixSeparationRenderer(std::unique_ptr<ManyLightsClu
         float min_dist, float sample_percentage, float error_threshold, float reincorporation_density_threshold,
         std::uint32_t slice_size, std::uint32_t max_prediction_iterations, std::uint32_t max_separation_iterations,
         std::uint32_t show_slices, std::uint32_t only_directsamples, bool separate, bool show_error, bool show_sparse,
-        std::uint32_t predictor_mask, bool show_rank, bool show_predictors, float rank_increase_threshold, float theta) : 
+        std::uint32_t predictor_mask, bool show_rank, bool show_predictors, float rank_increase_threshold, float theta,
+        bool vsl) : 
         clusterer_(std::move(clusterer)), min_dist_(min_dist), sample_percentage_(sample_percentage),
         error_threshold_(error_threshold), reincorporation_density_threshold_(reincorporation_density_threshold),
         slice_size_(slice_size), max_prediction_iterations_(max_prediction_iterations), 
         max_separation_iterations_(max_separation_iterations), show_slices_(show_slices > 0),
         show_only_directsamples_(only_directsamples > 0), cancel_(false), separate_(separate), show_error_(show_error),
         show_sparse_(show_sparse), predictor_mask_(predictor_mask), show_rank_(show_rank), show_predictors_(show_predictors),
-        rank_increase_threshold_(rank_increase_threshold), theta_(theta){
+        rank_increase_threshold_(rank_increase_threshold), theta_(theta), vsl_(vsl){
 
 }
 
@@ -691,7 +692,7 @@ MatrixSeparationRenderer::MatrixSeparationRenderer(MatrixSeparationRenderer&& ot
         show_only_directsamples_(other.show_only_directsamples_), cancel_(false), samples_(std::move(other.samples_)),
         separate_(other.separate_), show_error_(other.show_error_), show_sparse_(other.show_sparse_),
         predictor_mask_(other.predictor_mask_), show_rank_(other.show_rank_), show_predictors_(other.show_predictors_),
-        rank_increase_threshold_(other.rank_increase_threshold_), theta_(other.theta_){
+        rank_increase_threshold_(other.rank_increase_threshold_), theta_(other.theta_), vsl_(other.vsl_){
     
 }
 
@@ -717,6 +718,7 @@ MatrixSeparationRenderer& MatrixSeparationRenderer::operator = (MatrixSeparation
         show_predictors_ = other.show_predictors_;
         rank_increase_threshold_ = other.rank_increase_threshold_;
         theta_ = other.theta_;
+        vsl_ = other.vsl_;
     }
     
     return *this;
@@ -774,7 +776,7 @@ bool MatrixSeparationRenderer::render(Scene* scene){
     calculateNearestVPLNeighbours(vpls, vpl_nearest_neighbours, vpl_nearest_distances, 10);
     
     std::cout << "constructing kd tree" << std::endl;
-    auto root = constructKDTree(scene, vpls, slice_size_, min_dist_, samples_);
+    auto root = constructKDTree(scene, vpls, slice_size_, min_dist_, samples_, vsl_);
     std::vector<KDTNode<RowSample>*> slices;
 
     getSlices(root.get(), slices);
@@ -831,7 +833,7 @@ bool MatrixSeparationRenderer::render(Scene* scene){
                 auto gaussian_kernel = createGaussianKernel(7);
 
                 //reincorporateDenseHighRank(l, s, slices[i], 0.00001f, gaussian_kernel, reincorporation_density_threshold_, 
-                //    scene, vpls, min_dist_);
+                //    scene, vpls, min_dist_, vsl_);
 
                 matrixToSlice(slices[i], show_sparse_ ? s : l);
             }

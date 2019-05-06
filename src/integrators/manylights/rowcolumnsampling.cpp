@@ -69,7 +69,7 @@ const double PI = 3.14159265359;
 
 std::vector<float> calculateLightContributions(const std::vector<VPL>& vpls, 
                                     const std::vector<std::pair<std::uint32_t, std::uint32_t>>& rows,
-                                    const Scene* scene, float min_dist){
+                                    const Scene* scene, float min_dist, bool vsl){
     std::vector<float> contributions(vpls.size(), 0.f);
 
     const Sensor* sensor = scene->getSensor();
@@ -94,7 +94,7 @@ std::vector<float> calculateLightContributions(const std::vector<VPL>& vpls,
 
         for(size_t i = 0; i < vpls.size(); ++i){
             Spectrum s = sample(const_cast<Scene*>(scene), sampler, its, ray, vpls[i], min_dist, true, 
-                    10, i == 0, intersected, true, true);
+                    10, i == 0, intersected, true, vsl);
 
             if(!intersected || its.isEmitter()){
                 break;
@@ -325,10 +325,10 @@ std::vector<VPL> calculateClustering(std::vector<VPL> vpls, std::vector<float> c
 }
 
 RowColumnSampling::RowColumnSampling(const std::vector<VPL>& vpls, std::uint32_t rows, std::uint32_t cols,
-        std::tuple<std::uint32_t, std::uint32_t> resolution, const Scene* scene, float min_dist) : min_dist_(min_dist){
+        std::tuple<std::uint32_t, std::uint32_t> resolution, const Scene* scene, float min_dist, bool vsl) : min_dist_(min_dist){
 
     auto indices = subsampleRows(rows, resolution);
-    auto contributions = calculateLightContributions(vpls, indices, scene, min_dist_);
+    auto contributions = calculateLightContributions(vpls, indices, scene, min_dist_, vsl);
     clustering_ = calculateClustering(vpls, contributions, cols, min_dist);
 }
 
