@@ -179,6 +179,7 @@ std::tuple<float, float, float> calculateMisWeight(const Vector3f& wi, const VPL
     }
 
     BSDFSamplingRecord bsdfsr(its, wi);
+    bsdfsr.typeMask = BSDF::EReflection;
     float bsdf_prob = its.getBSDF()->pdf(bsdfsr);
 
     return std::make_tuple(1.f / solid_angle, bsdf_prob, light_prob);
@@ -194,13 +195,13 @@ Spectrum sampleCone(const Vector3f& wi, const VPL& vpl, const Intersection& its,
     Vector3f sample_wi = normalize(cone_sample);
 
     BSDFSamplingRecord bsdf_sample_record(its, its.toLocal(sample_wi));
-    Spectrum curr_col = vpl.P * its.getBSDF()->eval(bsdf_sample_record);
+    Spectrum curr_col = vpl.P * its.getBSDF()->eval(bsdf_sample_record) * 
+        std::max(0.f, dot(bsdf_sample_record.wo, its.geoFrame.n));;
 
     Spectrum weight(0.f);
 
     if(vpl.emitter != nullptr){
-        DirectionSamplingRecord dir;
-        dir.d = -sample_wi;
+        DirectionSamplingRecord dir(-sample_wi);
         curr_col *= vpl.emitter->evalDirection(dir, vpl.psr);
     }
     else if(vpl.its.getBSDF() != nullptr){
@@ -218,24 +219,26 @@ Spectrum sampleCone(const Vector3f& wi, const VPL& vpl, const Intersection& its,
 Spectrum sampleBsdf(const VPL& vpl, const Intersection& its, Sampler* sampler, float solid_angle, float cos_theta){
     BSDFSamplingRecord bsdf_sample_record(its, sampler);
     bsdf_sample_record.typeMask = BSDF::EReflection;
-    Spectrum curr_col = its.getBSDF()->sample(bsdf_sample_record, sampler->next2D()) * vpl.P;
-
+    float pdf;
+    Spectrum curr_col = its.getBSDF()->sample(bsdf_sample_record, pdf, sampler->next2D()) * 
+        std::max(0.f, dot(bsdf_sample_record.wo, its.geoFrame.n)) / PI;
+    
     if(/*raySphereIntersect(its.p, bsdf_sample_record.wo, vpl.its.p, vpl.radius)*/
         dot(bsdf_sample_record.wo, normalize(vpl.its.p - its.p)) < cos_theta){
         if(vpl.emitter != nullptr){
-            DirectionSamplingRecord dir;
-            dir.d = -bsdf_sample_record.wo;
+            DirectionSamplingRecord dir(bsdf_sample_record.wo);
             curr_col *= vpl.emitter->evalDirection(dir, vpl.psr);
         }
         else if(vpl.its.getBSDF() != nullptr){
-            BSDFSamplingRecord light_sample_record(vpl.its, vpl.its.toLocal(-bsdf_sample_record.wo));
-            curr_col *= vpl.its.getBSDF()->eval(light_sample_record);
+            BSDFSamplingRecord light_sample_record(vpl.its, bsdf_sample_record.wo);
+            curr_col *= vpl.its.getBSDF()->eval(light_sample_record) * vpl.P;
         }
 
         float cone_prob, brdf_prob, light_prob;
         std::tie(cone_prob, brdf_prob, light_prob) = calculateMisWeight(bsdf_sample_record.wo, vpl, its, solid_angle);
+        //std::cout << brdf_prob << " " << pdf << " " << cone_prob << " " << light_prob << " " << solid_angle << std::endl;
         if(brdf_prob > std::numeric_limits<float>::epsilon()){
-            curr_col /= /*cone_prob + */brdf_prob/* + light_prob*/;
+            curr_col /= /*cone_prob +*/ brdf_prob /*+ light_prob*/;
         }
         else curr_col = Spectrum(0.f);
 
@@ -410,8 +413,7 @@ Spectrum sample(Scene* scene, Sampler* sampler, Intersection& its, const Ray& in
 
         if(vpl.type == ESurfaceVPL){
             if(vpl.emitter != nullptr){
-                DirectionSamplingRecord dir;
-                dir.d = -wi;
+                DirectionSamplingRecord dir(-wi);
                 c *= vpl.emitter->evalDirection(dir, vpl.psr);
             }
             else if(vpl.its.getBSDF() != nullptr){
@@ -420,8 +422,10 @@ Spectrum sample(Scene* scene, Sampler* sampler, Intersection& its, const Ray& in
             }
             //fallback to diffuse if no bsdf or emitter found
             else{
-                c *= Spectrum(std::max(0.f, dot(vpl.its.shFrame.n, -wi)));
+                c *= Spectrum(std::max(0.f, dot(vpl.its.shFrame.n, -wi))) / PI;
             }
+            /*float ln_dot_ldir = std::max(0.f, dot(vpl.its.shFrame.n, -wi)) / PI;
+            c *= ln_dot_ldir;    */
         }
     }
 
