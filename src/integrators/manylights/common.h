@@ -10,6 +10,8 @@
 #include <mutex>
 
 #include "definitions.h"
+#include "arpaca.hpp"
+#include "RedSVD-h.hpp"
 
 MTS_NAMESPACE_BEGIN
 
@@ -17,15 +19,122 @@ float calculateError(Scene* scene, const std::vector<VPL>& vpls, float min_dist,
 
 std::tuple<float, float, float> floatToRGB(float v);
 
-std::tuple<Eigen::MatrixXf, Eigen::MatrixXf, Eigen::MatrixXf> partialSvd(const Eigen::MatrixXf& mat, std::uint32_t num_singular_values);
+template<typename MatrixType>
+std::tuple<Eigen::Matrix<typename MatrixType::Scalar, Eigen::Dynamic, Eigen::Dynamic>, 
+    Eigen::Matrix<typename MatrixType::Scalar, Eigen::Dynamic, Eigen::Dynamic>,
+    Eigen::Matrix<typename MatrixType::Scalar, Eigen::Dynamic, Eigen::Dynamic>> 
+    partialSvd(const MatrixType& mat, typename MatrixType::Index num_singular_values){
+    
+    typedef typename MatrixType::Scalar Scalar;
+    typedef typename MatrixType::Index Index;
+    typedef typename Eigen::Matrix<Scalar, Eigen::Dynamic, Eigen::Dynamic> DenseMatrix;
+    typedef typename Eigen::Matrix<Scalar, Eigen::Dynamic, 1> ScalarVector;
 
-Eigen::MatrixXf softThreshRankNoTrunc(const Eigen::MatrixXf& mat, float theta);
-Eigen::MatrixXf softThreshRank(const Eigen::MatrixXf& mat, float theta, const std::uint32_t initial, 
-    const std::uint32_t step_size);
+    Index max_rank = std::min(mat.rows(), mat.cols());
+    num_singular_values = std::min(num_singular_values, max_rank);
 
-Spectrum sample(Scene* scene, Sampler* sampler, const Intersection& its, const VPL& vpl, float min_dist, bool check_occlusion);
+    RedSVD::RedSVD<DenseMatrix> svd;
+    svd.compute(mat, num_singular_values);
 
-Eigen::MatrixXf computeMoorePenroseInverse(const Eigen::MatrixXf& m);
+    DenseMatrix singular_values = DenseMatrix::Zero(mat.rows(), mat.cols());
+    DenseMatrix u = DenseMatrix::Zero(mat.rows(), mat.rows());
+    DenseMatrix v = DenseMatrix::Zero(mat.cols(), mat.cols());
+
+    const DenseMatrix uvectors = svd.matrixU();
+    const DenseMatrix vvectors = svd.matrixV();
+    const ScalarVector svs = svd.singularValues();
+
+    for(Index i = 0; i < svs.size(); ++i){
+        singular_values(i, i) = svs(i);
+        u.col(i) = uvectors.col(i);
+        v.col(i) = vvectors.col(i);
+    }
+
+    return std::make_tuple(u, singular_values, v);
+}
+
+template<typename MatrixType>
+Eigen::Matrix<typename MatrixType::Scalar, Eigen::Dynamic, Eigen::Dynamic> 
+    softThreshRankNoTrunc(const MatrixType& mat, typename MatrixType::Scalar theta){
+    typedef typename MatrixType::Scalar Scalar;
+    typedef typename MatrixType::Index Index;
+    typedef typename Eigen::Matrix<Scalar, Eigen::Dynamic, Eigen::Dynamic> DenseMatrix;
+
+    auto svd = mat.jacobiSvd(Eigen::ComputeFullU | Eigen::ComputeFullV);
+    auto singular_values = svd.singularValues();
+    DenseMatrix diagonal_singular = DenseMatrix::Zero(svd.matrixU().rows(), svd.matrixV().rows());
+    
+    for(Index j = 0; j < singular_values.rows(); ++j){
+        diagonal_singular(j, j) = std::max(Scalar(0), singular_values(j, 0) - theta);
+    }
+
+    return svd.matrixU() * diagonal_singular * svd.matrixV().transpose();
+}
+
+template<typename MatrixType>
+Eigen::Matrix<typename MatrixType::Scalar, Eigen::Dynamic, Eigen::Dynamic> 
+    softThreshRank(const MatrixType& mat, float theta, const typename MatrixType::Index initial, 
+    const typename MatrixType::Index step_size){
+    typedef typename MatrixType::Scalar Scalar;
+    typedef typename MatrixType::Index Index;
+    typedef typename Eigen::Matrix<Scalar, Eigen::Dynamic, Eigen::Dynamic> DenseMatrix;
+    typedef typename Eigen::Matrix<Scalar, Eigen::Dynamic, 1> ScalarVector;
+
+    Index max_rank = std::min(mat.rows(), mat.cols());
+    Index curr_step_size = std::min(max_rank, initial);
+
+    RedSVD::RedSVD<DenseMatrix> svd;
+
+    while(true){
+        Index actual_dim_to_compute = std::min(max_rank, curr_step_size + max_rank / 10);
+        svd.compute(mat, actual_dim_to_compute);
+        if(curr_step_size == max_rank || svd.singularValues()(curr_step_size - 1) < theta){
+            break;
+        }
+
+        curr_step_size = std::min(max_rank, curr_step_size + step_size);
+    }
+
+    DenseMatrix singular_values = DenseMatrix::Zero(mat.rows(), mat.cols());
+    DenseMatrix u = DenseMatrix::Zero(mat.rows(), mat.rows());
+    DenseMatrix v = DenseMatrix::Zero(mat.cols(), mat.cols());
+
+    const DenseMatrix uvectors = svd.matrixU();
+    const DenseMatrix vvectors = svd.matrixV();
+    const ScalarVector svs = svd.singularValues();
+
+    for(Index i = 0; i < curr_step_size; ++i){
+        singular_values(i, i) = std::max((Scalar)0, svs(i) - theta);
+        u.col(i) = uvectors.col(i);
+        v.col(i) = vvectors.col(i);
+    }
+
+    return u * singular_values * v.transpose();
+}
+
+template<typename MatrixType>
+Eigen::Matrix<typename MatrixType::Scalar, Eigen::Dynamic, Eigen::Dynamic> 
+    computeMoorePenroseInverse(const MatrixType& m){
+    typedef typename MatrixType::Scalar Scalar;
+    typedef typename MatrixType::Index Index;
+    typedef typename Eigen::Matrix<Scalar, Eigen::Dynamic, Eigen::Dynamic> DenseMatrix;
+
+    auto svd = m.jacobiSvd(Eigen::ComputeFullV | Eigen::ComputeFullU);
+    auto singular_values = svd.singularValues();
+    DenseMatrix svmat = Eigen::MatrixXf::Zero(m.cols(), m.rows());
+    for(Index i = 0; i < singular_values.size(); ++i){
+        if(fabs(singular_values(i)) > 1e-10){
+            svmat(i, i) = 1.0 / singular_values(i);
+        }
+    }
+    return svd.matrixV() * svmat * svd.matrixU().adjoint();
+}
+
+
+Spectrum sample(Scene* scene, Sampler* sampler, Intersection& its, const Ray& ray, const VPL& vpl, 
+    float min_dist, bool check_occlusion);
+
+
 
 const std::array<std::function<bool(float, const Intersection&)>, 6> searchers {
     [](float value, const Intersection& its){

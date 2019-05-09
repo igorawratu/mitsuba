@@ -15,14 +15,15 @@ struct RowSample{
     RowSample() : intersected_scene(false){
     }
 
-    RowSample(std::uint32_t x, std::uint32_t y, std::uint32_t cols, bool in_scene, Intersection intersection) : 
+    RowSample(std::uint32_t x, std::uint32_t y, std::uint32_t cols, bool in_scene, Intersection intersection,
+        const Ray& r) : 
         image_x(x), image_y(y), col_samples(cols, Spectrum(0.f)), visibility(cols, UNKNOWN), predictors(cols, 0),
-        intersected_scene(in_scene), its(intersection){
+        intersected_scene(in_scene), its(intersection), ray(r){
     }
 
     RowSample(RowSample&& other) : image_x(other.image_x), image_y(other.image_y), 
         col_samples(std::move(other.col_samples)), visibility(std::move(other.visibility)), predictors(std::move(other.predictors)),
-        intersected_scene(other.intersected_scene), its(other.its), emitter_color(other.emitter_color){
+        intersected_scene(other.intersected_scene), its(other.its), ray(other.ray), emitter_color(other.emitter_color){
     }
 
     RowSample& operator = (RowSample&& other){
@@ -34,6 +35,7 @@ struct RowSample{
             predictors = std::move(other.predictors);
             intersected_scene = other.intersected_scene;
             its = other.its;
+            ray = other.ray;
             emitter_color = other.emitter_color;
         }
 
@@ -46,6 +48,7 @@ struct RowSample{
     std::vector<std::uint32_t> predictors;
     bool intersected_scene;
     Intersection its;
+    Ray ray;
     Spectrum emitter_color;
 };
 

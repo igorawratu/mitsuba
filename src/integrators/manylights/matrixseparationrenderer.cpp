@@ -58,14 +58,14 @@ std::unique_ptr<KDTNode<RowSample>> constructKDTree(Scene* scene, const std::vec
                 continue;
             }
 
-            RowSample curr_sample(x, y, vpls.size(), intersected, its);;
+            RowSample curr_sample(x, y, vpls.size(), intersected, its, ray);
 
             if(its.isEmitter()){
                 curr_sample.emitter_color = its.Le(-ray.d);
             }
 
             for (std::uint32_t i = 0; i < vpls.size(); ++i) {
-                curr_sample.col_samples[i] = sample(scene, sampler, its, vpls[i], min_dist, false);
+                curr_sample.col_samples[i] = sample(scene, sampler, its, ray, vpls[i], min_dist, false);
             }
 
             samples[y * film->getSize().x + x] = std::move(curr_sample);
@@ -649,7 +649,8 @@ void reincorporateDenseHighRank(Eigen::MatrixXf& low_rank, const Eigen::MatrixXf
                 discrete_sparse(row, light * 3 + 2) > density_threshold;
 
             if(requires_direct_sample){
-                Spectrum col = sample(scene, sampler, slice->sample(row).its, vpls[light], min_dist, true);
+                Spectrum col = sample(scene, sampler, slice->sample(row).its, slice->sample(row).ray, vpls[light], 
+                    min_dist, true);
 
                 float r, g, b;
                 col.toLinearRGB(r, g, b);

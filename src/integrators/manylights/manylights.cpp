@@ -137,15 +137,18 @@ size_t generateVPLs(const Scene *scene, size_t offset, size_t count, int max_dep
 
 		//samples an emitter, adds it to the vpl vector, and then extracts a point and direction sample to be used later for additional
 		//vpl generation
-		if (!emitter->isEnvironmentEmitter() && emitter->needsDirectionSample()) {
-			VPL vpl(ESurfaceVPL, weight);
+		if (!emitter->isEnvironmentEmitter()) {
+			EVPLType type = emitter->needsDirectionSample() ? ESurfaceVPL : EPointEmitterVPL;
+			VPL vpl(type, weight);
 			vpl.its.p = point_sample.p;
 			vpl.its.time = time;
 			vpl.its.shFrame = point_sample.n.isZero() ? standard_frame : Frame(point_sample.n);
 			vpl.emitter = emitter;
 			vpls.push_back(vpl);
 
-			weight *= emitter->sampleDirection(direction_sample, point_sample, sampler->next2D());
+			if(type == ESurfaceVPL){
+				weight *= emitter->sampleDirection(direction_sample, point_sample, sampler->next2D());
+			}
 		}
 		else {
 			DirectSamplingRecord direct_sample(scene->getKDTree()->getAABB().getCenter(), point_sample.time);
@@ -174,7 +177,7 @@ size_t generateVPLs(const Scene *scene, size_t offset, size_t count, int max_dep
 		Ray ray(point_sample.p, direction_sample.d, time);
 		Intersection its;
 		//generates vpls from additional bounces
-		while (!weight.isZero() && (depth < max_depth || max_depth == -1)) {
+		while (!weight.isZero() && (depth < max_depth || max_depth == -1) && vpls.size() < count) {
 			if (!scene->rayIntersect(ray, its))
 				break;
 
@@ -320,11 +323,16 @@ private:
 				std::uint32_t slice_size = props.getInteger("completion-slice_size", 1024);
 				bool visibility_only = props.getInteger("completion-visibility_only", 0) > 0;
 				bool adaptive_col_sampling = props.getInteger("completion-adaptive_col_sampling", 0) > 0;
+				bool adaptive_importance_sampling = props.getInteger("completion-adaptive_importance_sampling", 0) > 0;
+				bool adaptive_force_resample = props.getInteger("completion-adaptive_force_resample", 0) > 0;
+				bool adaptive_recover_transpose = props.getInteger("completion-adaptive_recover_transpose", 0) > 0;
+				bool truncated = props.getInteger("completion-use_truncated", 0) > 0;
 
 				std::unique_ptr<ManyLightsClusterer> clusterer(new PassthroughClusterer(vpls_));
 				return std::unique_ptr<ManyLightsRenderer>(new MatrixReconstructionRenderer(std::move(clusterer), 
 					sample_percentage, min_dist_, step_size_factor, tolerance, tau, max_iterations, slice_size,
-					visibility_only, adaptive_col_sampling));
+					visibility_only, adaptive_col_sampling, adaptive_importance_sampling, adaptive_force_resample,
+					adaptive_recover_transpose, truncated));
 			}
 			case MATRIXSEPARATION:
 			{

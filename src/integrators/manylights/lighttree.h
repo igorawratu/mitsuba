@@ -13,18 +13,18 @@ MTS_NAMESPACE_BEGIN
 
 struct LightTreeNode{
     LightTreeNode() : left(nullptr), right(nullptr), vpl(EPointEmitterVPL, Spectrum(0.f)), emission_scale(0.f), 
-        min_bounds(0.f), max_bounds(0.f), cone_ray1(0.f), cone_ray2(0.f){
+        min_bounds(0.f), max_bounds(0.f), cone_ray(0.f), cone_halfangle(0.f){
     }
 
     LightTreeNode(const LightTreeNode& other) : left(other.left == nullptr ? nullptr : new LightTreeNode(*other.left)),
         right(other.right == nullptr ? nullptr : new LightTreeNode(*other.right)),
-        vpl(other.vpl), emission_scale(other.emission_scale), min_bounds(other.min_bounds), max_bounds(other.max_bounds), cone_ray1(other.cone_ray1),
-        cone_ray2(other.cone_ray2){
+        vpl(other.vpl), emission_scale(other.emission_scale), min_bounds(other.min_bounds), max_bounds(other.max_bounds), 
+        cone_ray(other.cone_ray), cone_halfangle(other.cone_halfangle){
     }
 
     LightTreeNode(LightTreeNode&& other) : left(std::move(other.left)), right(std::move(other.right)),
-        vpl(other.vpl), emission_scale(other.emission_scale), min_bounds(other.min_bounds), max_bounds(other.max_bounds), cone_ray1(other.cone_ray1),
-        cone_ray2(other.cone_ray2){
+        vpl(other.vpl), emission_scale(other.emission_scale), min_bounds(other.min_bounds), max_bounds(other.max_bounds), 
+        cone_ray(other.cone_ray), cone_halfangle(other.cone_halfangle){
     }
 
     LightTreeNode& operator = (const LightTreeNode& other){
@@ -35,8 +35,8 @@ struct LightTreeNode{
            emission_scale = other.emission_scale;
            min_bounds = other.min_bounds;
            max_bounds = other.max_bounds;
-           cone_ray1 = other.cone_ray1;
-           cone_ray2 = other.cone_ray2;
+           cone_ray = other.cone_ray;
+           cone_halfangle = other.cone_halfangle;
        }
 
        return *this;
@@ -50,8 +50,8 @@ struct LightTreeNode{
            emission_scale = other.emission_scale;
            min_bounds = other.min_bounds;
            max_bounds = other.max_bounds;
-           cone_ray1 = other.cone_ray1;
-           cone_ray2 = other.cone_ray2;
+           cone_ray = other.cone_ray;
+           cone_halfangle = other.cone_halfangle;
 
            other.left = nullptr;
            other.right = nullptr;
@@ -64,7 +64,8 @@ struct LightTreeNode{
     VPL vpl;
     float emission_scale;
     Point min_bounds, max_bounds;
-    Vector3 cone_ray1, cone_ray2;
+    Vector3 cone_ray;
+    float cone_halfangle;
 };
 
 class LightTree : public ManyLightsClusterer{
@@ -78,6 +79,7 @@ public:
     ~LightTree();
 
     std::vector<VPL> getClusteringForPoint(const Intersection& its);
+    std::vector<VPL> getClusteringForPoints(const std::vector<Intersection>& points);
 
 private:
     std::vector<VPL> point_vpls_, directional_vpls_, oriented_vpls_;

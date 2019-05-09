@@ -27,7 +27,6 @@ LightClustererRenderer::~LightClustererRenderer(){
 }
 
 bool LightClustererRenderer::render(Scene* scene){
-    std::cout << "hello" << std::endl;
     {
         std::lock_guard<std::mutex> lock(cancel_lock_);
         cancel_ = false;
@@ -42,6 +41,10 @@ bool LightClustererRenderer::render(Scene* scene){
     Sampler *sampler = static_cast<Sampler*>(PluginManager::getInstance()->createObject(MTS_CLASS(Sampler), props));
     sampler->configure();
     sampler->generate(Point2i(0));
+
+    std::uint64_t total_lights = 0;
+    std::uint64_t total_rendered_pixels = 0;
+    std::mutex light_counter_mutex;
 
     for (std::int32_t y = 0; y < output_image->getSize().y; ++y) {
         {
@@ -77,15 +80,26 @@ bool LightClustererRenderer::render(Scene* scene){
                 }
 
                 std::vector<VPL> vpls = clusterer_->getClusteringForPoint(its);
+                {
+                    std::lock_guard<std::mutex> counter_lock(light_counter_mutex);
+                    total_lights += vpls.size();
+                    total_rendered_pixels++;
+                }
+                
 
                 for (std::uint32_t i = 0; i < vpls.size(); ++i) {
-                    accumulator += sample(scene, sampler, its, vpls[i], min_dist_, true);
+                    accumulator += sample(scene, sampler, its, ray, vpls[i], min_dist_, true);
+                }
+            }
+            else{
+                if(scene->hasEnvironmentEmitter()){
+                    accumulator = scene->evalEnvironment(RayDifferential(ray));
                 }
             }
 
             float r, g, b;
             accumulator.toSRGB(r, g, b);
-
+            
             //can set the buffer directly since we have direct control over the format of the image
             std::uint32_t offset = (x + y * output_image->getSize().x) * output_image->getBytesPerPixel();
             
@@ -94,6 +108,8 @@ bool LightClustererRenderer::render(Scene* scene){
             image_buffer[offset + 2] = std::min(1.f, b) * 255 + 0.5f;
         }
     }
+
+    std::cout << (float)total_lights / (float)total_rendered_pixels << std::endl;
 
     film->setBitmap(output_image);
 

@@ -1,7 +1,5 @@
 #include "common.h"
 
-#include "arpaca.hpp"
-
 MTS_NAMESPACE_BEGIN
 
 std::tuple<float, float, float> floatToRGB(float v){
@@ -77,30 +75,44 @@ float calculateError(Scene* scene, const std::vector<VPL>& vpls, float min_dist,
                         Point2 uv;
 
                         if(scene->rayIntersect(shadow_ray, t, shape, norm, uv)){
+                            if(vpls[i].type == EDirectionalEmitterVPL){
+                                continue;
+                            }
+
                             if(abs((ray_origin - vpls[i].its.p).length() - t) > 0.0001f ){
                                 continue;
                             }
                         }
 
                         BSDFSamplingRecord bsdf_sample_record(its, sampler, ERadiance);
-                        bsdf_sample_record.wi = its.toLocal(normalize(vpls[i].its.p - its.p));
-                        bsdf_sample_record.wo = its.toLocal(n);
+                        Spectrum albedo(0.f);
+                        for(std::uint8_t i = 0; i < 10; ++i){
+                            albedo += its.getBSDF()->sample(bsdf_sample_record, sampler->next2D());
+                        }
+                        albedo /= 10.f;
 
-                        albedo = its.getBSDF()->eval(bsdf_sample_record);
+                        float n_dot_ldir = std::max(0.f, dot(n, normalize(vpls[i].its.p - its.p)));
 
-                        //only dealing with emitter and surface VPLs curently.
-                        if (vpls[i].type != EPointEmitterVPL && vpls[i].type != ESurfaceVPL){
-                            continue;
+                        Spectrum c = (vpls[i].P * n_dot_ldir * albedo) / PI;
+
+                        if(vpls[i].type == ESurfaceVPL){
+                            float ln_dot_ldir = std::max(0.f, dot(vpls[i].its.shFrame.n, normalize(its.p - vpls[i].its.p)));
+                            c *= ln_dot_ldir;
                         }
 
-                        float d = std::max((its.p - vpls[i].its.p).length(), min_dist);
-                        float attenuation = 1.f / (d * d);
+                        if(vpls[i].type != EDirectionalEmitterVPL){
+                            float d = std::max((its.p - vpls[i].its.p).length(), min_dist);
+                            float attenuation = 1.f / (d * d);
+                            c *= attenuation;
+                        }
 
-                        float n_dot_ldir = std::max(0.f, dot(normalize(n), normalize(vpls[i].its.p - its.p)));
-                        float ln_dot_ldir = std::max(0.f, dot(normalize(vpls[i].its.shFrame.n), normalize(its.p - vpls[i].its.p)));
-
-                        accumulator += (vpls[i].P * ln_dot_ldir * attenuation * n_dot_ldir * albedo) / PI;
+                        accumulator += c;
                     }
+                }
+            }
+            else{
+                if(scene->hasEnvironmentEmitter()){
+                    accumulator = scene->evalEnvironment(RayDifferential(ray));
                 }
             }
 
@@ -136,134 +148,55 @@ float calculateError(Scene* scene, const std::vector<VPL>& vpls, float min_dist,
     return tot_error;
 }
 
-std::tuple<Eigen::MatrixXf, Eigen::MatrixXf, Eigen::MatrixXf> partialSvd(const Eigen::MatrixXf& mat, 
-    const std::uint32_t num_singular_values){
-    assert(num_singular_values < std::min(mat.rows(), mat.cols()));
-
-    std::uint32_t dim = std::max(mat.rows(), mat.cols());
-    Eigen::MatrixXf jordan_wielandt = Eigen::MatrixXf::Zero(dim * 2, dim * 2);
-    jordan_wielandt.block(0, dim, mat.rows(), mat.cols()) = mat;
-    jordan_wielandt.block(dim, 0, mat.cols(), mat.rows()) = mat.transpose();
-
-    const arpaca::EigenvalueType type = arpaca::ALGEBRAIC_LARGEST;
-    arpaca::SymmetricEigenSolver<float> solver = arpaca::Solve(jordan_wielandt, num_singular_values, type);
-    const Eigen::MatrixXf& eigenvectors = solver.eigenvectors();
-    const Eigen::VectorXf& eigenvalues = solver.eigenvalues();
-
-    Eigen::MatrixXf singular_values = Eigen::MatrixXf::Zero(mat.rows(), mat.cols());
-    Eigen::MatrixXf u = Eigen::MatrixXf::Zero(mat.rows(), mat.rows());
-    Eigen::MatrixXf v = Eigen::MatrixXf::Zero(mat.cols(), mat.cols());
-
-    float scale = sqrt(2.f);
-
-    for(int i = 0; i < eigenvalues.size(); ++i){
-        singular_values(i, i) = eigenvalues(i);
-        u.col(i) = scale * eigenvectors.block(0, i, mat.rows(), 1);
-        v.col(i) = scale * eigenvectors.block(dim, i, mat.cols(), 1);
-    }
-
-    return std::make_tuple(u, singular_values, v);
-}
-
-Eigen::MatrixXf softThreshRankNoTrunc(const Eigen::MatrixXf& mat, float theta){
-    auto svd = mat.jacobiSvd(Eigen::ComputeFullU | Eigen::ComputeFullV);
-    auto singular_values = svd.singularValues();
-    Eigen::MatrixXf diagonal_singular = Eigen::MatrixXf::Zero(svd.matrixU().rows(), svd.matrixV().rows());
-    
-    for(std::uint32_t j = 0; j < singular_values.rows(); ++j){
-        diagonal_singular(j, j) = std::max(0.f, singular_values(j, 0) - theta);
-    }
-
-    return svd.matrixU() * diagonal_singular * svd.matrixV().transpose();
-}
-
-Eigen::MatrixXf softThreshRank(const Eigen::MatrixXf& mat, float theta, const std::uint32_t initial, 
-    const std::uint32_t step_size){
-    std::uint32_t max_rank = std::min(mat.rows(), mat.cols());
-    std::uint32_t curr_step_size = std::min(max_rank, initial);
-
-    std::uint32_t dim = std::max(mat.rows(), mat.cols());
-    Eigen::MatrixXf jordan_wielandt = Eigen::MatrixXf::Zero(dim * 2, dim * 2);
-
-    {
-        jordan_wielandt.block(0, dim, mat.rows(), mat.cols()) = mat;
-        jordan_wielandt.block(dim, 0, mat.cols(), mat.rows()) = mat.transpose();
-    }
-    
-    arpaca::SymmetricEigenSolver<float> solver;
-    while(true){
-        solver = arpaca::Solve(jordan_wielandt, curr_step_size, arpaca::ALGEBRAIC_LARGEST);
-        if(curr_step_size == max_rank || solver.eigenvalues()(0) < theta){
-            break;
-        }
-        curr_step_size = std::min(max_rank, curr_step_size + step_size);
-    }
-
-    const Eigen::MatrixXf& eigenvectors = solver.eigenvectors();
-    const Eigen::VectorXf& eigenvalues = solver.eigenvalues();
-
-    Eigen::MatrixXf singular_values = Eigen::MatrixXf::Zero(mat.rows(), mat.cols());
-    Eigen::MatrixXf u = Eigen::MatrixXf::Zero(mat.rows(), mat.rows());
-    Eigen::MatrixXf v = Eigen::MatrixXf::Zero(mat.cols(), mat.cols());
-
-    float scale = sqrt(2.f);
-    for(int i = 0; i < eigenvalues.size(); ++i){
-        singular_values(i, i) = std::max(0.f, eigenvalues(i) - theta);
-        u.col(i) = scale * eigenvectors.block(0, i, mat.rows(), 1);
-        v.col(i) = scale * eigenvectors.block(dim, i, mat.cols(), 1);
-    }
-
-    return u * singular_values * v.transpose();
-}
-
-Spectrum sample(Scene* scene, Sampler* sampler, const Intersection& its, const VPL& vpl, float min_dist, 
+Spectrum sample(Scene* scene, Sampler* sampler, Intersection& its, const Ray& ray, const VPL& vpl, float min_dist, 
     bool check_occlusion){
 
-    //only dealing with emitter and surface VPLs curently.
-    if (vpl.type != EPointEmitterVPL && vpl.type != ESurfaceVPL){
-        return Spectrum(0.f);
-    }
-
+    Vector3f wi = vpl.type == EDirectionalEmitterVPL ? -Vector3f(vpl.its.shFrame.n) : 
+        normalize(vpl.its.p - its.p);
     if(check_occlusion){
-        Ray shadow_ray(its.p, normalize(vpl.its.p - its.p), 0.f);
-
+        Ray shadow_ray(its.p, wi, 0.f);
         Float t;
         ConstShapePtr shape;
         Normal norm;
         Point2 uv;
 
         if(scene->rayIntersect(shadow_ray, t, shape, norm, uv)){
-            if(abs((its.p - vpl.its.p).length() - t) > 0.0001f ){
+            if(vpl.type == EDirectionalEmitterVPL || 
+                ((its.p - vpl.its.p).length() - t) > 1e-6f * min_dist){
                 return Spectrum(0.f);
             }
         }
     }
 
-    BSDFSamplingRecord bsdf_sample_record(its, sampler, ERadiance);
-        bsdf_sample_record.wi = its.toLocal(normalize(vpl.its.p - its.p));
-        bsdf_sample_record.wo = its.toLocal(its.geoFrame.n);
+    RayDifferential rd(ray);
 
-    Spectrum albedo = its.getBSDF()->eval(bsdf_sample_record);
+    const BSDF *bsdf = its.getBSDF(rd);
 
-    float d = std::max((its.p - vpl.its.p).length(), min_dist);
-    float attenuation = 1.f / (d * d);
+    Spectrum c(0.f);
 
-    float n_dot_ldir = std::max(0.f, dot(normalize(its.geoFrame.n), normalize(vpl.its.p - its.p)));
-    float ln_dot_ldir = std::max(0.f, dot(normalize(vpl.its.shFrame.n), normalize(its.p - vpl.its.p)));
-
-    return (vpl.P * ln_dot_ldir * attenuation * n_dot_ldir * albedo) / PI;
-}
-
-Eigen::MatrixXf computeMoorePenroseInverse(const Eigen::MatrixXf& m){
-    auto svd = m.jacobiSvd(Eigen::ComputeFullV | Eigen::ComputeFullU);
-    auto singular_values = svd.singularValues();
-    Eigen::MatrixXf svmat = Eigen::MatrixXf::Zero(m.cols(), m.rows());
-    for(auto i = 0; i < singular_values.size(); ++i){
-        if(fabs(singular_values(i)) > 0.000001f){
-            svmat(i, i) = 1.f / singular_values(i);
-        }
+    //only care about non-specular surfaces for now, just return specular reflectance
+    if(!(bsdf->getType() & BSDF::EDiffuse) && !(bsdf->getType() & BSDF::EGlossy)){
+        BSDFSamplingRecord bsdf_sample_record(its, sampler);
+        c = vpl.P * bsdf->sample(bsdf_sample_record, sampler->next2D()) * dot(its.shFrame.n, wi) / PI;
     }
-    return svd.matrixV() * svmat * svd.matrixU().adjoint();
+    else{
+        BSDFSamplingRecord bsdf_sample_record(its, its.toLocal(wi));
+        c = vpl.P * bsdf->eval(bsdf_sample_record);
+    }
+    
+
+    if(vpl.type != EDirectionalEmitterVPL){
+        float d = std::max((its.p - vpl.its.p).length(), min_dist);
+        float attenuation = 1.f / (d * d);
+        c *= attenuation;
+    }
+
+    if(vpl.type == ESurfaceVPL){
+        float ln_dot_ldir = std::max(0.f, dot(vpl.its.shFrame.n, normalize(its.p - vpl.its.p)));
+        c *= ln_dot_ldir;    
+    }
+
+    return c;
 }
 
 MTS_NAMESPACE_END

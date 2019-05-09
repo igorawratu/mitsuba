@@ -6,6 +6,7 @@
 #include <mutex>
 #include <mitsuba/render/vpl.h>
 
+
 #include "manylightsbase.h"
 
 MTS_NAMESPACE_BEGIN
