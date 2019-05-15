@@ -496,6 +496,16 @@ std::uint32_t adaptiveMatrixReconstruction(Eigen::MatrixXd& mat, Scene* scene,
         std::fill(num_samples.begin(), num_samples.end(), min_samples);
     }
     
+    float max_contrib = std::numeric_limits<float>::min();
+    std::vector<float> col_max_contrib(order.size(), std::numeric_limits<float>::min());
+    for(std::uint32_t i = 0; i < slice->sample_indices.size(); ++i){
+        for(std::uint32_t j = 0; j < order.size(); ++j){
+            float lum = slice->sample(i).unoccluded_samples[order[j]].getLuminance();
+            max_contrib = std::max(max_contrib, lum);
+            col_max_contrib[j] = std::max(col_max_contrib[j], lum);
+        }
+    }
+
     Eigen::MatrixXd reconstructed(expected_row_size, 1);
     std::vector<std::uint32_t> sampled;
     Eigen::MatrixXd q;
@@ -505,6 +515,8 @@ std::uint32_t adaptiveMatrixReconstruction(Eigen::MatrixXd& mat, Scene* scene,
     std::uint32_t total_samples = 0;
 
     std::uint32_t threshold = order.size() / 20;
+
+    std::uniform_real_distribution<float> gen(0.f, 1.f);
 
     for(std::uint32_t i = 0; i < order.size(); ++i){
         std::uint32_t samples_for_col = 0;
@@ -561,15 +573,29 @@ std::uint32_t adaptiveMatrixReconstruction(Eigen::MatrixXd& mat, Scene* scene,
             if(visibility_only){
                 for(std::uint32_t j = 0; j < reconstructed.rows(); ++j){
                     if(fabs(fabs(reconstructed(j, 0)) - 1.f) > std::numeric_limits<float>::epsilon()){
-                        d = 1.f;
-                        break;
+                        d += 1.f;
+                        //break;
                     }
                 }
             }
 
+            float allowed_error_rat = 1.f - col_max_contrib[i] / max_contrib;
+            allowed_error_rat = std::pow(allowed_error_rat, 4.f);
+            float allowed_error = allowed_error_rat * (reconstructed.rows() / 5) + std::numeric_limits<float>::epsilon();
+
+            for(std::uint32_t j = 0; j < reconstructed.rows(); ++j){
+                if(fabs(reconstructed(j, 0)) < std::numeric_limits<float>::epsilon()){
+                    reconstructed(j, 0) = gen(rng) > 0.5f ? 1.f : -1.f;
+                }
+            }
+
+            //std::cout << allowed_error << std::endl;
+
+            //std::cout << allowed_error << std::endl;
+
             bool resample = false;
 
-            if(d > std::numeric_limits<float>::epsilon()){
+            if(d > /*std::numeric_limits<float>::epsilon()*/allowed_error){
                 resample = true;
                 sampled = sampleRow(scene, slice, vpls, order[i], min_dist, slice->sample_indices.size(), rng, 
                     reconstructed, sampled, true, visibility_only, recover_transpose, adaptive_sampling);
