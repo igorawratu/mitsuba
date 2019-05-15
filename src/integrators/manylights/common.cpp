@@ -162,7 +162,7 @@ Spectrum sample(Scene* scene, Sampler* sampler, Intersection& its, const Ray& ra
 
         if(scene->rayIntersect(shadow_ray, t, shape, norm, uv)){
             if(vpl.type == EDirectionalEmitterVPL || 
-                ((its.p - vpl.its.p).length() - t) > 1e-6f * min_dist){
+                (its.p - vpl.its.p).length() - t > std::numeric_limits<float>::epsilon() * min_dist * 10.f){
                 return Spectrum(0.f);
             }
         }
