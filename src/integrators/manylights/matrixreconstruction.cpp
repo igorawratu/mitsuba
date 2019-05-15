@@ -427,9 +427,9 @@ std::vector<std::uint32_t> sampleRow(Scene* scene, KDTNode<ReconstructionSample>
 
             Float r, g, b;
             lightContribution.toLinearRGB(r, g, b);
-            mat(i * 3, 0) = r;
-            mat(i * 3 + 1, 0) = g;
-            mat(i * 3 + 2, 0) = b;
+            mat(sampled_indices[i] * 3, 0) = r;
+            mat(sampled_indices[i] * 3 + 1, 0) = g;
+            mat(sampled_indices[i] * 3 + 2, 0) = b;
         }
     }
 
