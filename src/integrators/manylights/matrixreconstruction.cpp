@@ -589,10 +589,6 @@ std::uint32_t adaptiveMatrixReconstruction(Eigen::MatrixXd& mat, Scene* scene,
                 }
             }
 
-            //std::cout << allowed_error << std::endl;
-
-            //std::cout << allowed_error << std::endl;
-
             bool resample = false;
 
             if(d > /*std::numeric_limits<float>::epsilon()*/allowed_error){
