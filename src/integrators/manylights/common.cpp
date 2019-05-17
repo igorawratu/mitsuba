@@ -195,8 +195,8 @@ Spectrum sampleCone(const Vector3f& wi, const VPL& vpl, const Intersection& its,
     Vector3f sample_wi = normalize(cone_sample);
 
     BSDFSamplingRecord bsdf_sample_record(its, its.toLocal(sample_wi));
-    Spectrum curr_col = vpl.P * its.getBSDF()->eval(bsdf_sample_record) * 
-        std::max(0.f, dot(bsdf_sample_record.wo, its.geoFrame.n));;
+    Spectrum curr_col = vpl.P * its.getBSDF()->eval(bsdf_sample_record);// * 
+        //std::max(0.f, dot(bsdf_sample_record.wo, its.geoFrame.n));;
 
     Spectrum weight(0.f);
 
@@ -217,11 +217,10 @@ Spectrum sampleCone(const Vector3f& wi, const VPL& vpl, const Intersection& its,
 }
 
 Spectrum sampleBsdf(const VPL& vpl, const Intersection& its, Sampler* sampler, float solid_angle, float cos_theta){
-    BSDFSamplingRecord bsdf_sample_record(its, sampler);
+    BSDFSamplingRecord bsdf_sample_record(its, sampler, ERadiance);
     bsdf_sample_record.typeMask = BSDF::EReflection;
     float pdf;
-    Spectrum curr_col = its.getBSDF()->sample(bsdf_sample_record, pdf, sampler->next2D()) * 
-        std::max(0.f, dot(bsdf_sample_record.wo, its.geoFrame.n)) / PI;
+    Spectrum curr_col = its.getBSDF()->sample(bsdf_sample_record, pdf, sampler->next2D());
     
     if(/*raySphereIntersect(its.p, bsdf_sample_record.wo, vpl.its.p, vpl.radius)*/
         dot(bsdf_sample_record.wo, normalize(vpl.its.p - its.p)) < cos_theta){
@@ -289,24 +288,27 @@ Spectrum sampleLight(const VPL& vpl, const Intersection& its, Sampler* sampler, 
 //-------taken from http://miloshasan.net/VirtualSphericalLights/vsl.fx--------
 float circleSegmentArea(float h, float r)
 {
-    h /= r;
+    /*h /= r;
     float  A = (h * sqrt(1-h*h) + asin(h) + M_PI/2);
-    return A*r*r;
+    return A*r*r;*/
+    return M_PI * h * h;
 }
 
-float distFromPlane(Point p, Vector3f np, Point q, Vector3f nq)
+float distFromPlane(Point p, Vector3f np, Point q, Vector3f nq, float min_dist)
 {
-    float dpq = dot(np,nq);
+    /*float dpq = dot(np,nq);
     if(dpq*dpq>0.99f) return 1e20f;
 
     float l = dot(p-q, nq);
 
-    return sqrt( l*l / (1.f-dpq*dpq) );
+    return sqrt( l*l / (1.f-dpq*dpq) );*/
+
+    return std::max(min_dist, (p - q).length());
 }
 
-float effectiveLightArea(float lightR, Point lightP, Vector3f lightN, Point P, Vector3f N)
+float effectiveLightArea(float lightR, Point lightP, Vector3f lightN, Point P, Vector3f N, float min_dist)
 {
-    float h = distFromPlane(lightP, lightN, P, N);
+    float h = distFromPlane(lightP, lightN, P, N, min_dist);
     return (h<lightR) ? circleSegmentArea(h,lightR) : M_PI*lightR*lightR;
 }
 //-----------------------------------------------------------------------------
@@ -378,17 +380,27 @@ Spectrum sample(Scene* scene, Sampler* sampler, Intersection& its, const Ray& in
     Spectrum c(0.f);
 
     if(vsl && vpl.type == ESurfaceVPL){
-        float central_disc_area = effectiveLightArea(vpl.radius, vpl.its.p, vpl.its.shFrame.n, its.p, its.geoFrame.n);
+        float central_disc_area = effectiveLightArea(vpl.radius, vpl.its.p, vpl.its.shFrame.n, its.p, its.geoFrame.n, min_dist);
         float d = (vpl.its.p - its.p).length();
         float cos_theta = cos(asin(std::min(vpl.radius / d, 1.f)));
-        float solid_angle = 2 * M_PI * (1.f - cos_theta);
-        float solid_angle_ratio = solid_angle / (2.f * M_PI);
-        std::uint32_t num_samples = std::max(1u, std::uint32_t(sqrt(solid_angle_ratio) * 1.f));
+        float n_dot_d = dot(normalize(vpl.its.p - its.p), its.geoFrame.n);
+
+        float inv_cos_theta;
+        if(n_dot_d < 0.f){
+            inv_cos_theta = std::max(0.f, 1.f - cos_theta + n_dot_d);
+        }
+        else{
+            float angle_span = (1.f - cos_theta) + (1.f - n_dot_d);
+            inv_cos_theta = angle_span > 1.f ? (2.f * (1.f - cos_theta) - (angle_span - 1.f)) / 2.f : 1.f - cos_theta;
+        }
+
+        float solid_angle = 2 * M_PI * inv_cos_theta;
+        std::uint32_t num_samples = std::max(1u, std::uint32_t(sqrt(inv_cos_theta) * 1.f));
         Spectrum total(0.f);
 
         for(std::uint32_t i = 0; i < num_samples; ++i){
-            //total += sampleCone(wi, vpl, its, d, sampler, solid_angle);
-            total += sampleBsdf(vpl, its, sampler, solid_angle, cos_theta);
+            total += sampleCone(wi, vpl, its, d, sampler, solid_angle);
+            //total += sampleBsdf(vpl, its, sampler, solid_angle, cos_theta);
             //total += sampleLight(vpl, its, sampler, solid_angle, cos_theta);
         }
 

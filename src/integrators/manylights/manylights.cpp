@@ -109,12 +109,22 @@ void setVPLRadii(std::vector<VPL>& vpls, float min_dist){
 	//radius calculation, 11 to account 10 + 1 for adding a node's self in nearest neighbours
 	std::uint32_t num_neighbours = std::min((std::uint32_t)vpls.size(), 11u);
 
-    flann::Matrix<float> dataset(new float[vpls.size() * 3], vpls.size(), 3);
+	std::uint32_t num_sl = 0;
+	for(std::uint32_t i = 0; i < vpls.size(); ++i){
+		if(vpls[i].type == ESurfaceVPL){
+			num_sl++;
+		}
+	}
+
+    flann::Matrix<float> dataset(new float[num_sl * 3], num_sl, 3);
+	std::uint32_t curr_light = 0;
     for(std::uint32_t i = 0; i < vpls.size(); ++i){
-        float* curr = (float*)dataset[i];
-        curr[0] = vpls[i].its.p.x;
-        curr[1] = vpls[i].its.p.y;
-        curr[2] = vpls[i].its.p.z;
+		if(vpls[i].type == ESurfaceVPL){
+			float* curr = (float*)dataset[curr_light++];
+			curr[0] = vpls[i].its.p.x;
+			curr[1] = vpls[i].its.p.y;
+			curr[2] = vpls[i].its.p.z;
+		}
     }
 
     flann::Index<flann::L2<float>> index(dataset, flann::KDTreeIndexParams(4));
@@ -126,16 +136,19 @@ void setVPLRadii(std::vector<VPL>& vpls, float min_dist){
     index.knnSearch(dataset, indices, distances, num_neighbours, flann::SearchParams(128));
 
 	for(std::uint32_t i = 0; i < vpls.size(); ++i){
-		float max = std::numeric_limits<float>::min();
-		float min = std::numeric_limits<float>::max();
-		for(std::uint32_t j = 0; j < distances[i].size(); ++j){
-			if(distances[i][j] > std::numeric_limits<float>::epsilon()){
-				max = std::max(distances[i][j], max);
-				min = std::min(distances[i][j], min);
+		if(vpls[i].type == ESurfaceVPL){
+			float max = std::numeric_limits<float>::min();
+			float min = std::numeric_limits<float>::max();
+			for(std::uint32_t j = 0; j < distances[i].size(); ++j){
+				if(distances[i][j] > std::numeric_limits<float>::epsilon()){
+					max = std::max(distances[i][j], max);
+					min = std::min(distances[i][j], min);
+				}
 			}
-		}
 
-		vpls[i].radius = max * 10.f;//(5.f / min_dist);
+			vpls[i].radius = max * 10.f;//(5.f / min_dist);
+		}
+		else vpls[i].radius = 0.f;
 	}
 }
 

@@ -80,6 +80,10 @@ bool LightClustererRenderer::render(Scene* scene){
             
             bool intersected;
             for (std::uint32_t i = 0; i < vpls.size(); ++i) {
+                if((vpls[i].its.p - its.p).length() < 5.f){
+                    accumulator += Spectrum(1.f);
+                    //break;
+                }
                 accumulator += sample(scene, sampler, its, ray, vpls[i], min_dist_, true, 
                     10, i == 0, intersected, true, vsl_);
 
