@@ -114,7 +114,9 @@ void setVPLRadii(std::vector<VPL>& vpls, float min_dist){
 		if(vpls[i].type == ESurfaceVPL){
 			num_sl++;
 		}
-	}
+	} 
+
+	std::cout << num_sl << std::endl;
 
     flann::Matrix<float> dataset(new float[num_sl * 3], num_sl, 3);
 	std::uint32_t curr_light = 0;
@@ -146,7 +148,7 @@ void setVPLRadii(std::vector<VPL>& vpls, float min_dist){
 				}
 			}
 
-			vpls[i].radius = max * 10.f;//(5.f / min_dist);
+			vpls[i].radius = sqrt(max) * 1.f;//(5.f / min_dist);
 		}
 		else vpls[i].radius = 0.f;
 	}
@@ -201,6 +203,7 @@ size_t generateVPLs(const Scene *scene, size_t offset, size_t count, int max_dep
 			}
 		}
 		else {
+			std::cout << "Creating direct vpl" << std::endl;
 			DirectSamplingRecord direct_sample(scene->getKDTree()->getAABB().getCenter(), point_sample.time);
 
 			Spectrum direct_sample_weight = emitter->sampleDirect(direct_sample, sampler->next2D())	/ scene->pdfEmitterDiscrete(emitter);

@@ -222,8 +222,8 @@ Spectrum sampleBsdf(const VPL& vpl, const Intersection& its, Sampler* sampler, f
     float pdf;
     Spectrum curr_col = its.getBSDF()->sample(bsdf_sample_record, pdf, sampler->next2D());
     
-    if(/*raySphereIntersect(its.p, bsdf_sample_record.wo, vpl.its.p, vpl.radius)*/
-        dot(bsdf_sample_record.wo, normalize(vpl.its.p - its.p)) < cos_theta){
+    if(/*raySphereIntersect(its.p, bsdf_sample_record.wo, vpl.its.p, vpl.radius*/
+        std::max(1e-5f, dot(bsdf_sample_record.wo, normalize(vpl.its.p - its.p))) > cos_theta){
         if(vpl.emitter != nullptr){
             DirectionSamplingRecord dir(bsdf_sample_record.wo);
             curr_col *= vpl.emitter->evalDirection(dir, vpl.psr);
@@ -264,7 +264,7 @@ Spectrum sampleLight(const VPL& vpl, const Intersection& its, Sampler* sampler, 
     }
 
     if(/*raySphereIntersect(its.p, wi, vpl.its.p, vpl.radius)*/
-        dot(wi, normalize(vpl.its.p - its.p)) < cos_theta){
+        std::max(1e-10f, dot(wi, normalize(vpl.its.p - its.p))) < cos_theta){
         BSDFSamplingRecord bsdf_sample_record(its, its.toLocal(wi));
         curr_col *= its.getBSDF()->eval(bsdf_sample_record);
 
@@ -303,12 +303,13 @@ float distFromPlane(Point p, Vector3f np, Point q, Vector3f nq, float min_dist)
 
     return sqrt( l*l / (1.f-dpq*dpq) );*/
 
-    return std::max(min_dist, (p - q).length());
+    return std::max(min_dist / 1.f, (p - q).length());
+    //return (p-q).length();
 }
 
 float effectiveLightArea(float lightR, Point lightP, Vector3f lightN, Point P, Vector3f N, float min_dist)
 {
-    float h = distFromPlane(lightP, lightN, P, N, min_dist);
+    float h = distFromPlane(lightP, lightN, P, N, lightR);
     return (h<lightR) ? circleSegmentArea(h,lightR) : M_PI*lightR*lightR;
 }
 //-----------------------------------------------------------------------------
@@ -383,11 +384,15 @@ Spectrum sample(Scene* scene, Sampler* sampler, Intersection& its, const Ray& in
         float central_disc_area = effectiveLightArea(vpl.radius, vpl.its.p, vpl.its.shFrame.n, its.p, its.geoFrame.n, min_dist);
         float d = (vpl.its.p - its.p).length();
         float cos_theta = cos(asin(std::min(vpl.radius / d, 1.f)));
+        //std::cout << cos_theta << " " << vpl.radius << " " << d << std::endl;
         float n_dot_d = dot(normalize(vpl.its.p - its.p), its.geoFrame.n);
 
         float inv_cos_theta;
         if(n_dot_d < 0.f){
-            inv_cos_theta = std::max(0.f, 1.f - cos_theta + n_dot_d);
+            float total = 1.f - n_dot_d;
+            float leftover = total - 1.f;
+            float remaining = 1.f - cos_theta - leftover;
+            inv_cos_theta = std::max(0.f, remaining / 2.f);
         }
         else{
             float angle_span = (1.f - cos_theta) + (1.f - n_dot_d);
@@ -397,6 +402,8 @@ Spectrum sample(Scene* scene, Sampler* sampler, Intersection& its, const Ray& in
         float solid_angle = 2 * M_PI * inv_cos_theta;
         std::uint32_t num_samples = std::max(1u, std::uint32_t(sqrt(inv_cos_theta) * 1.f));
         Spectrum total(0.f);
+
+        //std::cout << solid_angle << " " << central_disc_area << std::endl;
 
         for(std::uint32_t i = 0; i < num_samples; ++i){
             total += sampleCone(wi, vpl, its, d, sampler, solid_angle);
