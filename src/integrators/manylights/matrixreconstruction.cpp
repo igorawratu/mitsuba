@@ -497,12 +497,16 @@ std::uint32_t adaptiveMatrixReconstruction(Eigen::MatrixXd& mat, Scene* scene,
     }
     
     float max_contrib = std::numeric_limits<float>::min();
+    float total_contrib = 0.f;
     std::vector<float> col_max_contrib(order.size(), std::numeric_limits<float>::min());
+    std::vector<float> col_total_contrib(order.size(), 0.f);
     for(std::uint32_t i = 0; i < slice->sample_indices.size(); ++i){
         for(std::uint32_t j = 0; j < order.size(); ++j){
             float lum = slice->sample(i).unoccluded_samples[order[j]].getLuminance();
             max_contrib = std::max(max_contrib, lum);
             col_max_contrib[j] = std::max(col_max_contrib[j], lum);
+            total_contrib += lum;
+            col_total_contrib[j] += lum;
         }
     }
 
@@ -579,8 +583,9 @@ std::uint32_t adaptiveMatrixReconstruction(Eigen::MatrixXd& mat, Scene* scene,
                 }
             }
 
-            float allowed_error_rat = 1.f - col_max_contrib[i] / max_contrib;
-            allowed_error_rat = std::pow(allowed_error_rat, 4.f);
+            //float allowed_error_rat = 1.f - col_max_contrib[i] / max_contrib;
+            float allowed_error_rat = 1.f - std::min(1.f, col_total_contrib[i] / total_contrib + 0.75f);
+            allowed_error_rat = std::pow(allowed_error_rat, 2.f);
             float allowed_error = allowed_error_rat * (reconstructed.rows() / 5) + std::numeric_limits<float>::epsilon();
 
             for(std::uint32_t j = 0; j < reconstructed.rows(); ++j){
