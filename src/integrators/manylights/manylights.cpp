@@ -116,8 +116,6 @@ void setVPLRadii(std::vector<VPL>& vpls, float min_dist){
 		}
 	} 
 
-	std::cout << num_sl << std::endl;
-
     flann::Matrix<float> dataset(new float[num_sl * 3], num_sl, 3);
 	std::uint32_t curr_light = 0;
     for(std::uint32_t i = 0; i < vpls.size(); ++i){
@@ -148,7 +146,7 @@ void setVPLRadii(std::vector<VPL>& vpls, float min_dist){
 				}
 			}
 
-			vpls[i].radius = sqrt(max) * 1.f;//(5.f / min_dist);
+			vpls[i].radius = sqrt(max) * 2.f;
 		}
 		else vpls[i].radius = 0.f;
 	}
@@ -194,6 +192,7 @@ size_t generateVPLs(const Scene *scene, size_t offset, size_t count, int max_dep
 			vpl.its.p = point_sample.p;
 			vpl.its.time = time;
 			vpl.its.shFrame = point_sample.n.isZero() ? standard_frame : Frame(point_sample.n);
+			//vpl.its.geoFrame = point_sample.n.isZero() ? standard_frame : Frame(point_sample.n);
 			vpl.emitter = emitter;
 			vpl.psr = point_sample;
 			vpls.push_back(vpl);
