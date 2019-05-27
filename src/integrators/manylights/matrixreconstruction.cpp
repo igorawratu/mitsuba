@@ -427,9 +427,9 @@ std::vector<std::uint32_t> sampleRow(Scene* scene, KDTNode<ReconstructionSample>
 
             Float r, g, b;
             lightContribution.toLinearRGB(r, g, b);
-            mat(sampled_indices[i] * 3, 0) = r;
-            mat(sampled_indices[i] * 3 + 1, 0) = g;
-            mat(sampled_indices[i] * 3 + 2, 0) = b;
+            mat(i * 3, 0) = r;
+            mat(i * 3 + 1, 0) = g;
+            mat(i * 3 + 2, 0) = b;
         }
     }
 
@@ -540,7 +540,7 @@ std::uint32_t adaptiveMatrixReconstruction(Eigen::MatrixXd& mat, Scene* scene,
                 sampled = sampleRow(scene, slice, vpls, order[i], min_dist, num_samples_for_col, rng, sample_omega, sampled, 
                     true, visibility_only, recover_transpose, adaptive_sampling);
 
-                q_omega.resize(sampled.size(), q.cols());
+                q_omega.resize(expected_omega_rows, q.cols());
 
                 for(std::uint32_t j = 0; j < sampled.size(); ++j){
                     if(visibility_only){
@@ -578,7 +578,7 @@ std::uint32_t adaptiveMatrixReconstruction(Eigen::MatrixXd& mat, Scene* scene,
             if(visibility_only){
                 for(std::uint32_t j = 0; j < reconstructed.rows(); ++j){
                     if(fabs(fabs(reconstructed(j, 0)) - 1.f) > std::numeric_limits<float>::epsilon()){
-                        d += 1.f;
+                        d += 1e10f;
                         //break;
                     }
                 }
@@ -587,13 +587,7 @@ std::uint32_t adaptiveMatrixReconstruction(Eigen::MatrixXd& mat, Scene* scene,
             float allowed_error_rat = 1.f - col_max_contrib[i] / max_contrib;
             //float allowed_error_rat = 1.f - std::min(1.f, col_total_contrib[i] / total_contrib + 0.75f);
             allowed_error_rat = std::pow(allowed_error_rat, 4.f);
-            float allowed_error = allowed_error_rat * (reconstructed.rows() / 5) + std::numeric_limits<float>::epsilon();
-
-            for(std::uint32_t j = 0; j < reconstructed.rows(); ++j){
-                if(fabs(reconstructed(j, 0)) < std::numeric_limits<float>::epsilon()){
-                    reconstructed(j, 0) = gen(rng) > 0.5f ? 1.f : -1.f;
-                }
-            }
+            float allowed_error = allowed_error_rat * (reconstructed.rows() / 5.f) + std::numeric_limits<float>::epsilon();
 
             bool resample = false;
 
