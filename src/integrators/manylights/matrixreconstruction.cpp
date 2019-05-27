@@ -417,7 +417,7 @@ std::vector<std::uint32_t> sampleRow(Scene* scene, KDTNode<ReconstructionSample>
             Point2 uv;
 
             if(scene->rayIntersect(shadow_ray, t, shape, norm, uv)){
-                if((ray_origin - vpl.its.p).length() - t > min_dist * 1e-4f){
+                if((ray_origin - vpl.its.p).length() - t > std::numeric_limits<float>::epsilon() * min_dist * 10.f){
                     mat(i, 0) = -1.f;
                 }
             }
@@ -438,7 +438,8 @@ std::vector<std::uint32_t> sampleRow(Scene* scene, KDTNode<ReconstructionSample>
 
 std::uint32_t adaptiveMatrixReconstruction(Eigen::MatrixXd& mat, Scene* scene,
     KDTNode<ReconstructionSample>* slice, const std::vector<VPL>& vpls, float min_dist, float sample_perc,
-    std::mt19937& rng, bool visibility_only, bool recover_transpose, bool adaptive_sampling, bool force_resample){
+    std::mt19937& rng, bool visibility_only, bool recover_transpose, bool adaptive_sampling, bool force_resample,
+    std::uint32_t& basis_rank){
     assert(sample_perc > 0.f && slice->sample_indices.size() > 0 && vpls.size() > 0);
     std::random_shuffle(slice->sample_indices.begin(), slice->sample_indices.end());
 
@@ -583,9 +584,9 @@ std::uint32_t adaptiveMatrixReconstruction(Eigen::MatrixXd& mat, Scene* scene,
                 }
             }
 
-            //float allowed_error_rat = 1.f - col_max_contrib[i] / max_contrib;
-            float allowed_error_rat = 1.f - std::min(1.f, col_total_contrib[i] / total_contrib + 0.75f);
-            allowed_error_rat = std::pow(allowed_error_rat, 2.f);
+            float allowed_error_rat = 1.f - col_max_contrib[i] / max_contrib;
+            //float allowed_error_rat = 1.f - std::min(1.f, col_total_contrib[i] / total_contrib + 0.75f);
+            allowed_error_rat = std::pow(allowed_error_rat, 4.f);
             float allowed_error = allowed_error_rat * (reconstructed.rows() / 5) + std::numeric_limits<float>::epsilon();
 
             for(std::uint32_t j = 0; j < reconstructed.rows(); ++j){
@@ -617,6 +618,8 @@ std::uint32_t adaptiveMatrixReconstruction(Eigen::MatrixXd& mat, Scene* scene,
         mat.col(order[i]) = reconstructed.col(0);
         total_samples += samples_for_col;
     }
+
+    basis_rank = q.cols();
 
     /*std::cout << mat << std::endl;
     int x;
@@ -699,7 +702,7 @@ bool MatrixReconstructionRenderer::render(Scene* scene){
 
     std::cout << "constructing kd tree" << std::endl;
     auto kdt_root = constructKDTree(scene, slice_size_, samples_, min_dist_, true, vpls);
-
+    std::cout << "getting slices" << std::endl;
     std::vector<KDTNode<ReconstructionSample>*> slices;
     getSlices(kdt_root.get(), slices);
 
@@ -734,9 +737,31 @@ bool MatrixReconstructionRenderer::render(Scene* scene){
             std::mt19937 rng(std::chrono::high_resolution_clock::now().time_since_epoch().count() * i);
         
             if(adaptive_col_sampling_){
-                Eigen::MatrixXd mat = Eigen::MatrixXd::Zero(slices[i]->sample_indices.size() * 3, vpls.size());
+                std::uint32_t mat_rows = visibility_only_ ? slices[i]->sample_indices.size() : slices[i]->sample_indices.size() * 3;
+                Eigen::MatrixXd mat = Eigen::MatrixXd::Zero(mat_rows, vpls.size());
+                std::uint32_t max_rank = std::min(mat.rows(), mat.cols());
+                std::uint32_t basis_rank;
                 std::uint32_t samples = adaptiveMatrixReconstruction(mat, scene, slices[i], vpls, min_dist_, 
-                    sample_percentage_, rng, visibility_only_, adaptive_recover_transpose_, adaptive_importance_sampling_, adaptive_force_resample_);
+                    sample_percentage_, rng, visibility_only_, adaptive_recover_transpose_, 
+                    adaptive_importance_sampling_, adaptive_force_resample_, basis_rank);
+                
+                float v = float(samples) / (mat.rows() * mat.cols());
+                float r, g, b;
+                std::tie(r, g, b) = floatToRGB(v);
+                std::uint8_t ro = r * 255.f;
+                std::uint8_t go = g * 255.f;
+                std::uint8_t bo = b * 255.f;
+                //std::uint8_t v = float(basis_rank) / max_rank * 255.f;
+
+                for(std::uint32_t j = 0; j < slices[i]->sample_indices.size(); ++j){
+                    std::uint32_t offset = (slices[i]->sample(j).image_x + slices[i]->sample(j).image_y * 
+                    output_bitmap->getSize().x) * output_bitmap->getBytesPerPixel();
+
+                    output_image[offset] = ro;
+                    output_image[offset + 1] = go;
+                    output_image[offset + 2] = bo;
+                }
+
                 copyMatrixToBuffer(output_image, mat, slices[i], size, visibility_only_, adaptive_recover_transpose_);
 
                 {
