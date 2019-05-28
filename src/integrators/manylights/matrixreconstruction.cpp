@@ -578,7 +578,7 @@ std::uint32_t adaptiveMatrixReconstruction(Eigen::MatrixXd& mat, Scene* scene,
             if(visibility_only){
                 for(std::uint32_t j = 0; j < reconstructed.rows(); ++j){
                     if(fabs(fabs(reconstructed(j, 0)) - 1.f) > std::numeric_limits<float>::epsilon()){
-                        d += 1e10f;
+                        d += 1.f;
                         //break;
                     }
                 }
