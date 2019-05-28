@@ -317,8 +317,8 @@ Spectrum sample(Scene* scene, Sampler* sampler, Intersection& its, const Ray& in
         float d = (vpl.its.p - its.p).length();
         
         float hypot_length = sqrt(d * d + vpl.radius * vpl.radius);
-        float cos_theta = d / hypot_length;
-        //float cos_theta = cos(asin(std::min(vpl.radius / d, 1.f)));
+        //float cos_theta = d / hypot_length;
+        float cos_theta = cos(asin(std::min(vpl.radius / d, 1.f)));
 
         float solid_angle = 2.f * M_PI * (1.f - cos_theta);
         std::uint32_t num_samples = std::max(1u, std::uint32_t(sqrt(1.f - cos_theta) * 100.f));

@@ -118,12 +118,17 @@ void setVPLRadii(std::vector<VPL>& vpls, float min_dist){
 
     flann::Matrix<float> dataset(new float[num_sl * 3], num_sl, 3);
 	std::uint32_t curr_light = 0;
+	std::vector<std::uint32_t> pointlight_indices;
     for(std::uint32_t i = 0; i < vpls.size(); ++i){
 		if(vpls[i].type == ESurfaceVPL){
 			float* curr = (float*)dataset[curr_light++];
 			curr[0] = vpls[i].its.p.x;
 			curr[1] = vpls[i].its.p.y;
 			curr[2] = vpls[i].its.p.z;
+			pointlight_indices.emplace_back(i);
+		}
+		else{
+			vpls[i].radius = 0.f;
 		}
     }
 
@@ -135,20 +140,17 @@ void setVPLRadii(std::vector<VPL>& vpls, float min_dist){
 
     index.knnSearch(dataset, indices, distances, num_neighbours, flann::SearchParams(128));
 
-	for(std::uint32_t i = 0; i < vpls.size(); ++i){
-		if(vpls[i].type == ESurfaceVPL){
-			float max = std::numeric_limits<float>::min();
-			float min = std::numeric_limits<float>::max();
-			for(std::uint32_t j = 0; j < distances[i].size(); ++j){
-				if(distances[i][j] > std::numeric_limits<float>::epsilon()){
-					max = std::max(distances[i][j], max);
-					min = std::min(distances[i][j], min);
-				}
+	for(std::uint32_t i = 0; i < distances.size(); ++i){
+		float max = std::numeric_limits<float>::min();
+		float min = std::numeric_limits<float>::max();
+		for(std::uint32_t j = 0; j < distances[i].size(); ++j){
+			if(distances[i][j] > std::numeric_limits<float>::epsilon()){
+				max = std::max(distances[i][j], max);
+				min = std::min(distances[i][j], min);
 			}
-
-			vpls[i].radius = sqrt(max) * 2.f;
 		}
-		else vpls[i].radius = 0.f;
+
+		vpls[pointlight_indices[i]].radius = sqrt(max) * 2.f;
 	}
 }
 
@@ -202,7 +204,6 @@ size_t generateVPLs(const Scene *scene, size_t offset, size_t count, int max_dep
 			}
 		}
 		else {
-			std::cout << "Creating direct vpl" << std::endl;
 			DirectSamplingRecord direct_sample(scene->getKDTree()->getAABB().getCenter(), point_sample.time);
 
 			Spectrum direct_sample_weight = emitter->sampleDirect(direct_sample, sampler->next2D())	/ scene->pdfEmitterDiscrete(emitter);
