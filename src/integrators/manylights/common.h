@@ -227,18 +227,7 @@ struct KDTNode{
             }
         }
 
-        std::uint32_t limit = std::max(left->sample_indices.size(), right->sample_indices.size());
-
         if(left->sample_indices.size() == 0 || right->sample_indices.size() == 0){
-            for(std::uint32_t j = 0; j < 6; ++j){
-                std::cout << midpoints[ranges[j].first] << " " << std::uint32_t(ranges[j].first) << " " << ranges[j].second << 
-                    " " << std::endl;
-            }
-            std::cout << max_pos.x << " " << max_pos.y << " " << max_pos.z << " " << min_pos.x << " " << min_pos.y << " " << min_pos.z << " ";
-            std::cout << max_normal.x << " " << max_normal.y << " " << max_normal.z << " " << min_normal.x << " " << min_normal.y << " " << min_normal.z << std::endl;
-
-            std::cout << "--------------------------------------------------------------------" << std::endl;
-
             std::uint32_t midpoint = sample_indices.size() / 2;
             left->sample_indices.clear();
             left->sample_indices.insert(left->sample_indices.end(), sample_indices.begin(), sample_indices.begin() + midpoint);

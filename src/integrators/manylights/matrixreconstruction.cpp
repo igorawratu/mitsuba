@@ -122,10 +122,34 @@ std::unique_ptr<KDTNode<ReconstructionSample>> constructKDTree(Scene* scene, std
 
             if(calc_unoccluded_samples){
                 curr_sample.unoccluded_samples.resize(vpls.size());
+                float total_lum = 0.f;
 
                 for(std::uint32_t i = 0; i < vpls.size(); ++i){
                     curr_sample.unoccluded_samples[i] = sample(scene, sampler, its, ray, vpls[i], min_dist, false);
+                    total_lum += curr_sample.unoccluded_samples[i].getLuminance();
                 }
+
+                //try enforce more exact low rank by discarding small and irrelevant information
+                /*std::vector<std::uint32_t> sorted_by_intensity(curr_sample.unoccluded_samples.size());
+                std::iota(sorted_by_intensity.begin(), sorted_by_intensity.end(), 0);
+                std::sort(sorted_by_intensity.begin(), sorted_by_intensity.end(), 
+                    [&curr_sample](const std::uint32_t& lhs, const std::uint32_t& rhs){
+                        return curr_sample.unoccluded_samples[lhs].getLuminance() < 
+                            curr_sample.unoccluded_samples[rhs].getLuminance();
+                    });
+
+                float energy_to_remove = total_lum * 0.02f;
+
+                for(std::uint32_t i = 0; i < sorted_by_intensity.size(); ++i){
+                    float curr_lum = curr_sample.unoccluded_samples[sorted_by_intensity[i]].getLuminance();
+                    if(energy_to_remove < curr_lum){
+                        curr_sample.unoccluded_samples[sorted_by_intensity[i]] *= (curr_lum - energy_to_remove) / curr_lum;
+                        break;
+                    }
+
+                    energy_to_remove -= curr_lum;
+                    curr_sample.unoccluded_samples[sorted_by_intensity[i]] = Spectrum(0.f);
+                }*/
             }
 
             if(its.isEmitter()){
@@ -143,7 +167,7 @@ std::unique_ptr<KDTNode<ReconstructionSample>> constructKDTree(Scene* scene, std
         }
     }
 
-    splitKDTree(kdt_root.get(), size_threshold, min_dist);
+    splitKDTree(kdt_root.get(), size_threshold, 0.f);
 
     return kdt_root;
 }
@@ -235,9 +259,13 @@ void copyMatrixToBuffer(std::uint8_t* output_image, const Eigen::MatrixXd& mat, 
             if(visibility_only){
                 Spectrum light_contributions(0.f);
                 for(std::uint32_t j = 0; j < slice->sample(i).unoccluded_samples.size(); ++j){
-                    float coeff = /*mat(i, j);*/mat(i, j) >= 0.f ? 1.f : 0.f;
-                    light_contributions += //Spectrum(coeff * (1.f / slice->sample(i).unoccluded_samples.size()));
-                        slice->sample(i).unoccluded_samples[j] * coeff;
+                    //float coeff = mat(i, j) > 0.f ? 1.f : 0.f;
+                    float coeff = ((recover_transpose ? mat(j, i) : mat(i, j)) + 1.f) / 2.f;
+                    /*float sample_lum = slice->sample(i).unoccluded_samples[j].getLuminance();
+                    float coeff = sample_lum < std::numeric_limits<double>::epsilon() || 
+                                    mat(i, j) < std::numeric_limits<double>::epsilon() ? 
+                                    0.f : mat(i, j) / slice->sample(i).unoccluded_samples[j].getLuminance();*/
+                    light_contributions += slice->sample(i).unoccluded_samples[j] * coeff;
                 }
 
                 light_contributions.toSRGB(r, g, b);
@@ -294,14 +322,8 @@ void printToFile(const std::vector<float>& vals, std::string filename, std::ios_
     output_file.close();
 }
 
-std::vector<std::uint32_t> importanceSample(KDTNode<ReconstructionSample>* slice, std::uint32_t sample_index, 
-    std::uint32_t num_samples, std::mt19937& rng, bool lights){
-    assert((lights && slice->sample(sample_index).unoccluded_samples.size() > 0) ||
-        (!lights && slice->sample_indices.size()) > 0);
-    
-    std::uint32_t total_vals = lights ? slice->sample(sample_index).unoccluded_samples.size() : 
-        slice->sample_indices.size();
-    std::vector<std::uint32_t> available(total_vals);
+std::vector<std::uint32_t> importanceSample(std::uint32_t num_samples, std::mt19937& rng, const std::vector<float>& probabilities){
+    std::vector<std::uint32_t> available(probabilities.size());
     std::iota(available.begin(), available.end(), 0);
 
     num_samples = std::min((size_t)num_samples, available.size());
@@ -313,8 +335,7 @@ std::vector<std::uint32_t> importanceSample(KDTNode<ReconstructionSample>* slice
     for(std::uint32_t i = 0; i < num_samples; ++i){
         double total_contrib = 0.;
         for(std::uint32_t j = 0; j < available.size(); ++j){
-            total_contrib += lights ? slice->sample(sample_index).unoccluded_samples[available[j]].getLuminance() :
-                slice->sample(available[j]).unoccluded_samples[sample_index].getLuminance();
+            total_contrib += probabilities[available[j]];
         }
 
         std::uniform_real_distribution<double> gen(0., total_contrib);
@@ -322,8 +343,7 @@ std::vector<std::uint32_t> importanceSample(KDTNode<ReconstructionSample>* slice
 
         std::uint32_t idx = 0;
         for(; idx < available.size(); ++idx){
-            selection -= lights ? slice->sample(sample_index).unoccluded_samples[available[idx]].getLuminance() :
-                slice->sample(available[idx]).unoccluded_samples[sample_index].getLuminance();
+            selection -= probabilities[available[idx]];
             if(selection <= 0.){
                 break;
             }
@@ -352,7 +372,12 @@ std::vector<std::uint32_t> sampleRow(Scene* scene, KDTNode<ReconstructionSample>
     std::vector<std::uint32_t> sampled_indices;
     if(resample){
         if(adaptive_sampling){
-            sampled_indices = importanceSample(slice, col, num_samples, rng, recover_transpose);
+            std::vector<float> probabilities(max_samples);
+            for(std::uint32_t i = 0; i < max_samples; ++i){
+                probabilities[i] = recover_transpose ? slice->sample(col).unoccluded_samples[i].getLuminance() : 
+                    slice->sample(i).unoccluded_samples[col].getLuminance();
+            }
+            sampled_indices = importanceSample(num_samples, rng, probabilities);
         }
         else{
             if(num_samples == max_samples){
@@ -402,14 +427,15 @@ std::vector<std::uint32_t> sampleRow(Scene* scene, KDTNode<ReconstructionSample>
 	sampler->generate(Point2i(0));
 
     for(size_t i = 0; i < sampled_indices.size(); ++i){
-        const VPL& vpl = recover_transpose ? vpls[sampled_indices[i]] : vpls[col];
+        std::uint32_t vpl_index = recover_transpose ? sampled_indices[i] : col;
+        const VPL& vpl = vpls[vpl_index];
         ReconstructionSample& scene_sample = recover_transpose ? slice->sample(col) : slice->sample(sampled_indices[i]);
 
         if(visibility_only){
             Point ray_origin = scene_sample.its.p;
             Ray shadow_ray(ray_origin, normalize(vpl.its.p - ray_origin), 0.f);
 
-            mat(i, 0) = 1.f;
+            mat(i, 0) = 1.;
 
             Float t;
             ConstShapePtr shape;
@@ -417,8 +443,9 @@ std::vector<std::uint32_t> sampleRow(Scene* scene, KDTNode<ReconstructionSample>
             Point2 uv;
 
             if(scene->rayIntersect(shadow_ray, t, shape, norm, uv)){
-                if((ray_origin - vpl.its.p).length() - t > std::numeric_limits<float>::epsilon() * min_dist * 10.f){
-                    mat(i, 0) = -1.f;
+                if(/*scene_sample.unoccluded_samples[vpl_index].getLuminance() < std::numeric_limits<double>::epsilon() || */
+                (ray_origin - vpl.its.p).length() - t > std::numeric_limits<float>::epsilon() * min_dist * 10.f){
+                    mat(i, 0) = -1.;
                 }
             }
         }
@@ -459,10 +486,6 @@ std::uint32_t adaptiveMatrixReconstruction(Eigen::MatrixXd& mat, Scene* scene,
 
     //change this later
     std::uint32_t max_samples = std::min(min_samples * 3, total_row_samples);
-    
-    std::vector<std::uint32_t> order(num_cols);
-    std::iota(order.begin(), order.end(), 0);
-    std::random_shuffle(order.begin(), order.end());
 
     std::vector<std::uint32_t> num_samples(num_cols);
 
@@ -470,9 +493,8 @@ std::uint32_t adaptiveMatrixReconstruction(Eigen::MatrixXd& mat, Scene* scene,
         std::vector<Spectrum> col_contributions(num_cols, Spectrum(0.f));
         for(std::uint32_t i = 0; i < slice->sample_indices.size(); ++i){
             ReconstructionSample& recon_sample = slice->sample(i);
-            for(std::uint32_t j = 0; j < order.size(); ++j){
-                std::uint32_t colidx = order[j];
-                col_contributions[colidx] += recon_sample.unoccluded_samples[colidx];
+            for(std::uint32_t j = 0; j < recon_sample.unoccluded_samples.size(); ++j){
+                col_contributions[j] += recon_sample.unoccluded_samples[j];
             }
         }
         
@@ -497,31 +519,47 @@ std::uint32_t adaptiveMatrixReconstruction(Eigen::MatrixXd& mat, Scene* scene,
         std::fill(num_samples.begin(), num_samples.end(), min_samples);
     }
     
-    float max_contrib = std::numeric_limits<float>::min();
+    float max_contrib = -std::numeric_limits<float>::max();
     float total_contrib = 0.f;
-    std::vector<float> col_max_contrib(order.size(), std::numeric_limits<float>::min());
-    std::vector<float> col_total_contrib(order.size(), 0.f);
+    std::vector<float> col_max_contrib(num_cols, -std::numeric_limits<float>::max());
+    std::vector<float> col_total_contrib(num_cols, 0.f);
     for(std::uint32_t i = 0; i < slice->sample_indices.size(); ++i){
-        for(std::uint32_t j = 0; j < order.size(); ++j){
-            float lum = slice->sample(i).unoccluded_samples[order[j]].getLuminance();
+        for(std::uint32_t j = 0; j < slice->sample(i).unoccluded_samples.size(); ++j){
+            float lum = slice->sample(i).unoccluded_samples[j].getLuminance();
             max_contrib = std::max(max_contrib, lum);
-            col_max_contrib[j] = std::max(col_max_contrib[j], lum);
             total_contrib += lum;
-            col_total_contrib[j] += lum;
+
+            if(recover_transpose){
+                col_max_contrib[i] = std::max(col_max_contrib[i], lum);
+                col_total_contrib[i] += lum;
+            }
+            else{
+                col_max_contrib[j] = std::max(col_max_contrib[j], lum);
+                col_total_contrib[j] += lum;
+            }
         }
     }
+    std::vector<std::uint32_t> order(num_cols);
+    std::iota(order.begin(), order.end(), 0);
+    //std::random_shuffle(order.begin(), order.end());
+    std::sort(order.begin(), order.end(), 
+        [&col_total_contrib](const std::uint32_t& lhs, const std::uint32_t& rhs){
+            return col_total_contrib[lhs] > col_total_contrib[rhs];
+        });
 
     Eigen::MatrixXd reconstructed(expected_row_size, 1);
     std::vector<std::uint32_t> sampled;
     Eigen::MatrixXd q;
     Eigen::MatrixXd sample_omega;
     Eigen::MatrixXd q_omega;
+    Eigen::MatrixXd q_omega_pseudoinverse;
 
     std::uint32_t total_samples = 0;
 
     std::uint32_t threshold = order.size() / 20;
 
     std::uniform_real_distribution<float> gen(0.f, 1.f);
+    bool resampled_required = false;
 
     for(std::uint32_t i = 0; i < order.size(); ++i){
         std::uint32_t samples_for_col = 0;
@@ -529,14 +567,16 @@ std::uint32_t adaptiveMatrixReconstruction(Eigen::MatrixXd& mat, Scene* scene,
             float sample_mult_ratio = float(q.cols()) / threshold;
             float sample_multiplier = 1.f;//std::max(1.f, 2.f - sample_mult_ratio);
             std::uint32_t num_samples_for_col = std::min(std::uint32_t(num_samples[i] * sample_multiplier), 
-                total_row_samples);
+                total_row_samples) + 0.5f;
             //std::cout << num_samples_for_col << " " << total_row_samples << std::endl;
             std::uint32_t expected_omega_rows = visibility_only ? num_samples_for_col : num_samples_for_col * 3;
             sample_omega.resize(expected_omega_rows, 1);
             sample_omega.setZero();
             //previous full sample was used, which means that there is now a need to regenerate the sample indices and 
             //the omega matrices
-            if(num_samples_for_col != sampled.size() || num_samples_for_col == slice->sample_indices.size() || force_resample){
+            if(num_samples_for_col != sampled.size() || num_samples_for_col == total_row_samples || force_resample ||
+                resampled_required){
+                resampled_required = false;
                 sampled = sampleRow(scene, slice, vpls, order[i], min_dist, num_samples_for_col, rng, sample_omega, sampled, 
                     true, visibility_only, recover_transpose, adaptive_sampling);
 
@@ -552,6 +592,15 @@ std::uint32_t adaptiveMatrixReconstruction(Eigen::MatrixXd& mat, Scene* scene,
                         q_omega.row(j * 3 + 2) = q.row(sampled[j] * 3 + 2);
                     }
                 }
+
+                auto svd = q_omega.jacobiSvd(Eigen::ComputeThinU | Eigen::ComputeThinV);
+                auto sv = svd.singularValues();
+                Eigen::MatrixXd singular_val_inv = Eigen::MatrixXd::Zero(sv.size(), sv.size());
+                for(std::uint32_t i = 0; i < sv.size(); ++i){
+                    singular_val_inv(i, i) = sv(i) < 1e-10f ? 0.f : 1.f / sv(i);
+                }
+
+                q_omega_pseudoinverse = svd.matrixV() * singular_val_inv * svd.matrixU().transpose();
             }
             //no new direction was added so no need to regenerate sample indices
             else{
@@ -560,51 +609,49 @@ std::uint32_t adaptiveMatrixReconstruction(Eigen::MatrixXd& mat, Scene* scene,
             }
             samples_for_col = num_samples_for_col;
 
-            auto svd = q_omega.jacobiSvd(Eigen::ComputeThinU | Eigen::ComputeThinV);
-            auto sv = svd.singularValues();
-            Eigen::MatrixXd singular_val_inv = Eigen::MatrixXd::Zero(sv.size(), sv.size());
-            for(std::uint32_t i = 0; i < sv.size(); ++i){
-                singular_val_inv(i, i) = sv(i) < 1e-10f ? 0.f : 1.f / sv(i);
+            if(sample_omega.rows() == reconstructed.rows()){
+                reconstructed = sample_omega;
+            }
+            else{
+                reconstructed = q * q_omega_pseudoinverse * sample_omega;
             }
 
-            Eigen::MatrixXd q_omega_pseudoInverse = svd.matrixV() * singular_val_inv * svd.matrixU().transpose();
-            reconstructed = q * q_omega_pseudoInverse * sample_omega;
-
-            float d = 0.f;
+            double d = 0;
             for(std::uint32_t j = 0; j < sampled.size(); ++j){
                 d += fabs(reconstructed(sampled[j], 0) - sample_omega(j, 0));
             }
 
             if(visibility_only){
                 for(std::uint32_t j = 0; j < reconstructed.rows(); ++j){
-                    if(fabs(fabs(reconstructed(j, 0)) - 1.f) > std::numeric_limits<float>::epsilon()){
-                        d += 1.f;
-                        //break;
+                    if(fabs(fabs(reconstructed(j, 0)) - 1.) > std::numeric_limits<float>::epsilon()){
+                        resampled_required = true;
+                        break;
                     }
                 }
             }
 
-            float allowed_error_rat = 1.f - col_max_contrib[i] / max_contrib;
-            //float allowed_error_rat = 1.f - std::min(1.f, col_total_contrib[i] / total_contrib + 0.75f);
+            /*if(resampled_required){
+                std::cout << reconstructed.transpose() << std::endl << std::endl;
+            }*/
+
+            float allowed_error_rat = 1.f - std::min(1.f, col_max_contrib[order[i]] / max_contrib + 0.75f);
+            //float allowed_error_rat = 1.f - std::min(1.f, col_total_contrib[order[i]] / total_contrib + 0.75f);
             allowed_error_rat = std::pow(allowed_error_rat, 4.f);
-            float allowed_error = allowed_error_rat * (reconstructed.rows() / 5.f) + std::numeric_limits<float>::epsilon();
+            float allowed_error = allowed_error_rat * reconstructed.rows() + std::numeric_limits<float>::epsilon();
 
-            bool resample = false;
-
-            if(d > /*std::numeric_limits<float>::epsilon()*/allowed_error){
-                resample = true;
-                sampled = sampleRow(scene, slice, vpls, order[i], min_dist, slice->sample_indices.size(), rng, 
+            if(d > 1e-5/*allowed_error*/){
+                sampled = sampleRow(scene, slice, vpls, order[i], min_dist, total_row_samples, rng, 
                     reconstructed, sampled, true, visibility_only, recover_transpose, adaptive_sampling);
-                samples_for_col = slice->sample_indices.size();
+                samples_for_col = total_row_samples;
 
                 q.conservativeResize(q.rows(), q.cols() + 1);
                 q.col(q.cols() - 1) = reconstructed;
             }
         }
         else{
-            sampled = sampleRow(scene, slice, vpls, order[i], min_dist, slice->sample_indices.size(), rng, reconstructed, 
+            sampled = sampleRow(scene, slice, vpls, order[i], min_dist, total_row_samples, rng, reconstructed, 
                 sampled, true, visibility_only, recover_transpose, adaptive_sampling);
-            samples_for_col = slice->sample_indices.size();
+            samples_for_col = total_row_samples;
             if(reconstructed.norm() > 0.f){
                 q = reconstructed;
             }
@@ -613,13 +660,33 @@ std::uint32_t adaptiveMatrixReconstruction(Eigen::MatrixXd& mat, Scene* scene,
         total_samples += samples_for_col;
     }
 
+    /*auto svd = mat.jacobiSvd(Eigen::ComputeThinU | Eigen::ComputeThinV);
+    auto sv = svd.singularValues();
+    Eigen::MatrixXd singular_vals = Eigen::MatrixXd::Zero(sv.size(), sv.size());
+    for(std::uint32_t i = 0; i < sv.size(); ++i){
+        singular_vals(i, i) = sv(i) < 20. ? 0. : sv(i);
+    }
+
+    mat = svd.matrixU() * singular_vals * svd.matrixV().transpose();
+
+    basis_rank = 0;
+    for(std::uint32_t i = 0; i < sv.size(); ++i){
+        if(singular_vals(i, i) > 1e-6){
+            basis_rank++;
+        }
+    }*/
+
+    /*if(basis_rank > sv.size() / 2){
+        for(std::uint32_t i = 0; i < sv.size(); ++i){
+            if(sv(i) > std::numeric_limits<float>::epsilon()){
+                std::cout << sv(i) << " ";
+            }
+        }
+        std::cout << std::endl << std::endl;
+    }*/
+
     basis_rank = q.cols();
 
-    /*std::cout << mat << std::endl;
-    int x;
-    std::cin >> x;*/
-
-    //this needs to be fixed
     return total_samples;
 }
 
@@ -739,13 +806,13 @@ bool MatrixReconstructionRenderer::render(Scene* scene){
                     sample_percentage_, rng, visibility_only_, adaptive_recover_transpose_, 
                     adaptive_importance_sampling_, adaptive_force_resample_, basis_rank);
                 
-                float v = float(samples) / (mat.rows() * mat.cols());
+                //float v = float(samples) / (mat.rows() * mat.cols());
+                float v = float(basis_rank) / max_rank;
                 float r, g, b;
                 std::tie(r, g, b) = floatToRGB(v);
                 std::uint8_t ro = r * 255.f;
                 std::uint8_t go = g * 255.f;
                 std::uint8_t bo = b * 255.f;
-                //std::uint8_t v = float(basis_rank) / max_rank * 255.f;
 
                 for(std::uint32_t j = 0; j < slices[i]->sample_indices.size(); ++j){
                     std::uint32_t offset = (slices[i]->sample(j).image_x + slices[i]->sample(j).image_y * 
