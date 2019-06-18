@@ -245,9 +245,6 @@ struct KDTNode{
     }
 
     Sample& sample(std::uint32_t index){
-        if(index >= sample_indices.size()){
-            std::cout << sample_indices.size() << " " << index << std::endl;
-        }
         assert(samples != nullptr && index < sample_indices.size());
 
         return (*samples)[sample_indices[index]];
