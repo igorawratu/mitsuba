@@ -37,13 +37,15 @@ enum EVPLType {
  */
 struct VPL {
     inline VPL(EVPLType type, const Spectrum &P)
-        : type(type), P(P) {
+        : type(type), P(P), emitter(nullptr) {
     }
     EVPLType type;
     Spectrum P;
     Intersection its;
     const Emitter *emitter;
     Float emitterScale;
+    Float radius;
+    PositionSamplingRecord psr;
 
     std::string toString() const;
 };

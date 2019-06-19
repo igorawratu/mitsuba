@@ -15,7 +15,7 @@ class RowColumnSampling : public ManyLightsClusterer{
 public:
     RowColumnSampling() = delete;
     RowColumnSampling(const std::vector<VPL>& vpls, std::uint32_t rows, std::uint32_t cols,
-        std::tuple<std::uint32_t, std::uint32_t> resolution, const Scene* scene, float min_dist);
+        std::tuple<std::uint32_t, std::uint32_t> resolution, const Scene* scene, float min_dist, bool vsl);
     RowColumnSampling(const RowColumnSampling& other);
     RowColumnSampling(RowColumnSampling&& other);
     RowColumnSampling& operator = (const RowColumnSampling& other);

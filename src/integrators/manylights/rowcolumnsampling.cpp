@@ -8,6 +8,8 @@
 #include <chrono>
 #include <algorithm>
 
+#include "common.h"
+
 MTS_NAMESPACE_BEGIN
 
 std::vector<std::pair<std::uint32_t, std::uint32_t>> subsampleRows(std::uint32_t rows, std::tuple<std::uint32_t, std::uint32_t> resolution){
@@ -67,7 +69,7 @@ const double PI = 3.14159265359;
 
 std::vector<float> calculateLightContributions(const std::vector<VPL>& vpls, 
                                     const std::vector<std::pair<std::uint32_t, std::uint32_t>>& rows,
-                                    const Scene* scene, float min_dist){
+                                    const Scene* scene, float min_dist, bool vsl){
     std::vector<float> contributions(vpls.size(), 0.f);
 
     const Sensor* sensor = scene->getSensor();
@@ -81,54 +83,24 @@ std::vector<float> calculateLightContributions(const std::vector<VPL>& vpls,
 	sampler->configure();
 	sampler->generate(Point2i(0));
 
-    for(size_t i = 0; i < vpls.size(); ++i){
-        //only dealing with emitter and surface VPLs curently.
-        if (vpls[i].type != EPointEmitterVPL && vpls[i].type != ESurfaceVPL){
-            continue;
-        }
+    for(size_t j = 0; j < rows.size(); ++j){
+        Point2 sample_position(rows[j].first + 0.5f, rows[j].second + 0.5f);
 
-        for(size_t j = 0; j < rows.size(); ++j){
-            Point2 sample_position(rows[j].first + 0.5f, rows[j].second + 0.5f);
+        Ray ray;
+        sensor->sampleRay(ray, sample_position, aperture_sample, time_sample);
 
-            Ray ray;
-            sensor->sampleRay(ray, sample_position, aperture_sample, time_sample);
+        Intersection its;
+        bool intersected;
 
-            Intersection its;
+        for(size_t i = 0; i < vpls.size(); ++i){
+            Spectrum s = sample(const_cast<Scene*>(scene), sampler, its, ray, vpls[i], min_dist, true, 
+                    10, i == 0, intersected, true, vsl);
 
-            if (!scene->rayIntersect(ray, its)) {
-                continue;
+            if(!intersected || its.isEmitter()){
+                break;
             }
 
-            Normal n = its.geoFrame.n;
-
-            Point ray_origin = its.p;
-            Ray shadow_ray(ray_origin, normalize(vpls[i].its.p - ray_origin), ray.time);
-
-            Float t;
-            ConstShapePtr shape;
-            Normal norm;
-            Point2 uv;
-
-            if(scene->rayIntersect(shadow_ray, t, shape, norm, uv)){
-                if(abs((ray_origin - vpls[i].its.p).length() - t) > 0.0001f ){
-                    continue;
-                }
-            }
-
-            BSDFSamplingRecord bsdf_sample_record(its, sampler, ERadiance);
-            bsdf_sample_record.wi = its.toLocal(normalize(vpls[i].its.p - its.p));
-            bsdf_sample_record.wo = its.toLocal(n);
-
-            Spectrum albedo = its.getBSDF()->eval(bsdf_sample_record);
-
-            float d = std::max((its.p - vpls[i].its.p).length(), min_dist);
-            float attenuation = 1.f / (d * d);
-
-            float n_dot_ldir = std::max(0.f, dot(normalize(n), normalize(vpls[i].its.p - its.p)));
-            float ln_dot_ldir = std::max(0.f, dot(normalize(vpls[i].its.shFrame.n), normalize(its.p - vpls[i].its.p)));
-
-            Spectrum lightContribution = (vpls[i].P * ln_dot_ldir * attenuation * n_dot_ldir * albedo) / PI;
-            contributions[i] += lightContribution.getLuminance();
+            contributions[i] += s.getLuminance();
         }
     }
 
@@ -251,7 +223,7 @@ std::vector<VPL> calculateClustering(std::vector<VPL> vpls, std::vector<float> c
         }
 
         //it's ok to move this since we won't be using it any longer in the vector
-        split_queue.push(std::make_pair(std::move(clusters[i]), total_contrib));
+        split_queue.push(std::make_pair(clusters[i], total_contrib));
     }
 
     std::uniform_real_distribution<float> gen(0, 1.f);
@@ -261,7 +233,7 @@ std::vector<VPL> calculateClustering(std::vector<VPL> vpls, std::vector<float> c
     };
 
     while(split_queue.size() < num_clusters){
-        ClusterContributionPair largest_cluster(std::move(split_queue.top()));
+        ClusterContributionPair largest_cluster(split_queue.top());
 
         if(largest_cluster.first.size() == 1){
             std::cerr << "I should not be here" << std::endl;
@@ -303,7 +275,7 @@ std::vector<VPL> calculateClustering(std::vector<VPL> vpls, std::vector<float> c
         ClusterContributionPair split_clusters[2];
 
         for(size_t i = 0; i < ordered_projections.size(); ++i){
-            if((contrib_half <= 0.f || i == ordered_projections.size() - 2) && idx == 0){
+            if(idx == 0 && (contrib_half <= 0.f || i == ordered_projections.size() - 1) && i > 0){
                 idx = 1;
             }
 
@@ -314,14 +286,13 @@ std::vector<VPL> calculateClustering(std::vector<VPL> vpls, std::vector<float> c
         }
 
         for(std::uint8_t i = 0; i < 2; ++i){
-            split_queue.push(std::move(split_clusters[i]));
+            split_queue.push(split_clusters[i]);
         }
     }
 
-    //representative picking and emission scalingstd::tuple<std::uint32_t, std::uint32_t> 
+    //representative picking and emission scaling
     while(split_queue.size() > 0){
-        ClusterContributionPair cluster(std::move(split_queue.top()));
-        split_queue.pop();
+        const ClusterContributionPair& cluster = split_queue.top();
 
         float total_contrib = 0.f;
         float total_lum = 0.f;
@@ -346,16 +317,18 @@ std::vector<VPL> calculateClustering(std::vector<VPL> vpls, std::vector<float> c
         output_clusters.push_back(cluster.first[representative_idx]);
         output_clusters.back().emitterScale = 1.f;
         output_clusters.back().P = output_clusters.back().P / output_clusters.back().P.getLuminance() * total_lum;
+
+        split_queue.pop();
     }
 
     return output_clusters;
 }
 
 RowColumnSampling::RowColumnSampling(const std::vector<VPL>& vpls, std::uint32_t rows, std::uint32_t cols,
-        std::tuple<std::uint32_t, std::uint32_t> resolution, const Scene* scene, float min_dist) : min_dist_(min_dist){
+        std::tuple<std::uint32_t, std::uint32_t> resolution, const Scene* scene, float min_dist, bool vsl) : min_dist_(min_dist){
 
     auto indices = subsampleRows(rows, resolution);
-    auto contributions = calculateLightContributions(vpls, indices, scene, min_dist_);
+    auto contributions = calculateLightContributions(vpls, indices, scene, min_dist_, vsl);
     clustering_ = calculateClustering(vpls, contributions, cols, min_dist);
 }
 

@@ -19,6 +19,8 @@
 
 #include "definitions.h"
 
+#include <flann/flann.hpp>
+
 MTS_NAMESPACE_BEGIN
 
 enum CLUSTERING_STRATEGY{
@@ -32,7 +34,7 @@ float calculateMinDistance(const Scene *scene, const std::vector<VPL>& vpls, flo
 	std::uint32_t lights_processed = 0;
 
 	for(std::uint32_t i = 0; i < vpls.size(); ++i){
-		bool surface_emitter = vpls[i].emitter->getType() & Emitter::EOnSurface;
+		bool surface_emitter = vpls[i].type == ESurfaceVPL;
 		float near = std::numeric_limits<float>::max();
 		float far = std::numeric_limits<float>::min();
 
@@ -103,6 +105,55 @@ float calculateMinDistance(const Scene *scene, const std::vector<VPL>& vpls, flo
 	return acc_near + (acc_far - acc_near) * clamping;
 }
 
+void setVPLRadii(std::vector<VPL>& vpls, float min_dist){
+	//radius calculation, 11 to account 10 + 1 for adding a node's self in nearest neighbours
+	std::uint32_t num_neighbours = std::min((std::uint32_t)vpls.size(), 11u);
+
+	std::uint32_t num_sl = 0;
+	for(std::uint32_t i = 0; i < vpls.size(); ++i){
+		if(vpls[i].type == ESurfaceVPL){
+			num_sl++;
+		}
+	} 
+
+    flann::Matrix<float> dataset(new float[num_sl * 3], num_sl, 3);
+	std::uint32_t curr_light = 0;
+	std::vector<std::uint32_t> pointlight_indices;
+    for(std::uint32_t i = 0; i < vpls.size(); ++i){
+		if(vpls[i].type == ESurfaceVPL){
+			float* curr = (float*)dataset[curr_light++];
+			curr[0] = vpls[i].its.p.x;
+			curr[1] = vpls[i].its.p.y;
+			curr[2] = vpls[i].its.p.z;
+			pointlight_indices.emplace_back(i);
+		}
+		else{
+			vpls[i].radius = 0.f;
+		}
+    }
+
+    flann::Index<flann::L2<float>> index(dataset, flann::KDTreeIndexParams(4));
+    index.buildIndex();
+
+	std::vector<std::vector<int>> indices;
+	std::vector<std::vector<float>> distances;
+
+    index.knnSearch(dataset, indices, distances, num_neighbours, flann::SearchParams(128));
+
+	for(std::uint32_t i = 0; i < distances.size(); ++i){
+		float max = std::numeric_limits<float>::min();
+		float min = std::numeric_limits<float>::max();
+		for(std::uint32_t j = 0; j < distances[i].size(); ++j){
+			if(distances[i][j] > std::numeric_limits<float>::epsilon()){
+				max = std::max(distances[i][j], max);
+				min = std::min(distances[i][j], min);
+			}
+		}
+
+		vpls[pointlight_indices[i]].radius = sqrt(max) * 2.f;
+	}
+}
+
 size_t generateVPLs(const Scene *scene, size_t offset, size_t count, int max_depth, bool prune, 
 	std::vector<VPL> &vpls) {
 	if (max_depth <= 1)
@@ -143,7 +194,9 @@ size_t generateVPLs(const Scene *scene, size_t offset, size_t count, int max_dep
 			vpl.its.p = point_sample.p;
 			vpl.its.time = time;
 			vpl.its.shFrame = point_sample.n.isZero() ? standard_frame : Frame(point_sample.n);
+			//vpl.its.geoFrame = point_sample.n.isZero() ? standard_frame : Frame(point_sample.n);
 			vpl.emitter = emitter;
+			vpl.psr = point_sample;
 			vpls.push_back(vpl);
 
 			if(type == ESurfaceVPL){
@@ -265,6 +318,8 @@ public:
 
 		min_dist_ = calculateMinDistance(scene, vpls_, clamping_);
 
+		setVPLRadii(vpls_, min_dist_);
+
 		renderer_ = initializeRendererByStrategy(scene, properties_, clustering_strategy_);
 
 		Log(EInfo, "Generated %i virtual point lights", vpls_.size());
@@ -290,18 +345,19 @@ public:
 
 private:
 	std::unique_ptr<ManyLightsRenderer> initializeRendererByStrategy(const Scene* scene, const Properties& props, CLUSTERING_STRATEGY strategy){
+		bool vsl = props.getInteger("vsl", 0) > 0;
 		switch(strategy){
 			case NONE:
 			{
 				std::unique_ptr<ManyLightsClusterer> clusterer(new PassthroughClusterer(vpls_));
-				return std::unique_ptr<ManyLightsRenderer>(new LightClustererRenderer(std::move(clusterer), min_dist_));
+				return std::unique_ptr<ManyLightsRenderer>(new LightClustererRenderer(std::move(clusterer), min_dist_, vsl));
 			}
 			case LIGHTCUTS:
 			{
 				int max_lights = props.getInteger("lightcuts-num_clusters", 64);
 				float error_threshold = props.getFloat("lightcuts-error_threshold", 0.02);
 				std::unique_ptr<ManyLightsClusterer> clusterer(new LightTree(vpls_, min_dist_, max_lights, error_threshold));
-				return std::unique_ptr<ManyLightsRenderer>(new LightClustererRenderer(std::move(clusterer), min_dist_));
+				return std::unique_ptr<ManyLightsRenderer>(new LightClustererRenderer(std::move(clusterer), min_dist_, vsl));
 			}
 			case ROWCOLSAMPLING:
 			{
@@ -309,9 +365,9 @@ private:
 				int cols = props.getInteger("rowcol-num_clusters", 64);
 
 				std::unique_ptr<ManyLightsClusterer> clusterer(new RowColumnSampling(vpls_, rows, cols, std::make_tuple(scene->getFilm()->getSize().x, scene->getFilm()->getSize().y),
-					scene, min_dist_));
+					scene, min_dist_, vsl));
 
-				return std::unique_ptr<ManyLightsRenderer>(new LightClustererRenderer(std::move(clusterer), min_dist_));
+				return std::unique_ptr<ManyLightsRenderer>(new LightClustererRenderer(std::move(clusterer), min_dist_, vsl));
 			}
 			case MATRIXRECONSTRUCTION:
 			{
@@ -333,7 +389,7 @@ private:
 				return std::unique_ptr<ManyLightsRenderer>(new MatrixReconstructionRenderer(std::move(clusterer), 
 					sample_percentage, min_dist_, step_size_factor, tolerance, tau, max_iterations, slice_size,
 					visibility_only, adaptive_col_sampling, adaptive_importance_sampling, adaptive_force_resample,
-					adaptive_recover_transpose, truncated, show_slices));
+					adaptive_recover_transpose, truncated, show_slices, vsl));
 			}
 			case MATRIXSEPARATION:
 			{
@@ -359,7 +415,7 @@ private:
 					min_dist_, sample_percentage, error_threshold, reincorporation_density_threshold, slice_size, 
 					max_prediction_iterations, max_separation_iterations, show_slices, only_directsamples, separate,
 					show_error, show_sparse, predictor_mask, show_rank, show_predictors, rank_increase_threshold,
-					theta));
+					theta, vsl));
 			}
 			default:
 				return nullptr;

@@ -21,7 +21,7 @@ MatrixReconstructionRenderer::MatrixReconstructionRenderer(std::unique_ptr<ManyL
     float sample_percentage, float min_dist, float step_size_factor, float tolerance, float tau, 
     std::uint32_t max_iterations, std::uint32_t slice_size, bool visibility_only, bool adaptive_col, 
     bool adaptive_importance_sampling, bool adaptive_force_resample, bool adaptive_recover_transpose,
-    bool truncated, bool show_slices) : 
+    bool truncated, bool show_slices, bool vsl) : 
         clusterer_(std::move(clusterer)), 
         sample_percentage_(sample_percentage), 
         min_dist_(min_dist), 
@@ -37,6 +37,7 @@ MatrixReconstructionRenderer::MatrixReconstructionRenderer(std::unique_ptr<ManyL
         adaptive_recover_transpose_(adaptive_recover_transpose),
         truncated_(truncated),
         show_slices_(show_slices),
+        vsl_(vsl),
         cancel_(false){
 }
 
@@ -55,6 +56,7 @@ MatrixReconstructionRenderer::MatrixReconstructionRenderer(MatrixReconstructionR
     adaptive_force_resample_(other.adaptive_force_resample_),
     truncated_(other.truncated_),
     show_slices_(other.show_slices_),
+    vsl_(other.vsl_),
     cancel_(other.cancel_){
 }
 
@@ -75,6 +77,7 @@ MatrixReconstructionRenderer& MatrixReconstructionRenderer::operator = (MatrixRe
         adaptive_recover_transpose_ = other.adaptive_recover_transpose_;
         truncated_ = other.truncated_;
         show_slices_ = other.show_slices_;
+        vsl_ = other.vsl_;
         cancel_ = other.cancel_;
     }
     return *this;
@@ -113,28 +116,29 @@ std::unique_ptr<KDTNode<ReconstructionSample>> constructKDTree(Scene* scene, std
 
             sensor->sampleRay(ray, sample_position, aperture_sample, time_sample);
 
-            Intersection its;
+            ReconstructionSample curr_sample;
+            curr_sample.image_x = x;
+            curr_sample.image_y = y;
+            curr_sample.ray = ray;
+            curr_sample.unoccluded_samples.resize(vpls.size());
 
-            bool intersected = scene->rayIntersect(ray, its);
-            ReconstructionSample curr_sample(x, y, intersected, its, ray);
+            for(std::uint32_t i = 0; i < vpls.size(); ++i){
+                Spectrum col = sample(scene, sampler, curr_sample.its, ray, vpls[i], min_dist, false, 
+                    5, i == 0, curr_sample.intersected_scene, false, false);
 
-            if(intersected){
-                //unoccluded colours calculated for heuristic purposes. a proper calculation is performed for the moment but it might
-                //be better if something less accurate is used
-                curr_sample.unoccluded_samples.resize(vpls.size());
-                float total_lum = 0.f;
-
-                for(std::uint32_t i = 0; i < vpls.size(); ++i){
-                    curr_sample.unoccluded_samples[i] = sample(scene, sampler, its, ray, vpls[i], min_dist, false);
-                    total_lum += curr_sample.unoccluded_samples[i].getLuminance();
+                if(!curr_sample.intersected_scene){
+                    curr_sample.emitter_color = col;
+                    break;
                 }
-
-                if(its.isEmitter()){
-                    curr_sample.emitter_color = its.Le(-ray.d);
+                else{
+                    curr_sample.unoccluded_samples[i] = col;
                 }
             }
-            
 
+            if(curr_sample.intersected_scene && curr_sample.its.isEmitter()){
+                curr_sample.emitter_color = curr_sample.its.Le(-curr_sample.ray.d);
+            }
+            
             samples[y * film->getSize().x + x] = std::move(curr_sample);
         }
     }
@@ -156,7 +160,7 @@ std::unique_ptr<KDTNode<ReconstructionSample>> constructKDTree(Scene* scene, std
 //RGB assumed, which are dealt with in separate matrices
 std::vector<std::uint32_t> calculateSparseSamples(Scene* scene, KDTNode<ReconstructionSample>* slice, 
     const std::vector<VPL>& vpls, Eigen::MatrixXd& rmat, Eigen::MatrixXd& gmat, Eigen::MatrixXd& bmat,
-    std::uint32_t num_samples, float min_dist){
+    std::uint32_t num_samples, float min_dist, bool vsl){
     assert(rmat.rows() * rmat.cols() > 0 && gmat.rows() * gmat.cols() > 0 && bmat.rows() * bmat.cols() > 0);
 
     std::uint32_t total_samples = slice->sample_indices.size() * vpls.size();
@@ -177,7 +181,8 @@ std::vector<std::uint32_t> calculateSparseSamples(Scene* scene, KDTNode<Reconstr
         const VPL& vpl = vpls[light_index];
         ReconstructionSample& sample_to_compute = slice->sample(sample_index);
 
-        Spectrum lightContribution = sample(scene, sampler, sample_to_compute.its, sample_to_compute.ray, vpl, min_dist, true);
+        Spectrum lightContribution = sample(scene, sampler, sample_to_compute.its, sample_to_compute.ray, vpl, min_dist, true,
+            5, false, sample_to_compute.intersected_scene, false, vsl);
 
         Float r, g, b;
         lightContribution.toLinearRGB(r, g, b);
@@ -189,83 +194,81 @@ std::vector<std::uint32_t> calculateSparseSamples(Scene* scene, KDTNode<Reconstr
     return indices;
 }
 
-void copyMatrixToBuffer(std::uint8_t* output_image, const Eigen::MatrixXd& rmat, const Eigen::MatrixXd& gmat,
-    const Eigen::MatrixXd& bmat, KDTNode<ReconstructionSample>* slice, Vector2i image_size){
-    for(std::uint32_t i = 0; i < rmat.rows(); ++i){
-        float r = 0, g = 0, b = 0;
-
-        for(int j = 0; j < rmat.cols(); ++j){
-            r += rmat(i, j);
-            g += gmat(i, j);
-            b += bmat(i, j);
+void updateSliceWithMatData(const Eigen::MatrixXd& rmat, const Eigen::MatrixXd& gmat,
+    const Eigen::MatrixXd& bmat, KDTNode<ReconstructionSample>* slice){
+    for(std::uint32_t i = 0; i < slice->sample_indices.size(); ++i){
+        for(std::uint32_t j = 0; j < slice->sample(i).unoccluded_samples.size(); ++j){
+            slice->sample(i).unoccluded_samples[j].fromLinearRGB(rmat(i, j), gmat(i, j), bmat(i, j));
         }
-
-        Spectrum converter;
-        converter.fromLinearRGB(r, g, b);
-        if(slice->sample(i).its.isEmitter()){
-            converter += slice->sample(i).emitter_color;
-        }
-
-        //have to convert to SRGB because we are setting the buffer directly
-        converter.toSRGB(r, g, b);
-        
-        ReconstructionSample& sample = slice->sample(i);
-
-        std::uint32_t buffer_pos = sample.image_x + sample.image_y * image_size.x;
-
-        output_image[buffer_pos*3] = std::max(0.f, std::min(1.f, r)) * 255 + 0.5f;
-        output_image[buffer_pos*3 + 1] = std::max(0.f, std::min(1.f, g)) * 255 + 0.5f;
-        output_image[buffer_pos*3 + 2] = std::max(0.f, std::min(1.f, b)) * 255 + 0.5f;
     }
 }
 
-void copyMatrixToBuffer(std::uint8_t* output_image, const Eigen::MatrixXd& mat, KDTNode<ReconstructionSample>* slice, 
-    Vector2i image_size, bool visibility_only, bool recover_transpose){
+void updateSliceWithMatData(const Eigen::MatrixXd& mat, KDTNode<ReconstructionSample>* slice, 
+    bool visibility_only, bool recover_transpose, bool vsl, Scene* scene, const std::vector<VPL>& vpls,
+    float min_dist){
+    
+    Sampler *sampler = nullptr;
 
+    if(vsl){
+        Properties props("independent");
+        sampler = static_cast<Sampler*>(PluginManager::getInstance()->createObject(MTS_CLASS(Sampler), props));
+        sampler->configure();
+        sampler->generate(Point2i(0));
+    }
+    
     std::uint32_t total_samples = slice->sample_indices.size();
     for(std::uint32_t i = 0; i < total_samples; ++i){
-        float r = 0, g = 0, b = 0;
         if(visibility_only){
             Spectrum light_contributions(0.f);
             for(std::uint32_t j = 0; j < slice->sample(i).unoccluded_samples.size(); ++j){
                 float coeff = ((recover_transpose ? mat(j, i) : mat(i, j)) + 1.f) / 2.f;
-                light_contributions += slice->sample(i).unoccluded_samples[j] * coeff;
-            }
-
-            if(slice->sample(i).its.isEmitter()){
-                light_contributions += slice->sample(i).emitter_color;
-            }
-
-            light_contributions.toSRGB(r, g, b);
-        }
-        else{
-            std::uint32_t lights = recover_transpose ? mat.rows() / 3 : mat.cols();
-            for(std::uint32_t j = 0; j < lights; ++j){
-                if(recover_transpose){
-                    r += mat(j * 3, i);
-                    g += mat(j * 3 + 1, i);
-                    b += mat(j * 3 + 2, i);
+                if(vsl){
+                    if(coeff > std::numeric_limits<float>::epsilon()){
+                        slice->sample(i).unoccluded_samples[j] = sample(scene, sampler, slice->sample(i).its, slice->sample(i).ray,
+                            vpls[j], min_dist, false, 5, false, slice->sample(i).intersected_scene, false, true) * coeff;
+                    }
+                    else{
+                        slice->sample(i).unoccluded_samples[j] = Spectrum(0.f);
+                    }
                 }
                 else{
-                    r += mat(i * 3, j);
-                    g += mat(i * 3 + 1, j);
-                    b += mat(i * 3 + 2, j);
+                    slice->sample(i).unoccluded_samples[j] *= coeff;
                 }
             }
+        }
+        else{
+            for(std::uint32_t j = 0; j < slice->sample(i).unoccluded_samples.size(); ++j){
+                float r = recover_transpose ? mat(j * 3, i) : mat(i * 3, j);
+                float g = recover_transpose ? mat(j * 3 + 1, i) : mat(i * 3 + 1, j);
+                float b = recover_transpose ? mat(j * 3 + 2, i) : mat(i * 3 + 2, j);
 
-            Spectrum converter;
-            converter.fromLinearRGB(r, g, b);
+                slice->sample(i).unoccluded_samples[j].fromLinearRGB(r, g, b);
+            }
+        }
+    }
+}
 
-            if(slice->sample(i).its.isEmitter()){
-                converter += slice->sample(i).emitter_color;
+void copySamplesToBuffer(std::uint8_t* output_image, const std::vector<ReconstructionSample>& samples, Vector2i image_size){
+    for(std::uint32_t i = 0; i < samples.size(); ++i){
+        Spectrum col(0.f);
+        if(samples[i].intersected_scene){
+            for(std::uint32_t j = 0; j < samples[i].unoccluded_samples.size(); ++j){
+                col += samples[i].unoccluded_samples[j];
             }
 
-            converter.toSRGB(r, g, b);
+            if(samples[i].its.isEmitter()){
+                col += samples[i].emitter_color;
+            }
         }
-        
-        ReconstructionSample& sample = slice->sample(i);
+        else{
+            //environment map colour is also stored in emitter_color
+            col = samples[i].emitter_color;
+        }
 
-        std::uint32_t buffer_pos = sample.image_x + sample.image_y * image_size.x;
+        std::uint32_t buffer_pos = samples[i].image_x + samples[i].image_y * image_size.x;
+
+        float r, g, b;
+        col.toSRGB(r, g, b);
 
         output_image[buffer_pos*3] = std::max(0.f, std::min(1.f, r)) * 255 + 0.5f;
         output_image[buffer_pos*3 + 1] = std::max(0.f, std::min(1.f, g)) * 255 + 0.5f;
@@ -337,7 +340,7 @@ std::vector<std::uint32_t> importanceSample(std::uint32_t num_samples, std::mt19
 std::vector<std::uint32_t> sampleCol(Scene* scene, KDTNode<ReconstructionSample>* slice, const std::vector<VPL>& vpls, 
     std::uint32_t col, float min_dist, std::uint32_t num_samples, std::mt19937& rng, Eigen::MatrixXd& mat, 
     const std::vector<std::uint32_t>& sample_set, bool resample, bool visibility_only, bool recover_transpose,
-    bool importance_sample, const std::vector<float>& probabilities){
+    bool importance_sample, const std::vector<float>& probabilities, bool vsl){
     
     std::uint32_t num_rows = visibility_only ? num_samples : num_samples * 3;
     std::uint32_t max_samples = recover_transpose ? vpls.size() : slice->sample_indices.size();
@@ -400,7 +403,8 @@ std::vector<std::uint32_t> sampleCol(Scene* scene, KDTNode<ReconstructionSample>
             }
         }
         else{
-            Spectrum lightContribution = sample(scene, sampler, scene_sample.its, scene_sample.ray, vpl, min_dist, true);
+            Spectrum lightContribution = sample(scene, sampler, scene_sample.its, scene_sample.ray, vpl, 
+                min_dist, true, 5, false, scene_sample.intersected_scene, false, vsl);
 
             Float r, g, b;
             lightContribution.toLinearRGB(r, g, b);
@@ -416,7 +420,7 @@ std::vector<std::uint32_t> sampleCol(Scene* scene, KDTNode<ReconstructionSample>
 std::uint32_t adaptiveMatrixReconstruction(Eigen::MatrixXd& mat, Scene* scene, KDTNode<ReconstructionSample>* slice, 
     const std::vector<VPL>& vpls, float min_dist, float sample_perc,
     std::mt19937& rng, bool visibility_only, bool recover_transpose, bool importance_sample, bool force_resample,
-    std::uint32_t& basis_rank){
+    std::uint32_t& basis_rank, bool vsl){
 
     assert(sample_perc > 0.f && slice->sample_indices.size() > 0 && vpls.size() > 0);
     std::random_shuffle(slice->sample_indices.begin(), slice->sample_indices.end());
@@ -473,6 +477,7 @@ std::uint32_t adaptiveMatrixReconstruction(Eigen::MatrixXd& mat, Scene* scene, K
 
     Eigen::MatrixXd reconstructed(num_rows, 1);
     std::vector<std::uint32_t> sampled;
+
     Eigen::MatrixXd q;
     Eigen::MatrixXd sample_omega;
     Eigen::MatrixXd q_omega;
@@ -499,7 +504,7 @@ std::uint32_t adaptiveMatrixReconstruction(Eigen::MatrixXd& mat, Scene* scene, K
             if(num_samples != sampled.size() || num_samples == total_rows || force_resample || resampled_required){
                 resampled_required = false;
                 sampled = sampleCol(scene, slice, vpls, order[i], min_dist, num_samples, rng, sample_omega, sampled, 
-                    true, visibility_only, recover_transpose, importance_sample, probabilities);
+                    true, visibility_only, recover_transpose, importance_sample, probabilities, vsl);
 
                 q_omega.resize(expected_omega_rows, q.cols());
 
@@ -524,10 +529,10 @@ std::uint32_t adaptiveMatrixReconstruction(Eigen::MatrixXd& mat, Scene* scene, K
 
                 q_omega_pseudoinverse = svd.matrixV() * singular_val_inv * svd.matrixU().transpose();
             }
-            //no new direction was added so no need to regenerate sample indices
+                //no new direction was added so no need to regenerate sample indices
             else{
                 sampled = sampleCol(scene, slice, vpls, order[i], min_dist, num_samples, rng, sample_omega, sampled, 
-                    false, visibility_only, recover_transpose, importance_sample, probabilities);
+                    false, visibility_only, recover_transpose, importance_sample, probabilities, vsl);
             }
             samples_for_col = num_samples;
 
@@ -552,7 +557,7 @@ std::uint32_t adaptiveMatrixReconstruction(Eigen::MatrixXd& mat, Scene* scene, K
             //sampled values can't be reconstructed accurately so fully sample
             if(d > 1e-5){
                 sampled = sampleCol(scene, slice, vpls, order[i], min_dist, total_rows, rng, 
-                    reconstructed, sampled, true, visibility_only, recover_transpose, importance_sample, probabilities);
+                    reconstructed, sampled, true, visibility_only, recover_transpose, importance_sample, probabilities, vsl);
                 samples_for_col = total_rows;
 
                 q.conservativeResize(q.rows(), q.cols() + 1);
@@ -563,7 +568,7 @@ std::uint32_t adaptiveMatrixReconstruction(Eigen::MatrixXd& mat, Scene* scene, K
         }
         else{
             sampled = sampleCol(scene, slice, vpls, order[i], min_dist, total_rows, rng, reconstructed, 
-                sampled, true, visibility_only, recover_transpose, importance_sample, probabilities);
+                sampled, true, visibility_only, recover_transpose, importance_sample, probabilities, vsl);
             samples_for_col = total_rows;
 
             //only add to basis if vector isn't a zero vector, as it is otherwise meaningless
@@ -590,8 +595,6 @@ std::uint32_t adaptiveMatrixReconstruction(Eigen::MatrixXd& mat, Scene* scene, K
                 probabilities[j] += std::min(grad, 1.f) * mul;
             }
         }
-        
-        
         mat.col(order[i]) = reconstructed.col(0);
         total_samples += samples_for_col;
     }
@@ -674,8 +677,10 @@ bool MatrixReconstructionRenderer::render(Scene* scene){
     memset(output_image, 0, output_bitmap->getBytesPerPixel() * size.x * size.y);
 
     std::cout << "constructing kd tree" << std::endl;
+
     auto kdt_root = constructKDTree(scene, slice_size_, samples_, min_dist_, vpls);
     std::cout << "getting slices" << std::endl;
+
     std::vector<KDTNode<ReconstructionSample>*> slices;
     getSlices(kdt_root.get(), slices);
 
@@ -684,17 +689,17 @@ bool MatrixReconstructionRenderer::render(Scene* scene){
     std::uint32_t amount_sampled = 0;
     std::uint32_t total_samples = 0;
 
-    #pragma omp parallel for
-    for(std::uint32_t i = 0; i < slices.size(); ++i){
-        int y = rand() % 255;
-        int u = rand() % 255;
-        int v = ((float)i / slices.size()) * 255.f;
+    if(show_slices_){
+        #pragma omp parallel for
+        for(std::uint32_t i = 0; i < slices.size(); ++i){
+            int y = rand() % 255;
+            int u = rand() % 255;
+            int v = ((float)i / slices.size()) * 255.f;
 
-        int sb = 1.164 * (y - 16) + 2.018 * (u - 128);
-        int sg = 1.164 * (y - 16) - 0.813 * (v - 128) - 0.391 * (u - 128);
-        int sr = 1.164 * (y - 16) + 1.596 * (v - 128);
+            int sb = 1.164 * (y - 16) + 2.018 * (u - 128);
+            int sg = 1.164 * (y - 16) - 0.813 * (v - 128) - 0.391 * (u - 128);
+            int sr = 1.164 * (y - 16) + 1.596 * (v - 128);
 
-        if(show_slices_){
             for(std::uint32_t j = 0; j < slices[i]->sample_indices.size(); ++j){
                 std::uint32_t offset = (slices[i]->sample(j).image_x + slices[i]->sample(j).image_y * 
                 output_bitmap->getSize().x) * output_bitmap->getBytesPerPixel();
@@ -703,10 +708,11 @@ bool MatrixReconstructionRenderer::render(Scene* scene){
                 output_image[offset + 1] = sg;
                 output_image[offset + 2] = sb;
             }
-
-            continue;
         }
-        else{
+    }
+    else{
+        #pragma omp parallel for
+        for(std::uint32_t i = 0; i < slices.size(); ++i){
             std::mt19937 rng(std::chrono::high_resolution_clock::now().time_since_epoch().count() * i);
         
             if(adaptive_col_sampling_){
@@ -716,7 +722,7 @@ bool MatrixReconstructionRenderer::render(Scene* scene){
                 std::uint32_t basis_rank;
                 std::uint32_t samples = adaptiveMatrixReconstruction(mat, scene, slices[i], vpls, min_dist_, 
                     sample_percentage_, rng, visibility_only_, adaptive_recover_transpose_, 
-                    adaptive_importance_sampling_, adaptive_force_resample_, basis_rank);
+                    adaptive_importance_sampling_, adaptive_force_resample_, basis_rank, vsl_);
                 
                 //float v = float(samples) / (mat.rows() * mat.cols());
                 float v = float(basis_rank) / max_rank;
@@ -735,7 +741,8 @@ bool MatrixReconstructionRenderer::render(Scene* scene){
                     output_image[offset + 2] = bo;
                 }
 
-                copyMatrixToBuffer(output_image, mat, slices[i], size, visibility_only_, adaptive_recover_transpose_);
+                updateSliceWithMatData(mat, slices[i], visibility_only_, adaptive_recover_transpose_, vsl_, scene, 
+                    vpls, min_dist_);
 
                 {
                     std::lock_guard<std::mutex> lock(mutex);
@@ -749,7 +756,8 @@ bool MatrixReconstructionRenderer::render(Scene* scene){
                 Eigen::MatrixXd bmat = Eigen::MatrixXd::Zero(slices[i]->sample_indices.size(), vpls.size());
 
                 std::uint32_t num_samples = slices[i]->sample_indices.size() * vpls.size() * sample_percentage_;
-                auto indices = calculateSparseSamples(scene, slices[i], vpls, rmat, gmat, bmat, num_samples, min_dist_);
+                
+                auto indices = calculateSparseSamples(scene, slices[i], vpls, rmat, gmat, bmat, num_samples, min_dist_, vsl_);
 
                 float step_size = 1.9f;//(1.2f * lighting_matrix.rows() * lighting_matrix.cols()) / (indices.size() * 3.f); 
 
@@ -757,17 +765,18 @@ bool MatrixReconstructionRenderer::render(Scene* scene){
                 svt(reconstructed_r, rmat, step_size, tolerance_, tau_, max_iterations_, indices, truncated_);
                 svt(reconstructed_g, gmat, step_size, tolerance_, tau_, max_iterations_, indices, truncated_);
                 svt(reconstructed_b, bmat, step_size, tolerance_, tau_, max_iterations_, indices, truncated_);
-                copyMatrixToBuffer(output_image, reconstructed_r, reconstructed_g, reconstructed_b, slices[i], size);
+                updateSliceWithMatData(reconstructed_r, reconstructed_g, reconstructed_b, slices[i]);
             }
         }
 
-    }
+        copySamplesToBuffer(output_image, samples_, size);
 
-    if(adaptive_col_sampling_){
-        float sample_perc = (float)amount_sampled / total_samples;
-        std::cout << "Sample percentage: " << sample_perc << std::endl;
+        if(adaptive_col_sampling_){
+            float sample_perc = (float)amount_sampled / total_samples;
+            std::cout << "Sample percentage: " << sample_perc << std::endl;
+        }
     }
-
+    
     film->setBitmap(output_bitmap);
 
     return cancel_;
