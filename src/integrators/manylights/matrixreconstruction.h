@@ -49,7 +49,7 @@ struct ReconstructionSample{
 class MatrixReconstructionRenderer : public ManyLightsRenderer{
 public:
     MatrixReconstructionRenderer() = delete;
-    MatrixReconstructionRenderer(std::unique_ptr<ManyLightsClusterer> clusterer, float sample_percentage_, 
+    MatrixReconstructionRenderer(const std::vector<VPL>& vpls, float sample_percentage_, 
         float min_dist, float step_size_factor, float tolerance, float tau, std::uint32_t max_iterations,
         std::uint32_t slice_size, bool visibility_only, bool adaptive_col, bool adaptive_importance_sampling, 
     bool adaptive_force_resample, bool adaptive_recover_transpose, bool truncated, bool show_slices, bool vsl);
@@ -68,7 +68,7 @@ public:
     }
 
 private:
-    std::unique_ptr<ManyLightsClusterer> clusterer_;
+    std::vector<VPL> vpls_;
     float sample_percentage_, min_dist_, step_size_factor_, tolerance_, tau_;
     std::uint32_t max_iterations_, slice_size_;
     bool output_stats_;
@@ -84,6 +84,7 @@ private:
     bool cancel_;
 
     std::vector<ReconstructionSample> samples_;
+    std::vector<std::vector<std::uint32_t>> clusters_by_sampling_;
 };
 
 MTS_NAMESPACE_END

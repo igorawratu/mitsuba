@@ -385,11 +385,10 @@ private:
 				bool truncated = props.getInteger("completion-use_truncated", 0) > 0;
 				bool show_slices = props.getInteger("completion-show_slices", 0) > 0;
 
-				std::unique_ptr<ManyLightsClusterer> clusterer(new PassthroughClusterer(vpls_));
-				return std::unique_ptr<ManyLightsRenderer>(new MatrixReconstructionRenderer(std::move(clusterer), 
-					sample_percentage, min_dist_, step_size_factor, tolerance, tau, max_iterations, slice_size,
-					visibility_only, adaptive_col_sampling, adaptive_importance_sampling, adaptive_force_resample,
-					adaptive_recover_transpose, truncated, show_slices, vsl));
+				//std::unique_ptr<ManyLightsClusterer> clusterer(new PassthroughClusterer(vpls_));
+				return std::unique_ptr<ManyLightsRenderer>(new MatrixReconstructionRenderer(vpls_, sample_percentage, min_dist_, 
+					step_size_factor, tolerance, tau, max_iterations, slice_size, visibility_only, adaptive_col_sampling, 
+					adaptive_importance_sampling, adaptive_force_resample, adaptive_recover_transpose, truncated, show_slices, vsl));
 			}
 			case MATRIXSEPARATION:
 			{
