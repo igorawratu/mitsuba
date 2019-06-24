@@ -18,35 +18,35 @@
 
 MTS_NAMESPACE_BEGIN
 
-std::vector<float> calculateClusterContributions(const std::vector<VPL>& vpls, KDTNode<ReconstructionSample>* slice, Scene* scene,
-    float min_dist, std::uint32_t num_rows){
-    num_rows = std::min(num_rows, std::uint32_t(slice->sample_indices.size()));
-    std::vector<std::uint32_t> row_samples(slice->sample_indices.size());
-    std::iota(row_samples.begin(), row_samples.end(), 0);
-    std::random_shuffle(row_samples.begin(), row_samples.end());
-    row_samples.resize(num_rows);
+Eigen::MatrixXf calculateClusterContributions(const std::vector<VPL>& vpls, 
+    const std::vector<KDTNode<ReconstructionSample>*>& slices, Scene* scene,
+    float min_dist, std::vector<std::uint32_t>& sampled_slice_rows){
 
-    std::vector<float> contributions(vpls.size(), 0.f);
+    assert(slices.size() > 0 && vpls.size() > 0);
+
+    Eigen::MatrixXf contributions = Eigen::MatrixXf::Zero(slices.size(), vpls.size());
 
     Properties props("independent");
     Sampler *sampler = static_cast<Sampler*>(PluginManager::getInstance()->createObject(MTS_CLASS(Sampler), props));
     sampler->configure();
     sampler->generate(Point2i(0));
 
-    for(std::uint32_t i = 0; i < vpls.size(); ++i){
-        for(std::uint32_t j = 0; j < row_samples.size(); ++j){
-            auto& curr_sample = slice->sample(row_samples[j]);
-            Spectrum c = sample(scene, sampler, curr_sample.its, curr_sample.ray, vpls[i], min_dist, true, 5, false, 
-            curr_sample.intersected_scene, false, false);
-            contributions[i] += c.getLuminance();
+    for(std::uint32_t i = 0; i < slices.size(); ++i){
+        sampled_slice_rows[i] = rand() % slices[i]->sample_indices.size();
+        auto& curr_sample = slices[i]->sample(sampled_slice_rows[i]); 
+        for(std::uint32_t j = 0; j < vpls.size(); ++j){
+            Spectrum c = sample(scene, sampler, curr_sample.its, curr_sample.ray, vpls[j], min_dist, true, 5, false, 
+                curr_sample.intersected, false, false);
+
+            contributions(i, j) = c.getLuminance();
         }
     }
 
     return contributions;
 }
 
-std::vector<std::vector<std::uint32_t>> clusterVPLsBySampling(const std::vector<VPL>& vpls, std::uint32_t num_clusters,
-    float min_dist){
+std::vector<std::vector<std::uint32_t>> clusterVPLsBySampling(const Eigen::MatrixXf& contrbutions,
+    std::uint32_t num_clusters){
     num_clusters = std::min(std::uint32_t(vpls.size()), num_clusters);
     std::vector<std::vector<std::uint32_t>> clusters;
 
@@ -54,7 +54,7 @@ std::vector<std::vector<std::uint32_t>> clusterVPLsBySampling(const std::vector<
         return clusters;
     }
 
-    std::vector<std::uint32_t> remaining_vpls(vpls.size());
+    std::vector<std::uint32_t> remaining_vpls(contributions.cols());
     std::iota(remaining_vpls.begin(), remaining_vpls.end(), 0);
 
     //minus one because a cluster is added randomly at the start
@@ -75,8 +75,8 @@ std::vector<std::vector<std::uint32_t>> clusterVPLsBySampling(const std::vector<
 
         //only need to update the distance info with the last
         for(std::uint32_t i = 0; i < remaining_vpls.size(); ++i){
-            float dist = (vpls[remaining_vpls[i]].its.p - vpls[clusters.back()[0]].its.p).lengthSquared();
-            dist += dot(vpls[remaining_vpls[i]].its.shFrame.n, vpls[clusters.back()[0]].its.shFrame.n) * min_dist;
+            float dist = contributions.col(remaining_vpls[i]).dot(contributions.col(clusters.back()[0])) +
+                (contributions.col(remaining_vpls[i]) - contributions.col(clusters.back()[0])).squaredNorm();
 
             if(dist < closest_cluster_to_vpl[i].first){
                 closest_cluster_to_vpl[i].first = dist;
@@ -110,7 +110,14 @@ std::vector<std::vector<std::uint32_t>> clusterVPLsBySampling(const std::vector<
 }
 
 std::vector<std::vector<std::uint32_t>> clusterVPLsBySplitting(const std::vector<std::vector<std::uint32_t>>& sampling_clusters, 
-    const std::vector<VPL>& vpls, const std::vector<float> contributions, std::uint32_t num_clusters, std::mt19937& rng){
+    const Eigen::MatrixXf& contributions, std::uint32_t num_clusters, std::mt19937& rng, 
+    const std::vector<int>& reduced_indices, std::uint32_t cluster_idx){
+
+    Eigen::MatrixXf reduced_contrib_mat(reduced_indices.size(), contributions.cols());
+    for(std::uint32_t i = 1; i < reduced_contrib_mat.rows(); ++i){
+        reduced_contrib_mat.row(i) = contributions.row(reduced_indices[i]);
+    }
+    
     std::vector<std::vector<std::uint32_t>> splitting_clusters = sampling_clusters;
 
     typedef std::pair<std::uint32_t, float> ClusterContributionPair;
@@ -134,7 +141,12 @@ std::vector<std::vector<std::uint32_t>> clusterVPLsBySplitting(const std::vector
     for(std::uint32_t i = 0; i < splitting_clusters.size(); ++i){
         float cluster_contrib = 0.f;
         for(std::uint32_t j = 0; j < splitting_clusters[i].size(); ++j){
-            cluster_contrib += splitting_clusters[i][j];
+            for(std::uint32_t k = j; k < splitting_clusters[i].size(); ++k){
+                std::uint32_t col1 = splitting_clusters[i][j];
+                std::uint32_t col2 = splitting_clusters[i][k];
+                cluster_contrib += reduced_contrib_mat.col(col1).dot(reduced_contrib_mat.col(col2)) +
+                    (reduced_contrib_mat.col(col1) - reduced_contrib_mat.col(col2)).squaredNorm();;
+            }
         }
 
         split_queue.push(std::make_pair(i, cluster_contrib));
@@ -144,55 +156,73 @@ std::vector<std::vector<std::uint32_t>> clusterVPLsBySplitting(const std::vector
         return l.second < r.second;
     };
 
-    std::uniform_real_distribution<float> gen_pick(0.f, 1.f);
-
     std::uint32_t total_clusters = splitting_clusters.size() + num_clusters;
     while(splitting_clusters.size() < total_clusters){
         auto largest = split_queue.top();
         split_queue.pop();
 
-        //generate random line and then project VPLs onto it. Then split it according to half the amount of energy along this line
-        Eigen::VectorXf rand_line(6);
-        do{
-            for(std::uint32_t i = 0; i < 6; ++i){
-                rand_line(i) = gen_pick(rng);
+        std::uint32_t cluster_idx = largest.first;
+        std::vector<std::uint32_t> cluster_cols = splitting_clusters[cluster_idx];
+        std::vector<float> col_norms(cluster_cols.size());
+        float total_cluster_contrib = 0.f;
+
+        for(std::uint32_t i = 0; i < cluster_cols.size(); ++i){
+            col_norms[i] = reduced_contrib_mat.col(cluster_cols[i]).norm();
+            total_cluster_contrib = col_norms[i];
+        }
+
+        std::uint32_t line_start_idx;
+        std::uniform_real_distribution<float> gen_start(0, total_cluster_contrib);
+        float start_val = gen_start(rng);
+        for(std::uint32_t i = 0; i < cluster_cols.size(); ++i){
+            line_start_idx = i;
+            start_val -= col_norms[i];
+            if(start_val < 0.f){
+                break;
             }
-        }while(rand_line.norm() == 0.f);
+        }
+
+        std::uint32_t line_start = cluster_cols[line_start_idx];
+        cluster_cols[line_start_idx] = cluster_cols.back();
+        cluster_cols.pop_back();
+        total_cluster_contrib -= col_norms[line_start_idx];
+        col_norms[line_start_idx] = col_norms.back();
+        col_norms.pop_back();
+
+        std::uint32_t line_end_idx;
+        std::uniform_real_distribution<float> gen_end(0, total_cluster_contrib);
+        float end_val = gen_end(rng);
+        for(std::uint32_t i = 0; i < cluster_cols.size(); ++i){
+            line_start_idx = i;
+            end_val -= col_norms[i];
+            if(end_val < 0.f){
+                break;
+            }
+        }
+
+        std::uint32_t line_end = cluster_cols[line_end_idx];
+        cluster_cols[line_end_idx] = cluster_cols.back();
+        cluster_cols.pop_back();
+        total_cluster_contrib -= col_norms[line_end_idx];
+        col_norms[line_end_idx] = col_norms.back();
+        col_norms.pop_back();
+
+        Eigen::VectorXf line = reduced_contrib_mat.col(line_end) - reduced_contrib_mat.col(line_start);
 
         std::vector<std::pair<std::uint32_t, float>> vpl_projection_distances;
+        vpl_project_distances.push_back(std::make_pair(line_start, 0.f));
+        vpl_project_distances.push_back(std::make_pair(line_end, line.norm()));
 
-        std::vector<std::uint32_t>& curr_cluster = splitting_clusters[largest.first];
-        for(std::uint32_t i = 0; i < curr_cluster.size(); ++i){
-            Eigen::VectorXf vpl_point(6);
-            for(std::uint32_t j = 0; j < 3; ++j){
-                vpl_point(j) = vpls[curr_cluster[i]].its.p[j];
-            }
-
-            vpl_point(3) = vpls[curr_cluster[i]].its.shFrame.n.x;
-            vpl_point(4) = vpls[curr_cluster[i]].its.shFrame.n.y;
-            vpl_point(5) = vpls[curr_cluster[i]].its.shFrame.n.z;
-
-            float d_on_line = vpl_point.dot(rand_line) / rand_line.dot(rand_line);
-
+        for(std::uint32_t i = 0; i < cluster_cols.size(); ++i){
+            Eigen::VectorXf vpl_point = reduced_contrib_mat.col(cluster_cols[i]) - reduced_contrib_mat.col(line_start);
+            float d_on_line = vpl_point.dot(line) / line.dot(line);
             vpl_projection_distances.push_back(std::make_pair(curr_cluster[i], d_on_line));
         }
 
         std::sort(vpl_projection_distances.begin(), vpl_projection_distances.end(), vpl_proj_comp);
-        std::uint32_t split_index = 1;
-        
-        if(largest.second < std::numeric_limits<float>::epsilon()){
-            split_index = vpl_projection_distances.size() / 2;
-        }
-        else{
-            float half = largest.second / 2.f;
-            for(std::uint32_t i = 0; i < vpl_projection_distances.size(); ++i){
-                half -= contributions[vpl_projection_distances[i].second];
-                if(half <= 0.f){
-                    split_index = i;
-                    break;
-                }
-            }
-        }
+
+        //may need to change this
+        std::uint32_t split_index = vpl_projection_distances.size() / 2;
 
         float new_cluster1_contrib = 0.f;
         float new_cluster2_contrib = 0.f;
@@ -202,11 +232,27 @@ std::vector<std::vector<std::uint32_t>> clusterVPLsBySplitting(const std::vector
         for(std::uint32_t i = 0; i < vpl_projection_distances.size(); ++i){
             if(i < split_index){
                 new_cluster1.push_back(vpl_projection_distances[i].first);
-                new_cluster1_contrib += contributions[new_cluster1.back()];
             }
             else{
                 new_cluster2.push_back(vpl_projection_distances[i].first);
-                new_cluster2_contrib += contributions[new_cluster2.back()];
+            }
+        }
+
+        for(std::uint32_t j = 0; j < new_cluster1.size(); ++j){
+            for(std::uint32_t k = j; k < new_cluster1.size(); ++k){
+                std::uint32_t col1 = new_cluster1[j];
+                std::uint32_t col2 = new_cluster1[k];
+                new_cluster1_contrib += reduced_contrib_mat.col(col1).dot(reduced_contrib_mat.col(col2)) +
+                    (reduced_contrib_mat.col(col1) - reduced_contrib_mat.col(col2)).squaredNorm();;
+            }
+        }
+
+        for(std::uint32_t j = 0; j < new_cluster2.size(); ++j){
+            for(std::uint32_t k = j; k < new_cluster2.size(); ++k){
+                std::uint32_t col1 = new_cluster2[j];
+                std::uint32_t col2 = new_cluster2[k];
+                new_cluster2_contrib += reduced_contrib_mat.col(col1).dot(reduced_contrib_mat.col(col2)) +
+                    (reduced_contrib_mat.col(col1) - reduced_contrib_mat.col(col2)).squaredNorm();;
             }
         }
 
@@ -217,9 +263,7 @@ std::vector<std::vector<std::uint32_t>> clusterVPLsBySplitting(const std::vector
         split_queue.push(std::make_pair(splitting_clusters.size() - 1, new_cluster2_contrib));
     }
 
-    //return splitting_clusters;
-
-    return sampling_clusters;
+    return splitting_clusters;
 }
 
 std::vector<VPL> sampleRepresentatives(const std::vector<VPL>& vpls, const std::vector<std::vector<std::uint32_t>>& clusters, 
