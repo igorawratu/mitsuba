@@ -84,7 +84,6 @@ private:
     bool cancel_;
 
     std::vector<ReconstructionSample> samples_;
-    std::vector<std::vector<std::uint32_t>> clusters_by_sampling_;
 };
 
 MTS_NAMESPACE_END

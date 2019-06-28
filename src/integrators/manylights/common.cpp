@@ -363,7 +363,6 @@ Spectrum sample(Scene* scene, Sampler* sampler, Intersection& its, const Ray& in
             }
         }
     }
-
     return c;
 }
 
