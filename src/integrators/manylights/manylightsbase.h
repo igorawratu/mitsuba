@@ -13,7 +13,7 @@ public:
 
 class ManyLightsRenderer{
 public:
-    virtual bool render(Scene* scene) = 0;
+    virtual bool render(Scene* scene, std::uint32_t spp, const RenderJob *job) = 0;
     virtual void setCancel(bool cancel) = 0;
 };
 

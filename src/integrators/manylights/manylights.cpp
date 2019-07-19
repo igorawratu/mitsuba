@@ -18,6 +18,7 @@
 #include "matrixseparationrenderer.h"
 
 #include "definitions.h"
+#include "common.h"
 
 #include <flann/flann.hpp>
 
@@ -307,7 +308,8 @@ public:
 				"(e.g. perspective/thinlens/orthographic/telecentric)!");
 
 		vpls_.clear();
-		size_t sample_count = scene->getSampler()->getSampleCount();
+		spp_ = upperPo2(scene->getSampler()->getSampleCount());
+		size_t sample_count = properties_.getInteger("vpls", 1024);
 		vpls_.reserve(sample_count);
 		float normalization = 1.f / generateVPLs(scene, 0, sample_count, max_depth_, true, vpls_);
 		
@@ -335,7 +337,7 @@ public:
 
 	bool render(Scene *scene, RenderQueue *queue, const RenderJob *job, int sceneResID, int sensorResID, int samplerResID) {
 		if(renderer_ != nullptr){
-			return renderer_->render(scene);
+			return renderer_->render(scene, spp_, job);
 		}
 
 		return false;
@@ -431,6 +433,7 @@ private:
 	CLUSTERING_STRATEGY clustering_strategy_;
 	std::unique_ptr<ManyLightsRenderer> renderer_;
 	float min_dist_;
+	std::uint32_t spp_;
 };
 
 MTS_IMPLEMENT_CLASS(ManyLightsIntegrator, false, Integrator)

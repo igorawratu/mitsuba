@@ -27,7 +27,7 @@ LightClustererRenderer& LightClustererRenderer::operator = (LightClustererRender
 LightClustererRenderer::~LightClustererRenderer(){
 }
 
-bool LightClustererRenderer::render(Scene* scene){
+bool LightClustererRenderer::render(Scene* scene, std::uint32_t spp, const RenderJob *job){
     {
         std::lock_guard<std::mutex> lock(cancel_lock_);
         cancel_ = false;
@@ -57,40 +57,53 @@ bool LightClustererRenderer::render(Scene* scene){
 
         #pragma omp parallel for
         for (std::int32_t x = 0; x < output_image->getSize().x; ++x) {
-            Ray ray;
-
-            Point2 sample_position(x + 0.5f, y + 0.5f);
-            
-            //disregarding aperture and time sampling for now, as we are only dealing with a single sample per pixel
-            Point2 aperture_sample(0.5f, 0.5f);
-            Float time_sample(0.5f);
-
-            sensor->sampleRay(ray, sample_position, aperture_sample, time_sample);
-
-            Intersection its;
-
             Spectrum accumulator(0.f);
 
-            std::vector<VPL> vpls = clusterer_->getClusteringForPoint(its);
-            {
-                std::lock_guard<std::mutex> counter_lock(light_counter_mutex);
-                total_lights += vpls.size();
-                total_rendered_pixels++;
-            }
-            
-            bool intersected;
-            for (std::uint32_t i = 0; i < vpls.size(); ++i) {
-                if((vpls[i].its.p - its.p).length() < 5.f){
-                    //accumulator += Spectrum(1.f);
-                    //break;
-                }
-                accumulator += sample(scene, sampler, its, ray, vpls[i], min_dist_, true, 
-                    10, i == 0, intersected, true, vsl_);
+            std::uint32_t cell_dim = sqrt(spp) + 0.5f;
+            float cell_side_len = 1.f / cell_dim;
 
-                if(!intersected || its.isEmitter()){
-                    break;
+            for(std::uint32_t j = 0; j < spp; ++j){
+                Ray ray;
+
+                float x_jitter = sampler->next1D() / cell_dim;
+                float y_jitter = sampler->next1D() / cell_dim;
+                float x_off = (j % spp) * cell_side_len;
+                float y_off = (j / spp) * cell_side_len;
+
+                Point2 sample_position(x + x_off + x_jitter, y + y_off + y_jitter);
+                
+                //disregarding aperture and time sampling for now, as we are only dealing with a single sample per pixel
+                Point2 aperture_sample(0.5f, 0.5f);
+                Float time_sample(0.5f);
+
+                sensor->sampleRay(ray, sample_position, aperture_sample, time_sample);
+
+                Intersection its;
+
+                std::vector<VPL> vpls = clusterer_->getClusteringForPoint(its);
+                {
+                    std::lock_guard<std::mutex> counter_lock(light_counter_mutex);
+                    total_lights += vpls.size();
+                    total_rendered_pixels++;
                 }
+                
+                bool intersected;
+                for (std::uint32_t i = 0; i < vpls.size(); ++i) {
+                    if((vpls[i].its.p - its.p).length() < 5.f){
+                        //accumulator += Spectrum(1.f);
+                        //break;
+                    }
+                    accumulator += sample(scene, sampler, its, ray, vpls[i], min_dist_, true, 
+                        10, i == 0, intersected, true, vsl_);
+
+                    if(!intersected || its.isEmitter()){
+                        break;
+                    }
+                }
+
+                
             }
+            accumulator /= spp;
 
             float r, g, b;
             accumulator.toSRGB(r, g, b);

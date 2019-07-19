@@ -13,6 +13,7 @@
 #include <random>
 #include <tuple>
 #include <queue>
+#include <unordered_map>
 
 #include "common.h"
 
@@ -69,30 +70,41 @@ void updateVPLRadii(std::vector<VPL>& vpls, float min_dist){
 
 Eigen::MatrixXf calculateClusterContributions(const std::vector<VPL>& vpls, 
     const std::vector<KDTNode<ReconstructionSample>*>& slices, Scene* scene,
-    float min_dist, std::vector<std::uint32_t>& sampled_slice_rows){
+    float min_dist, std::vector<std::uint32_t>& sampled_slice_rows, std::uint32_t samples_per_slice,
+    bool vsl){
 
     assert(slices.size() > 0 && vpls.size() > 0);
 
-    Eigen::MatrixXf contributions = Eigen::MatrixXf::Zero(slices.size() * 3, vpls.size());
+    Eigen::MatrixXf contributions = Eigen::MatrixXf::Zero(slices.size() * 3 * samples_per_slice, vpls.size());
 
     Properties props("independent");
     Sampler *sampler = static_cast<Sampler*>(PluginManager::getInstance()->createObject(MTS_CLASS(Sampler), props));
     sampler->configure();
     sampler->generate(Point2i(0));
 
+    #pragma omp parallel for
     for(std::uint32_t i = 0; i < slices.size(); ++i){
-        sampled_slice_rows[i] = rand() % slices[i]->sample_indices.size();
-        auto& curr_sample = slices[i]->sample(sampled_slice_rows[i]); 
-        for(std::uint32_t j = 0; j < vpls.size(); ++j){
-            Spectrum c = sample(scene, sampler, curr_sample.its, curr_sample.ray, vpls[j], min_dist, true, 5, false, 
-                curr_sample.intersected_scene, false, false);
+        std::set<std::uint32_t> generated;
+        while(generated.size() < samples_per_slice){
+            generated.insert(rand() % slices[i]->sample_indices.size());
+        }
 
-            float r, g, b;
-            c.toLinearRGB(r, g, b);
+        std::uint32_t pos = 0;
+        for(auto idx = generated.begin(); idx != generated.end(); ++idx){
+            sampled_slice_rows[i * samples_per_slice + pos] = *idx;
+            auto& curr_sample = slices[i]->sample(*idx); 
+            for(std::uint32_t j = 0; j < vpls.size(); ++j){
+                Spectrum c = sample(scene, sampler, curr_sample.its, curr_sample.ray, vpls[j], min_dist, true, 5, false, 
+                    curr_sample.intersected_scene, false, vsl);
 
-            contributions(i * 3, j) = r;
-            contributions(i * 3 + 1, j) = g;
-            contributions(i * 3 + 2, j) = b;
+                float r, g, b;
+                c.toLinearRGB(r, g, b);
+
+                contributions(i * 3 * samples_per_slice + pos, j) = r;
+                contributions(i * 3 * samples_per_slice + pos + 1, j) = g;
+                contributions(i * 3 * samples_per_slice + pos + 2, j) = b;
+            }
+            pos++;
         }
     }
 
@@ -108,106 +120,151 @@ std::vector<std::vector<std::uint32_t>> clusterVPLsBySampling(const Eigen::Matri
         return clusters;
     }
 
-    std::vector<std::uint32_t> remaining_vpls(contributions.cols());
-    std::iota(remaining_vpls.begin(), remaining_vpls.end(), 0);
+    std::vector<float> col_norms(contributions.cols());
+    std::vector<std::uint32_t> zero_norm_cols;
+    std::vector<std::uint32_t> nonzero_norm_cols;
 
-    //minus one because a cluster is added randomly at the start
-    std::vector<std::pair<float, std::uint32_t>> closest_cluster_to_vpl(contributions.cols() - 1, 
-        std::make_pair(std::numeric_limits<float>::max(), 0));
-    std::vector<float> vpl_dist_to_all_clusters(contributions.cols() - 1, 0.f);
+    for(std::uint32_t i = 0; i < contributions.cols(); ++i){
+        col_norms[i] = contributions.col(i).norm();
+        //change to eps for stability?
+        if(col_norms[i] > 0.f){
+            nonzero_norm_cols.push_back(i);
+        }
+        else{
+            zero_norm_cols.push_back(i);
+        }
+    }
 
-    //not anything too important so just using the lcg
-    std::uint32_t idx = rand() % remaining_vpls.size();
-    clusters.emplace_back(1, remaining_vpls[idx]);
+    Eigen::MatrixXf nz_norms(1, nonzero_norm_cols.size());
+    Eigen::MatrixXf nz_cols(contributions.rows(), nonzero_norm_cols.size());
+    std::vector<float> nz_norms_dist(nonzero_norm_cols.size());
 
-    remaining_vpls[idx] = remaining_vpls.back();
-    remaining_vpls.pop_back();
+    for(std::uint32_t i = 0; i < nonzero_norm_cols.size(); ++i){
+        std::uint32_t& idx = nonzero_norm_cols[i];
+        nz_norms_dist[i] = nz_norms(0, i) = col_norms[idx];
+        nz_cols.col(i) = contributions.col(idx);
+    }
 
-    while(clusters.size() < num_clusters){
-        std::uint32_t cluster_to_add = 0;
-        float max_dist = -std::numeric_limits<float>::max();
-        Eigen::VectorXf cluster_center(9);
-        cluster_center(0) = vpls[clusters.back()[0]].its.p.x;
-        cluster_center(1) = vpls[clusters.back()[0]].its.p.y;
-        cluster_center(2) = vpls[clusters.back()[0]].its.p.z;
-        cluster_center(3) = vpls[clusters.back()[0]].its.shFrame.n.x * min_dist;
-        cluster_center(4) = vpls[clusters.back()[0]].its.shFrame.n.y * min_dist;
-        cluster_center(5) = vpls[clusters.back()[0]].its.shFrame.n.z * min_dist;
+    std::discrete_distribution<std::uint32_t> nzdist(nz_norms_dist.begin(), nz_norms_dist.end());
+    auto nzprobs = nzdist.probabilities();
+    std::mt19937 rng(std::chrono::high_resolution_clock::now().time_since_epoch().count());
 
-        float cent_r, cent_g, cent_b;
-        vpls[clusters.back()[0]].P.toLinearRGB(cent_r, cent_g, cent_b);
-        cluster_center(6) = cent_r;
-        cluster_center(7) = cent_g;
-        cluster_center(8) = cent_b;
+    std::unordered_map<std::uint32_t, float> cluster_centers;
 
-        //only need to update the distance info with the last
-        for(std::uint32_t i = 0; i < remaining_vpls.size(); ++i){
-            //float dist = contributions.col(remaining_vpls[i]).dot(contributions.col(clusters.back()[0])) *
-            //    (contributions.col(remaining_vpls[i]) - contributions.col(clusters.back()[0])).squaredNorm();
-
-            Eigen::VectorXf curr_vpl(9);
-            curr_vpl(0) = vpls[remaining_vpls[i]].its.p.x;
-            curr_vpl(1) = vpls[remaining_vpls[i]].its.p.y;
-            curr_vpl(2) = vpls[remaining_vpls[i]].its.p.z;
-            curr_vpl(3) = vpls[remaining_vpls[i]].its.shFrame.n.x * min_dist;
-            curr_vpl(4) = vpls[remaining_vpls[i]].its.shFrame.n.y * min_dist;
-            curr_vpl(5) = vpls[remaining_vpls[i]].its.shFrame.n.z * min_dist;
-
-            float curr_r, curr_g, curr_b;
-            vpls[remaining_vpls[i]].P.toLinearRGB(curr_r, curr_g, curr_b);
-            curr_vpl(6) = curr_r;
-            curr_vpl(7) = curr_g;
-            curr_vpl(8) = curr_b;
-
-            float dist = (curr_vpl - cluster_center).norm();
-
-            if(dist < closest_cluster_to_vpl[i].first){
-                closest_cluster_to_vpl[i].first = dist;
-                closest_cluster_to_vpl[i].second = clusters.size() - 1;
+    int centers_added = num_clusters;
+    while(centers_added-- > 0){
+        std::uint32_t selected = nzdist(rng);
+        float pdf =  nzprobs[selected];
+        if(pdf > 0.f){
+            if(cluster_centers.find(selected) == cluster_centers.end()){
+                cluster_centers[selected] = 1.f / pdf;
             }
+            else{
+                cluster_centers[selected] += 1.f / pdf;
+            }
+        }
+    }
 
-            vpl_dist_to_all_clusters[i] += dist;
+    Eigen::MatrixXf cluster_norms(1, cluster_centers.size());
+    Eigen::MatrixXf cluster_cols(contributions.rows(), cluster_centers.size());
 
-            if(vpl_dist_to_all_clusters[i] > max_dist){
-                cluster_to_add = i;
-                max_dist = vpl_dist_to_all_clusters[i];
+    std::uint32_t idx = 0;
+    for(auto iter = cluster_centers.begin(); iter != cluster_centers.end(); ++iter, ++idx){
+        cluster_norms(0, idx) = contributions.col(iter->first).norm() * iter->second;
+        cluster_cols.col(idx) = contributions.col(iter->first) * iter->second;
+    }
+
+    Eigen::MatrixXf dist_mat = cluster_norms.transpose() * nz_norms - cluster_cols.transpose() * nz_cols;
+
+    clusters.resize(cluster_cols.cols());
+    for(std::uint32_t i = 0; i < dist_mat.cols(); ++i){
+        float min = std::numeric_limits<float>::max();
+        std::uint32_t min_idx = 0;
+        for(std::uint32_t j = 0; j < dist_mat.rows(); ++j){
+            if(min > dist_mat(j, i)){
+                min = dist_mat(j, i);
+                min_idx = j;
             }
         }
 
-        clusters.emplace_back(1, remaining_vpls[cluster_to_add]);
-        
-        remaining_vpls[cluster_to_add] = remaining_vpls.back();
-        vpl_dist_to_all_clusters[cluster_to_add] = vpl_dist_to_all_clusters.back();
-        closest_cluster_to_vpl[cluster_to_add] = closest_cluster_to_vpl.back();
-
-        remaining_vpls.pop_back();
-        vpl_dist_to_all_clusters.pop_back();
-        closest_cluster_to_vpl.pop_back();
+        clusters[min_idx].push_back(nonzero_norm_cols[i]);
     }
 
-    for(std::uint32_t i = 0; i < remaining_vpls.size(); ++i){
-        //std::cout << closest_cluster_to_vpl[i].second << " " << closest_cluster_to_vpl[i].first << std::endl;
-        clusters[closest_cluster_to_vpl[i].second].push_back(remaining_vpls[i]);
+    if(zero_norm_cols.size() > 0){
+        clusters.push_back(zero_norm_cols);
     }
 
     return clusters;
 }
 
+double computeCost(const Eigen::MatrixXf& contrib_mat, const std::vector<int>& nn, const std::vector<std::uint32_t>& cluster, 
+    const std::vector<float>& norm_cache){
+    if(cluster.size() < 2){
+        return 0.;
+    }
+
+    double vsum = 0.f;
+    double nsum = 0.f;
+    for(std::uint32_t i = 0; i < cluster.size(); ++i){
+        nsum += norm_cache[cluster[i]];
+    }
+    
+    for(std::uint32_t i = 0; i < nn.size() * 3; ++i){
+        double sum = 0.;
+
+        for(std::uint32_t j = 0; j < cluster.size(); ++j){
+            std::uint32_t nn_idx = i / 3;
+            std::uint32_t nn_offset = i % 3;
+            sum += contrib_mat(nn[nn_idx] * 3 + nn_offset, cluster[j]);
+        }
+
+        vsum += sum * sum;
+    }
+    
+    return std::max(0., (nsum * nsum) - vsum);
+    
+    /*float total = 0.f;
+    for(std::uint32_t i = 0; i < cluster.size(); ++i){
+        for(std::uint32_t j = i; j < cluster.size(); ++j){
+            total += (contrib_mat.col(cluster[j]) - contrib_mat.col(cluster[i])).norm() * norm_cache[cluster[i]] * 
+                norm_cache[cluster[j]];
+        }
+    }
+
+    return total;*/
+
+    /*float total_norm = 0.f;
+    Eigen::MatrixXf variance = Eigen::MatrixXf::Zero(contrib_mat.rows(), 1);
+    Eigen::MatrixXf mean = Eigen::MatrixXf::Zero(contrib_mat.rows(), 1);
+
+    for(std::uint32_t i = 0; i < cluster.size(); ++i){
+        total_norm += norm_cache[cluster[i]];
+        Eigen::MatrixXf old_mean = mean;
+        mean = mean + (contrib_mat.col(cluster[i]) - mean) / float(i + 1);
+        variance = variance + 
+            (contrib_mat.col(cluster[i]) - mean).cwiseProduct((contrib_mat.col(cluster[i]) - old_mean));
+    }
+    variance /= float(cluster.size() - 1);
+
+    return variance.norm() * total_norm;*/
+
+}
+
 std::vector<std::vector<std::uint32_t>> clusterVPLsBySplitting(const std::vector<std::vector<std::uint32_t>>& sampling_clusters, 
-    const Eigen::MatrixXf& reduced_contrib_mat, std::uint32_t num_clusters, std::mt19937& rng, 
-    const std::vector<int>& reduced_indices){
+    const Eigen::MatrixXf& cluster_contributions, const std::vector<int>& nn, std::uint32_t num_clusters,
+     std::mt19937& rng, std::vector<float>& norm_cache){
     
     std::vector<std::vector<std::uint32_t>> splitting_clusters = sampling_clusters;
 
-    typedef std::pair<std::uint32_t, float> ClusterContributionPair;
+    typedef std::pair<std::uint32_t, double> ClusterContributionPair;
 
     //it's not possible to split size 1 clusters, so we put them at the back of the queue regardless of their contribution
     auto cluster_comparator = [&splitting_clusters](const ClusterContributionPair& l, const ClusterContributionPair& r){
-        if(splitting_clusters[l.first].size() == 1){
+        if(splitting_clusters[l.first].size() <= 1){
             return true;
         }
 
-        if(splitting_clusters[r.first].size() == 1){
+        if(splitting_clusters[r.first].size() <= 1){
             return false;
         }
 
@@ -217,17 +274,20 @@ std::vector<std::vector<std::uint32_t>> clusterVPLsBySplitting(const std::vector
     std::priority_queue<ClusterContributionPair, std::vector<ClusterContributionPair>, 
         decltype(cluster_comparator)> split_queue(cluster_comparator);
 
-    for(std::uint32_t i = 0; i < splitting_clusters.size(); ++i){
-        float cluster_contrib = 0.f;
-        for(std::uint32_t j = 0; j < splitting_clusters[i].size(); ++j){
-            for(std::uint32_t k = j; k < splitting_clusters[i].size(); ++k){
-                std::uint32_t col1 = splitting_clusters[i][j];
-                std::uint32_t col2 = splitting_clusters[i][k];
-                cluster_contrib += reduced_contrib_mat.col(col1).dot(reduced_contrib_mat.col(col2)) +
-                    (reduced_contrib_mat.col(col1) - reduced_contrib_mat.col(col2)).squaredNorm();;
-            }
+    norm_cache.reserve(cluster_contributions.cols());
+    for(std::uint32_t i = 0; i < cluster_contributions.cols(); ++i){
+        norm_cache[i] = 0.f;
+        for(std::uint32_t j = 0; j < nn.size(); ++j){
+            norm_cache[i] += cluster_contributions(nn[j] * 3, i) * cluster_contributions(nn[j] * 3, i);
+            norm_cache[i] += cluster_contributions(nn[j] * 3 + 1, i) * cluster_contributions(nn[j] * 3 + 1, i);
+            norm_cache[i] += cluster_contributions(nn[j] * 3 + 2, i) * cluster_contributions(nn[j] * 3 + 2, i);
         }
+        norm_cache[i] = sqrt(norm_cache[i]);
+        
+    }
 
+    for(std::uint32_t i = 0; i < splitting_clusters.size(); ++i){
+        float cluster_contrib = computeCost(cluster_contributions, nn, splitting_clusters[i], norm_cache);
         split_queue.push(std::make_pair(i, cluster_contrib));
     }
 
@@ -238,48 +298,48 @@ std::vector<std::vector<std::uint32_t>> clusterVPLsBySplitting(const std::vector
 
         std::uint32_t cluster_idx = largest.first;
         std::vector<std::uint32_t> cluster_cols = splitting_clusters[cluster_idx];
-        std::vector<float> col_norms(cluster_cols.size());
-        float total_cluster_contrib = 0.f;
+        std::vector<float> nz_col_norms;
+        std::vector<std::uint32_t> nz_col_indices;
 
         for(std::uint32_t i = 0; i < cluster_cols.size(); ++i){
-            col_norms[i] = reduced_contrib_mat.col(cluster_cols[i]).norm();
-            total_cluster_contrib += col_norms[i];
+            if(norm_cache[cluster_cols[i]] > 0.){
+                nz_col_norms.push_back(norm_cache[cluster_cols[i]]);
+                nz_col_indices.push_back(cluster_cols[i]);
+            }
         }
 
         std::set<std::uint32_t> lidx_set;
 
-        std::uniform_real_distribution<float> genlidx(0, total_cluster_contrib);
-        
-        std::uint32_t tries = 0;
+        if(nz_col_indices.size() > 1){
+            std::discrete_distribution<std::uint32_t> nzdist(nz_col_norms.begin(), nz_col_norms.end());
+            std::uint32_t tries = 0;
+            do{
+                if(tries++ > 100){
+                    std::uint32_t index = 0;
+                    while(lidx_set.size() < 2 && index < cluster_cols.size()){
+                        lidx_set.insert(cluster_cols[index++]);
+                    }
 
-        do{
-            if(tries++ > 100){
-                std::uint32_t index = 0;
-                while(lidx_set.size() < 2 && index < cluster_cols.size()){
-                    lidx_set.insert(cluster_cols[index++]);
-                }
-                if(lidx_set.size() < 2){
-                    std::cout << "OK BIG ERROR HELPPLPLPLP! " << cluster_cols.size() << std::endl;
-                }
-                break;
-            }
-
-            float val = genlidx(rng);
-            std::uint32_t idx = 0;
-            for(std::uint32_t i = 0; i < cluster_cols.size(); ++i){
-                idx = cluster_cols[i];
-                val -= col_norms[i];
-                if(val < 0.f){
                     break;
                 }
-            }
 
-            lidx_set.insert(idx);
-        }while(lidx_set.size() < 2);
-
+                lidx_set.insert(nz_col_indices[nzdist(rng)]);
+            }while(lidx_set.size() < 2);
+        }
+        else{
+            lidx_set.insert(cluster_cols[0]);
+            lidx_set.insert(cluster_cols.back());
+        }
+        
         std::vector<std::uint32_t> lidx(lidx_set.begin(), lidx_set.end());
 
-        Eigen::VectorXf line = reduced_contrib_mat.col(lidx[1]) - reduced_contrib_mat.col(lidx[0]);
+        Eigen::VectorXf line(nn.size() * 3);
+        
+        for(std::uint32_t i = 0; i < nn.size(); ++i){
+            line(i * 3) = cluster_contributions(nn[i] * 3, lidx[1]) - cluster_contributions(nn[i] * 3, lidx[0]);
+            line(i * 3 + 1) = cluster_contributions(nn[i] * 3 + 1, lidx[1]) - cluster_contributions(nn[i] * 3 + 1, lidx[0]);
+            line(i * 3 + 2) = cluster_contributions(nn[i] * 3 + 2, lidx[1]) - cluster_contributions(nn[i] * 3 + 2, lidx[0]);
+        }
 
         std::vector<std::pair<std::uint32_t, float>> vpl_projection_distances;
 
@@ -287,7 +347,13 @@ std::vector<std::vector<std::uint32_t>> clusterVPLsBySplitting(const std::vector
         float max_d = -std::numeric_limits<float>::max();
 
         for(std::uint32_t i = 0; i < cluster_cols.size(); ++i){
-            Eigen::VectorXf vpl_point = reduced_contrib_mat.col(cluster_cols[i]) - reduced_contrib_mat.col(lidx[0]);
+            Eigen::VectorXf vpl_point(nn.size() * 3);
+            for(std::uint32_t j = 0; j < nn.size(); ++j){
+                vpl_point(j * 3) = cluster_contributions(nn[j] * 3, cluster_cols[i]) - cluster_contributions(nn[j] * 3, lidx[0]);
+                vpl_point(j * 3 + 1) = cluster_contributions(nn[j] * 3 + 1, cluster_cols[i]) - cluster_contributions(nn[j] * 3 + 1, lidx[0]);
+                vpl_point(j * 3 + 2) = cluster_contributions(nn[j] * 3 + 2, cluster_cols[i]) - cluster_contributions(nn[j] * 3 + 2, lidx[0]);
+            }
+
             float d_on_line = vpl_point.dot(line) / line.dot(line);
             min_d = std::min(d_on_line, min_d);
             max_d = std::max(d_on_line, max_d);
@@ -296,8 +362,6 @@ std::vector<std::vector<std::uint32_t>> clusterVPLsBySplitting(const std::vector
 
         float midpoint = (max_d + min_d) / 2.f;
 
-        float new_cluster1_contrib = 0.f;
-        float new_cluster2_contrib = 0.f;
         std::vector<std::uint32_t> new_cluster1;
         std::vector<std::uint32_t> new_cluster2;
 
@@ -316,31 +380,14 @@ std::vector<std::vector<std::uint32_t>> clusterVPLsBySplitting(const std::vector
 
             if(new_cluster1.size() > new_cluster2.size()){
                 new_cluster2.insert(new_cluster2.begin(), new_cluster1.begin() + split_idx, new_cluster1.end());
-                new_cluster1.erase(new_cluster1.begin() + split_idx, new_cluster1.end());
             }
             else{
                 new_cluster1.insert(new_cluster1.begin(), new_cluster2.begin() + split_idx, new_cluster2.end());
-                new_cluster2.erase(new_cluster2.begin() + split_idx, new_cluster2.end());
             }
         }
 
-        for(std::uint32_t j = 0; j < new_cluster1.size(); ++j){
-            for(std::uint32_t k = j; k < new_cluster1.size(); ++k){
-                std::uint32_t col1 = new_cluster1[j];
-                std::uint32_t col2 = new_cluster1[k];
-                new_cluster1_contrib += reduced_contrib_mat.col(col1).dot(reduced_contrib_mat.col(col2)) *
-                    (reduced_contrib_mat.col(col1) - reduced_contrib_mat.col(col2)).squaredNorm();
-            }
-        }
-
-        for(std::uint32_t j = 0; j < new_cluster2.size(); ++j){
-            for(std::uint32_t k = j; k < new_cluster2.size(); ++k){
-                std::uint32_t col1 = new_cluster2[j];
-                std::uint32_t col2 = new_cluster2[k];
-                new_cluster2_contrib += reduced_contrib_mat.col(col1).dot(reduced_contrib_mat.col(col2)) *
-                    (reduced_contrib_mat.col(col1) - reduced_contrib_mat.col(col2)).squaredNorm();
-            }
-        }
+        double new_cluster1_contrib = computeCost(cluster_contributions, nn, new_cluster1, norm_cache);
+        double new_cluster2_contrib = computeCost(cluster_contributions, nn, new_cluster2, norm_cache);
 
         splitting_clusters[largest.first] = new_cluster1;
         splitting_clusters.push_back(new_cluster2);
@@ -359,11 +406,17 @@ std::vector<VPL> sampleRepresentatives(const Eigen::MatrixXf& contributions, con
 
     //might need to make this more deterministic
     for(std::uint32_t i = 0; i < clusters.size(); ++i){
+        if(clusters[i].size() == 0){
+            continue;
+        }
+        
         float tot_cluster_power = 0.f;
         float total_vpl_power = 0.f;
         for(std::uint32_t j = 0; j < clusters[i].size(); ++j){
             tot_cluster_power += contributions.col(clusters[i][j]).norm();
-            total_vpl_power += vpls[clusters[i][j]].P.getLuminance();
+            float r, g, b;
+            vpls[clusters[i][j]].P.toLinearRGB(r, g, b);
+            total_vpl_power += sqrt(r * r + g * g + b * b);
         }
 
         std::uniform_real_distribution<float> gen(0, tot_cluster_power);
@@ -373,45 +426,42 @@ std::vector<VPL> sampleRepresentatives(const Eigen::MatrixXf& contributions, con
         float selected_norm = 0.f;
 
         for(std::uint32_t j = 0; j < clusters[i].size(); ++j){
-            selected_norm = contributions.col(clusters[i][j]).norm();
-            selected_norm *= selected_norm;
+            /*selected_norm = contributions.col(clusters[i][j]).norm();
             v += selected_norm;
             rep_idx = j;
 
             if(v > selection){
                 break;
-            }
+            }*/
 
-            /*float curr_norm = contributions.col(clusters[i][j]).norm();
-
+            float curr_norm = contributions.col(clusters[i][j]).norm();
             if(curr_norm > selected_norm){
                 selected_norm = curr_norm;
                 rep_idx = j;
-            }*/
+            }
         }
 
-        //std::cout << rep_idx << " " << selection << " " << selected_norm << " " << tot_cluster_power << " " << clusters[i].size() << std::endl;
-
         representatives.push_back(vpls[clusters[i][rep_idx]]);
-        //representatives.back().P = selected_norm < std::numeric_limits<float>::epsilon() ? 
-        //    Spectrum(0.f) : representatives.back().P * tot_cluster_power / selected_norm;
-        representatives.back().P = representatives.back().P * total_vpl_power / representatives.back().P.getLuminance();
+        float r, g, b;
+        representatives.back().P.toLinearRGB(r, g, b);
+        float rep_power = sqrt(r * r + g * g + b * b);
+        representatives.back().P = representatives.back().P * total_vpl_power / rep_power;
     }
 
-    updateVPLRadii(representatives, min_dist);
+    //updateVPLRadii(representatives, min_dist);
 
     return representatives;
 }
 
 std::unique_ptr<KDTNode<ReconstructionSample>> constructKDTree(Scene* scene, std::uint32_t size_threshold, 
-    std::vector<ReconstructionSample>& samples){
+    std::vector<ReconstructionSample>& samples, float min_dist, std::uint32_t min_slice_size, std::uint32_t spp){
 
     auto kdt_root = std::unique_ptr<KDTNode<ReconstructionSample>>(new KDTNode<ReconstructionSample>(&samples));
 
     ref<Sensor> sensor = scene->getSensor();
     ref<Film> film = sensor->getFilm();
 
-    samples.resize(film->getSize().y * film->getSize().x);
+    samples.resize(film->getSize().y * film->getSize().x * spp);
 
     Properties props("independent");
     Sampler *sampler = static_cast<Sampler*>(PluginManager::getInstance()->createObject(MTS_CLASS(Sampler), props));
@@ -421,55 +471,67 @@ std::unique_ptr<KDTNode<ReconstructionSample>> constructKDTree(Scene* scene, std
     for (std::int32_t y = 0; y < film->getSize().y; ++y) {
         #pragma omp parallel for
         for (std::int32_t x = 0; x < film->getSize().x; ++x) {
+            std::uint32_t cell_dim = sqrt(spp) + 0.5f;
+            float cell_side_len = 1.f / cell_dim;
 
-            //calculates the position the ray intersects with
-            Ray ray;
+            for(std::uint32_t i = 0; i < spp; ++i){
+                //calculates the position the ray intersects with
+                Ray ray;
 
-            Point2 sample_position(x + 0.5f, y + 0.5f);
+                float x_jitter = 0.5f;//sampler->next1D() / cell_dim;
+                float y_jitter = 0.5f;//sampler->next1D() / cell_dim;
+                float x_off = (i % spp) * cell_side_len;
+                float y_off = (i / spp) * cell_side_len;
 
-            Point2 aperture_sample(0.5f, 0.5f);
-            Float time_sample(0.5f);
+                Point2 sample_position(x + x_off + x_jitter, y + y_off + y_jitter);
 
-            sensor->sampleRay(ray, sample_position, aperture_sample, time_sample);
+                Point2 aperture_sample(0.5f, 0.5f);
+                Float time_sample(0.5f);
 
-            ReconstructionSample curr_sample;
-            curr_sample.image_x = x;
-            curr_sample.image_y = y;
+                sensor->sampleRay(ray, sample_position, aperture_sample, time_sample);
 
-            std::uint32_t num_bounces = 0;
+                ReconstructionSample curr_sample;
+                curr_sample.image_x = x;
+                curr_sample.image_y = y;
+                curr_sample.ray = ray;
+                curr_sample.color = Spectrum(0.f);
 
-            while(true){
-                curr_sample.intersected_scene = scene->rayIntersect(ray, curr_sample.its);
+                std::uint32_t num_bounces = 0;
+
+                while(true){
+                    curr_sample.intersected_scene = scene->rayIntersect(curr_sample.ray, curr_sample.its);
+                    if(!curr_sample.intersected_scene){
+                        break;
+                    }
+
+                    if(curr_sample.its.getBSDF()->getType() & BSDF::ESmooth || curr_sample.its.isEmitter()){
+                        break;
+                    }
+
+                    if(++num_bounces > 5){
+                        break;
+                    }
+
+                    BSDFSamplingRecord bsdf_sample_record(curr_sample.its, sampler);
+                    //bsdf_sample_record.typeMask = BSDF::EReflection;
+                    curr_sample.its.getBSDF()->sample(bsdf_sample_record, sampler->next2D());
+
+                    curr_sample.ray = Ray(curr_sample.its.p, bsdf_sample_record.its.toWorld(bsdf_sample_record.wo), ray.time);
+                }
+
                 if(!curr_sample.intersected_scene){
-                    break;
+                    if(scene->hasEnvironmentEmitter()){
+                        curr_sample.color = scene->evalEnvironment(RayDifferential(curr_sample.ray));
+                    }
+                    else curr_sample.color = Spectrum(0.f);
                 }
-
-                if(curr_sample.its.getBSDF()->getType() & BSDF::ESmooth || curr_sample.its.isEmitter()){
-                    break;
-                }
-
-                if(++num_bounces > 5){
-                    break;
-                }
-
-                BSDFSamplingRecord bsdf_sample_record(curr_sample.its, sampler);
-                bsdf_sample_record.typeMask = BSDF::EReflection;
-                curr_sample.its.getBSDF()->sample(bsdf_sample_record, sampler->next2D());
-
-                curr_sample.ray = Ray(curr_sample.its.p, bsdf_sample_record.its.toWorld(bsdf_sample_record.wo), ray.time);
+                else if(curr_sample.its.isEmitter()){
+                    curr_sample.color = curr_sample.its.Le(-curr_sample.ray.d);
+                }    
+                
+                samples[y * film->getSize().x * spp + x * spp + i] = std::move(curr_sample);
             }
-
-            if(!curr_sample.intersected_scene){
-                if(scene->hasEnvironmentEmitter()){
-                    curr_sample.emitter_color = scene->evalEnvironment(RayDifferential(curr_sample.ray));
-                }
-                else curr_sample.emitter_color = Spectrum(0.f);
-            }
-            else if(curr_sample.its.isEmitter()){
-                curr_sample.emitter_color = curr_sample.its.Le(-curr_sample.ray.d);
-            }    
             
-            samples[y * film->getSize().x + x] = std::move(curr_sample);
         }
     }
 
@@ -481,22 +543,9 @@ std::unique_ptr<KDTNode<ReconstructionSample>> constructKDTree(Scene* scene, std
         }
     }
 
-    splitKDTree(kdt_root.get(), size_threshold, 0.f);
+    splitKDTree(kdt_root.get(), size_threshold, min_slice_size, min_dist);
 
     return kdt_root;
-}
-
-void calculateUnoccludedSamples(KDTNode<ReconstructionSample>* slice, Scene* scene, float min_dist, 
-    const std::vector<VPL>& vpls, Sampler* sampler){
-    for(std::uint32_t i = 0; i < slice->sample_indices.size(); ++i){
-        auto& curr_sample = slice->sample(i);
-        curr_sample.unoccluded_samples.resize(vpls.size());
-        for(std::uint32_t j = 0; j < vpls.size(); ++j){
-            Spectrum col = sample(scene, sampler, curr_sample.its, curr_sample.ray, vpls[j], min_dist, false, 
-                5, false, curr_sample.intersected_scene, false, false);
-            curr_sample.unoccluded_samples[j] = col;
-        }
-    }
 }
 
 //Used in the proximal gradient descent version of recovery. Matrix is sparsely populated uniformly with observations
@@ -540,8 +589,10 @@ std::vector<std::uint32_t> calculateSparseSamples(Scene* scene, KDTNode<Reconstr
 void updateSliceWithMatData(const Eigen::MatrixXd& rmat, const Eigen::MatrixXd& gmat,
     const Eigen::MatrixXd& bmat, KDTNode<ReconstructionSample>* slice){
     for(std::uint32_t i = 0; i < slice->sample_indices.size(); ++i){
-        for(std::uint32_t j = 0; j < slice->sample(i).unoccluded_samples.size(); ++j){
-            slice->sample(i).unoccluded_samples[j].fromLinearRGB(rmat(i, j), gmat(i, j), bmat(i, j));
+        for(std::uint32_t j = 0; j < rmat.cols(); ++j){
+            Spectrum c;
+            c.fromLinearRGB(rmat(i, j), gmat(i, j), bmat(i, j));
+            slice->sample(i).color += c;
         }
     }
 }
@@ -552,70 +603,69 @@ void updateSliceWithMatData(const Eigen::MatrixXd& mat, KDTNode<ReconstructionSa
     
     Sampler *sampler = nullptr;
 
-    if(vsl){
-        Properties props("independent");
-        sampler = static_cast<Sampler*>(PluginManager::getInstance()->createObject(MTS_CLASS(Sampler), props));
-        sampler->configure();
-        sampler->generate(Point2i(0));
-    }
-    
+    Properties props("independent");
+    sampler = static_cast<Sampler*>(PluginManager::getInstance()->createObject(MTS_CLASS(Sampler), props));
+    sampler->configure();
+    sampler->generate(Point2i(0));
+
     std::uint32_t total_samples = slice->sample_indices.size();
     for(std::uint32_t i = 0; i < total_samples; ++i){
         if(visibility_only){
-            Spectrum light_contributions(0.f);
-            for(std::uint32_t j = 0; j < slice->sample(i).unoccluded_samples.size(); ++j){
+            for(std::uint32_t j = 0; j < vpls.size(); ++j){
                 float coeff = ((recover_transpose ? mat(j, i) : mat(i, j)) + 1.f) / 2.f;
                 if(coeff > std::numeric_limits<float>::epsilon()){
-                    slice->sample(i).unoccluded_samples[j] = sample(scene, sampler, slice->sample(i).its, slice->sample(i).ray,
+                    slice->sample(i).color += sample(scene, sampler, slice->sample(i).its, slice->sample(i).ray,
                         vpls[j], min_dist, false, 5, false, slice->sample(i).intersected_scene, false, vsl) * coeff;
-                }
-                else{
-                    slice->sample(i).unoccluded_samples[j] = Spectrum(0.f);
                 }
             }
 
             if(slice->sample(i).its.isEmitter()){
-                slice->sample(i).emitter_color = slice->sample(i).its.Le(-slice->sample(i).ray.d);
+                slice->sample(i).color += slice->sample(i).its.Le(-slice->sample(i).ray.d);
             }
         }
         else{
-            for(std::uint32_t j = 0; j < slice->sample(i).unoccluded_samples.size(); ++j){
+            for(std::uint32_t j = 0; j < vpls.size(); ++j){
                 float r = recover_transpose ? mat(j * 3, i) : mat(i * 3, j);
                 float g = recover_transpose ? mat(j * 3 + 1, i) : mat(i * 3 + 1, j);
                 float b = recover_transpose ? mat(j * 3 + 2, i) : mat(i * 3 + 2, j);
 
-                slice->sample(i).unoccluded_samples[j].fromLinearRGB(r, g, b);
+                Spectrum c;
+                c.fromLinearRGB(r, g, b);
+
+                slice->sample(i).color += c;
             }
         }
     }
 }
 
-void copySamplesToBuffer(std::uint8_t* output_image, const std::vector<ReconstructionSample>& samples, Vector2i image_size){
-    #pragma omp parallel for
+void copySamplesToBuffer(std::uint8_t* output_image, const std::vector<ReconstructionSample>& samples, Vector2i image_size,
+    std::uint32_t spp){
+    std::unordered_map<std::uint32_t, Spectrum> output;
+    //#pragma omp parallel for
     for(std::uint32_t i = 0; i < samples.size(); ++i){
-        Spectrum col(0.f);
-        if(samples[i].intersected_scene){
-            for(std::uint32_t j = 0; j < samples[i].unoccluded_samples.size(); ++j){
-                col += samples[i].unoccluded_samples[j];
-            }
-
-            if(samples[i].its.isEmitter()){
-                col += samples[i].emitter_color;
-            }
-        }
-        else{
-            //environment map colour is also stored in emitter_color
-            col = samples[i].emitter_color;
-        }
-
         std::uint32_t buffer_pos = samples[i].image_x + samples[i].image_y * image_size.x;
+        if(output.find(buffer_pos) != output.end()){
+            output[buffer_pos] += samples[i].color;
+        }
+        else output[buffer_pos] = samples[i].color;
+    }
+
+    for(auto iter = output.begin(); iter != output.end(); ++iter){
+        Spectrum col = iter->second;
+        col /= spp;
 
         float r, g, b;
         col.toSRGB(r, g, b);
 
-        output_image[buffer_pos*3] = std::max(0.f, std::min(1.f, r)) * 255 + 0.5f;
-        output_image[buffer_pos*3 + 1] = std::max(0.f, std::min(1.f, g)) * 255 + 0.5f;
-        output_image[buffer_pos*3 + 2] = std::max(0.f, std::min(1.f, b)) * 255 + 0.5f;
+        r = std::max(0.f, std::min(1.f, r));
+        g = std::max(0.f, std::min(1.f, g));
+        b = std::max(0.f, std::min(1.f, b));
+
+        std::uint32_t buffer_pos = iter->first;
+
+        output_image[buffer_pos*3] = r * 255 + 0.5f;
+        output_image[buffer_pos*3 + 1] = g * 255 + 0.5f;
+        output_image[buffer_pos*3 + 2] = b * 255 + 0.5f;
     }
 }
 
@@ -730,7 +780,9 @@ std::vector<std::uint32_t> sampleCol(Scene* scene, KDTNode<ReconstructionSample>
         //should centralize the shadow-cast to common actually
         if(visibility_only){
             Point ray_origin = scene_sample.its.p;
-            Ray shadow_ray(ray_origin, normalize(vpl.its.p - ray_origin), 0.f);
+            Vector dir = vpl.type == EDirectionalEmitterVPL ? -Vector3f(vpl.its.shFrame.n) : 
+                normalize(vpl.its.p - ray_origin);
+            Ray shadow_ray(ray_origin, dir, 0.f);
 
             mat(i, 0) = 1.;
 
@@ -763,7 +815,7 @@ std::vector<std::uint32_t> sampleCol(Scene* scene, KDTNode<ReconstructionSample>
 std::uint32_t adaptiveMatrixReconstruction(Eigen::MatrixXd& mat, Scene* scene, KDTNode<ReconstructionSample>* slice, 
     const std::vector<VPL>& vpls, float min_dist, float sample_perc,
     std::mt19937& rng, bool visibility_only, bool recover_transpose, bool importance_sample, bool force_resample,
-    std::uint32_t& basis_rank, bool vsl){
+    std::uint32_t& basis_rank, bool vsl, const std::vector<float>& col_estimations){
 
     assert(sample_perc > 0.f && slice->sample_indices.size() > 0 && vpls.size() > 0);
     std::random_shuffle(slice->sample_indices.begin(), slice->sample_indices.end());
@@ -784,37 +836,13 @@ std::uint32_t adaptiveMatrixReconstruction(Eigen::MatrixXd& mat, Scene* scene, K
         num_samples = total_rows;
     }
 
-    //calculate the contributions of each column to the rows. In the sense of lights as rows, this would be how much each light
-    //contributes to the slice, whereas when the pixels are the rows, it would be the brightest pixel
-    float max_contrib = -std::numeric_limits<float>::max();
-    float total_contrib = 0.f;
-
-    std::vector<float> col_max_contrib(num_cols, -std::numeric_limits<float>::max());
-    std::vector<float> col_total_contrib(num_cols, 0.f);
-    for(std::uint32_t i = 0; i < slice->sample_indices.size(); ++i){
-        for(std::uint32_t j = 0; j < slice->sample(i).unoccluded_samples.size(); ++j){
-            float lum = slice->sample(i).unoccluded_samples[j].getLuminance();
-            max_contrib = std::max(max_contrib, lum);
-            total_contrib += lum;
-
-            if(recover_transpose){
-                col_max_contrib[i] = std::max(col_max_contrib[i], lum);
-                col_total_contrib[i] += lum;
-            }
-            else{
-                col_max_contrib[j] = std::max(col_max_contrib[j], lum);
-                col_total_contrib[j] += lum;
-            }
-        }
-    }
-
     //we recover from the brightest to least bright because there will be more full samples initially, allow for better coverage of
     //higher energy sections
     std::vector<std::uint32_t> order(num_cols);
     std::iota(order.begin(), order.end(), 0);
     std::sort(order.begin(), order.end(), 
-        [&col_total_contrib](const std::uint32_t& lhs, const std::uint32_t& rhs){
-            return col_total_contrib[lhs] > col_total_contrib[rhs];
+        [&col_estimations](const std::uint32_t& lhs, const std::uint32_t& rhs){
+            return col_estimations[lhs] > col_estimations[rhs];
         });
 
 
@@ -825,6 +853,7 @@ std::uint32_t adaptiveMatrixReconstruction(Eigen::MatrixXd& mat, Scene* scene, K
     Eigen::MatrixXd sample_omega;
     Eigen::MatrixXd q_omega;
     Eigen::MatrixXd q_omega_pseudoinverse;
+    Eigen::MatrixXd q_normalized;
 
     std::uint32_t total_samples = 0;
     std::uniform_real_distribution<float> gen(0.f, 1.f);
@@ -862,6 +891,26 @@ std::uint32_t adaptiveMatrixReconstruction(Eigen::MatrixXd& mat, Scene* scene, K
                     }
                 }
 
+                /*q_normalized = q;
+
+                for(std::uint32_t j = 0; j < q_omega.cols(); ++j){
+                    float l2 = q_omega.col(j).norm();
+                    if(l2 < std::numeric_limits<float>::epsilon()){
+                        q_omega.col(j).setZero();
+                        q_normalized.col(j).setZero();
+                    }
+                    else{
+                        q_omega.col(j).normalize();
+
+                        for(std::uint32_t k = j + 1; k < q_omega.cols(); ++k){
+                            q_omega.col(k) = q_omega.col(k) - q_omega.col(j).dot(q_omega.col(k)) * q_omega.col(j);
+                        }
+                        q_normalized.col(j) /= l2;
+                    }
+                }
+
+                q_omega.transposeInPlace();*/
+
                 auto svd = q_omega.jacobiSvd(Eigen::ComputeThinU | Eigen::ComputeThinV);
                 auto sv = svd.singularValues();
                 Eigen::MatrixXd singular_val_inv = Eigen::MatrixXd::Zero(sv.size(), sv.size());
@@ -881,10 +930,11 @@ std::uint32_t adaptiveMatrixReconstruction(Eigen::MatrixXd& mat, Scene* scene, K
 
             //no need to reconstruct if full sample
             reconstructed = sample_omega.rows() == reconstructed.rows() ? sample_omega : q * q_omega_pseudoinverse * sample_omega;
+            //reconstructed = sample_omega.rows() == reconstructed.rows() ? sample_omega : q_normalized * q_omega * sample_omega;            
 
             double d = 0;
             for(std::uint32_t j = 0; j < sampled.size(); ++j){
-                d += fabs(reconstructed(sampled[j], 0) - sample_omega(j, 0));
+                d += std::abs(reconstructed(sampled[j], 0) - sample_omega(j, 0));
             }
 
             //this is just some heuristic on when to regenerate indices, need to investigate this better
@@ -896,9 +946,10 @@ std::uint32_t adaptiveMatrixReconstruction(Eigen::MatrixXd& mat, Scene* scene, K
                     }
                 }
             }
-
+            
             //sampled values can't be reconstructed accurately so fully sample
             if(d > 1e-5){
+                //std::cout << d << std::endl;
                 sampled = sampleCol(scene, slice, vpls, order[i], min_dist, total_rows, rng, 
                     reconstructed, sampled, true, visibility_only, recover_transpose, importance_sample, probabilities, vsl);
                 samples_for_col = total_rows;
@@ -917,7 +968,7 @@ std::uint32_t adaptiveMatrixReconstruction(Eigen::MatrixXd& mat, Scene* scene, K
             //only add to basis if vector isn't a zero vector, as it is otherwise meaningless
             //might want to change this to be above some epsilon instead
             if(reconstructed.norm() > 0.f){
-                q = reconstructed;
+                q_normalized = q = reconstructed;
             }
 
             full_col_sampled = true;
@@ -1064,7 +1115,8 @@ MatrixReconstructionRenderer::~MatrixReconstructionRenderer(){
 
 std::mutex mutex;
 
-bool MatrixReconstructionRenderer::render(Scene* scene){
+bool MatrixReconstructionRenderer::render(Scene* scene, std::uint32_t spp, const RenderJob *job){
+    srand(time(0));
     if(scene == nullptr){
         return true;
     }
@@ -1082,18 +1134,18 @@ bool MatrixReconstructionRenderer::render(Scene* scene){
         return true;
     }
 
+    std::uint32_t samples_per_slice = 5;
+
     ref<Bitmap> output_bitmap = new Bitmap(Bitmap::ERGB, Bitmap::EUInt8, size);
     std::uint8_t* output_image = output_bitmap->getUInt8Data();
     memset(output_image, 0, output_bitmap->getBytesPerPixel() * size.x * size.y);
 
     std::cout << "constructing kd tree" << std::endl;
-    auto kdt_root = constructKDTree(scene, slice_size_, samples_);
+    auto kdt_root = constructKDTree(scene, slice_size_, samples_, min_dist_, samples_per_slice, spp);
     std::cout << "getting slices" << std::endl;
 
     std::vector<KDTNode<ReconstructionSample>*> slices;
     getSlices(kdt_root.get(), slices);
-
-    std::cout << "clustering" << std::endl;
 
     std::uint32_t amount_sampled = 0;
     std::uint32_t total_samples = 0;
@@ -1120,74 +1172,93 @@ bool MatrixReconstructionRenderer::render(Scene* scene){
         }
     }
     else{
+        std::cout << "calculating contributions" << std::endl;
         std::uint32_t num_clusters = std::min(std::uint32_t(vpls_.size()), std::uint32_t(1000 * 0.3f));
-        std::vector<std::uint32_t> sampled_slice_rows(slices.size());
+        std::vector<std::uint32_t> sampled_slice_rows(slices.size() * samples_per_slice);
         Eigen::MatrixXf cluster_contributions = calculateClusterContributions(vpls_, slices, scene, min_dist_,
-            sampled_slice_rows);
+            sampled_slice_rows, samples_per_slice, vsl_);
+        std::cout << "cluster by sampling" << std::endl;
         std::vector<std::vector<std::uint32_t>> clusters_by_sampling = clusterVPLsBySampling(cluster_contributions,
             num_clusters, vpls_, min_dist_);
 
+        std::cout << "approx nearest neighbour computation" << std::endl;
         //approx nearest neighbours here
-        flann::Matrix<float> query_points(new float[sampled_slice_rows.size() * 3], 
+        flann::Matrix<float> data_points(new float[sampled_slice_rows.size() * 3], 
             sampled_slice_rows.size(), 3);
+        flann::Matrix<float> slice_centroids(new float[slices.size() * 3], 
+            slices.size(), 3);
 
         for(std::uint32_t i = 0; i < sampled_slice_rows.size(); ++i){
-            float* curr_col = (float*)query_points[i];
-            auto& sample = slices[i]->sample(sampled_slice_rows[i]);
+            float* curr_col = (float*)data_points[i];
+
+            std::uint32_t slice_idx = i / samples_per_slice;
+            auto& sample = slices[slice_idx]->sample(sampled_slice_rows[i]);
 
             curr_col[0] = sample.its.p.x;
             curr_col[1] = sample.its.p.y;
             curr_col[2] = sample.its.p.z;
         }
 
-        flann::Index<flann::L2<float>> index(query_points, flann::KDTreeIndexParams(4));
+        for(std::uint32_t i = 0; i < slices.size(); ++i){
+            Point slice_centroid(0.f, 0.f, 0.f);
+            for(std::uint32_t j = 0; j < slices[i]->sample_indices.size(); ++j){
+                slice_centroid += slices[i]->sample(j).its.p;
+            }
+            slice_centroid /= slices[i]->sample_indices.size();
+
+            float* curr_centroid = (float*)slice_centroids[i];
+            curr_centroid[0] = slice_centroid.x;
+            curr_centroid[1] = slice_centroid.y;
+            curr_centroid[2] = slice_centroid.z;
+        }
+
+        flann::Index<flann::L2<float>> index(data_points, flann::KDTreeIndexParams(4));
         index.buildIndex();
 
         std::vector<std::vector<int>> nearest_neighbours;
         std::vector<std::vector<float>> neighbour_distances;
 
-        index.knnSearch(query_points, nearest_neighbours, neighbour_distances, 9, flann::SearchParams(128));
+        index.knnSearch(slice_centroids, nearest_neighbours, neighbour_distances, 10 * samples_per_slice, flann::SearchParams(128));
 
         std::uint32_t split_num_clusters = std::min(vpls_.size(), 1000 - clusters_by_sampling.size());
-
-        std::vector<std::vector<VPL>> vpls(slices.size());
 
         Properties props("independent");
         Sampler *sampler = static_cast<Sampler*>(PluginManager::getInstance()->createObject(MTS_CLASS(Sampler), props));
         sampler->configure();
         sampler->generate(Point2i(0));
 
-        #pragma omp parallel for
-        for(std::uint32_t i = 0; i < slices.size(); ++i){
-            std::mt19937 cluster_rng(std::chrono::high_resolution_clock::now().time_since_epoch().count() * i);
-            Eigen::MatrixXf reduced_contrib_mat(nearest_neighbours[i].size() * 3, cluster_contributions.cols());
-            for(std::uint32_t j = 0; j < nearest_neighbours[i].size(); ++j){
-                reduced_contrib_mat.row(j * 3) = cluster_contributions.row(nearest_neighbours[i][j] * 3);
-                reduced_contrib_mat.row(j * 3 + 1) = cluster_contributions.row(nearest_neighbours[i][j] * 3 + 1);
-                reduced_contrib_mat.row(j * 3 + 2) = cluster_contributions.row(nearest_neighbours[i][j] * 3 + 2);
-            }
-            std::vector<std::vector<std::uint32_t>> clusters_by_splitting = 
-                clusterVPLsBySplitting(clusters_by_sampling, reduced_contrib_mat, split_num_clusters, cluster_rng,
-                nearest_neighbours[i]);
-            //std::vector<std::vector<std::uint32_t>> clusters_by_splitting = clusters_by_sampling;
-            vpls[i] = sampleRepresentatives(cluster_contributions, vpls_, clusters_by_splitting, cluster_rng, min_dist_);
-            
-            calculateUnoccludedSamples(slices[i], scene, min_dist_, vpls[i], sampler);
-        }
-
-        std::cout << "reconstructing slices" << std::endl;
-        #pragma omp parallel for
+        std::uint32_t finished_slices = 0;
+        std::cout << "reconstructing slice 0/" << slices.size();
+        std::mutex stat_mut;
+        #pragma omp parallel for num_threads(32)
         for(std::uint32_t i = 0; i < slices.size(); ++i){
             std::mt19937 rng(std::chrono::high_resolution_clock::now().time_since_epoch().count() * i);
 
+            std::vector<float> norm_cache;
+            std::vector<std::vector<std::uint32_t>> clusters_by_splitting = 
+                clusterVPLsBySplitting(clusters_by_sampling, cluster_contributions, nearest_neighbours[i], split_num_clusters, rng,
+                norm_cache);
+
+            auto vpls = sampleRepresentatives(cluster_contributions, vpls_, clusters_by_splitting, rng, min_dist_);
+
             if(adaptive_col_sampling_){
+                std::vector<float> cluster_contribs(vpls.size());
+                for(std::uint32_t j = 0; j < clusters_by_splitting.size(); ++j){
+                    if(clusters_by_splitting[j].size() > 0){
+                        cluster_contribs.push_back(0.f);
+                        for(std::uint32_t k = 0; k < clusters_by_splitting[j].size(); ++k){
+                            cluster_contribs.back() += norm_cache[clusters_by_splitting[j][k]];
+                        }
+                    }
+                }
+
                 std::uint32_t mat_rows = visibility_only_ ? slices[i]->sample_indices.size() : slices[i]->sample_indices.size() * 3;
-                Eigen::MatrixXd mat = Eigen::MatrixXd::Zero(mat_rows, vpls[i].size());
+                Eigen::MatrixXd mat = Eigen::MatrixXd::Zero(mat_rows, vpls.size());
                 std::uint32_t max_rank = std::min(mat.rows(), mat.cols());
                 std::uint32_t basis_rank;
-                std::uint32_t samples = adaptiveMatrixReconstruction(mat, scene, slices[i], vpls[i], min_dist_, 
+                std::uint32_t samples = adaptiveMatrixReconstruction(mat, scene, slices[i], vpls, min_dist_, 
                     sample_percentage_, rng, visibility_only_, adaptive_recover_transpose_, 
-                    adaptive_importance_sampling_, adaptive_force_resample_, basis_rank, vsl_);
+                    adaptive_importance_sampling_, adaptive_force_resample_, basis_rank, vsl_, cluster_contribs);
                 
                 //float v = float(samples) / (mat.rows() * mat.cols());
                 float v = float(basis_rank) / max_rank;
@@ -1207,22 +1278,22 @@ bool MatrixReconstructionRenderer::render(Scene* scene){
                 }
 
                 updateSliceWithMatData(mat, slices[i], visibility_only_, adaptive_recover_transpose_, vsl_, scene, 
-                    vpls[i], min_dist_);
+                    vpls, min_dist_);
 
                 {
                     std::lock_guard<std::mutex> lock(mutex);
                     amount_sampled += samples;
-                    total_samples += slices[i]->sample_indices.size() * vpls[i].size();
+                    total_samples += slices[i]->sample_indices.size() * vpls.size();
                 }
             }
             else{
-                Eigen::MatrixXd rmat = Eigen::MatrixXd::Zero(slices[i]->sample_indices.size(), vpls[i].size());
-                Eigen::MatrixXd gmat = Eigen::MatrixXd::Zero(slices[i]->sample_indices.size(), vpls[i].size());
-                Eigen::MatrixXd bmat = Eigen::MatrixXd::Zero(slices[i]->sample_indices.size(), vpls[i].size());
+                Eigen::MatrixXd rmat = Eigen::MatrixXd::Zero(slices[i]->sample_indices.size(), vpls.size());
+                Eigen::MatrixXd gmat = Eigen::MatrixXd::Zero(slices[i]->sample_indices.size(), vpls.size());
+                Eigen::MatrixXd bmat = Eigen::MatrixXd::Zero(slices[i]->sample_indices.size(), vpls.size());
 
-                std::uint32_t num_samples = slices[i]->sample_indices.size() * vpls[i].size() * sample_percentage_;
+                std::uint32_t num_samples = slices[i]->sample_indices.size() * vpls.size() * sample_percentage_;
                 
-                auto indices = calculateSparseSamples(scene, slices[i], vpls[i], rmat, gmat, bmat, num_samples, min_dist_, vsl_);
+                auto indices = calculateSparseSamples(scene, slices[i], vpls, rmat, gmat, bmat, num_samples, min_dist_, vsl_);
 
                 float step_size = 1.9f;//(1.2f * lighting_matrix.rows() * lighting_matrix.cols()) / (indices.size() * 3.f); 
 
@@ -1232,9 +1303,15 @@ bool MatrixReconstructionRenderer::render(Scene* scene){
                 svt(reconstructed_b, bmat, step_size, tolerance_, tau_, max_iterations_, indices, truncated_);
                 updateSliceWithMatData(reconstructed_r, reconstructed_g, reconstructed_b, slices[i]);
             }
+
+            {
+                std::lock_guard<std::mutex> lock(stat_mut);
+                printf("\rreconstructing slice %d/%d     ", finished_slices++, int(slices.size()));
+                fflush(stdout);
+            }
         }
 
-        copySamplesToBuffer(output_image, samples_, size);
+        copySamplesToBuffer(output_image, samples_, size, spp);
 
         if(adaptive_col_sampling_){
             float sample_perc = (float)amount_sampled / total_samples;
@@ -1244,7 +1321,7 @@ bool MatrixReconstructionRenderer::render(Scene* scene){
     
     film->setBitmap(output_bitmap);
 
-    return cancel_;
+    return !cancel_;
 }
 
 MTS_NAMESPACE_END

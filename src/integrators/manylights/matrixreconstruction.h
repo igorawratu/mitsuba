@@ -16,12 +16,11 @@ struct ReconstructionSample{
     }
 
     ReconstructionSample(std::uint32_t x, std::uint32_t y, bool in_scene, Intersection intersection, const Ray& r) : 
-        image_x(x), image_y(y), intersected_scene(in_scene), its(intersection), ray(r){
+        image_x(x), image_y(y), intersected_scene(in_scene), its(intersection), ray(r), color(0.f){
     }
 
     ReconstructionSample(ReconstructionSample&& other) : image_x(other.image_x), image_y(other.image_y), 
-        intersected_scene(other.intersected_scene), its(other.its), ray(other.ray), emitter_color(other.emitter_color),
-        unoccluded_samples(std::move(other.unoccluded_samples)){
+        intersected_scene(other.intersected_scene), its(other.its), ray(other.ray), color(other.color){
     }
 
     ReconstructionSample& operator = (ReconstructionSample&& other){
@@ -31,8 +30,7 @@ struct ReconstructionSample{
             intersected_scene = other.intersected_scene;
             its = other.its;
             ray = other.ray;
-            emitter_color = other.emitter_color;
-            unoccluded_samples = std::move(other.unoccluded_samples);
+            color = other.color;
         }
 
         return *this;
@@ -42,8 +40,7 @@ struct ReconstructionSample{
     bool intersected_scene;
     Intersection its;
     Ray ray;
-    Spectrum emitter_color;
-    std::vector<Spectrum> unoccluded_samples;
+    Spectrum color;
 };
 
 class MatrixReconstructionRenderer : public ManyLightsRenderer{
@@ -59,7 +56,7 @@ public:
     MatrixReconstructionRenderer& operator = (MatrixReconstructionRenderer&& other);
     ~MatrixReconstructionRenderer();
 
-    bool render(Scene* scene);
+    bool render(Scene* scene, std::uint32_t spp, const RenderJob *job);
 
     void setCancel(bool cancel){
         std::lock_guard<std::mutex> lock(cancel_lock_);

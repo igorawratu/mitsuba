@@ -66,7 +66,7 @@ public:
     MatrixSeparationRenderer& operator = (MatrixSeparationRenderer&& other);
     ~MatrixSeparationRenderer();
 
-    bool render(Scene* scene);
+    bool render(Scene* scene, std::uint32_t spp, const RenderJob *job);
 
     void setCancel(bool cancel){
         std::lock_guard<std::mutex> lock(cancel_lock_);

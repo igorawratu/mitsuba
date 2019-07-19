@@ -270,7 +270,7 @@ Spectrum sample(Scene* scene, Sampler* sampler, Intersection& its, const Ray& in
             }
 
             BSDFSamplingRecord bsdf_sample_record(its, sampler);
-            bsdf_sample_record.typeMask = BSDF::EReflection;
+            //bsdf_sample_record.typeMask = BSDF::EReflection;
             its.getBSDF()->sample(bsdf_sample_record, sampler->next2D());
 
             ray = Ray(its.p, bsdf_sample_record.its.toWorld(bsdf_sample_record.wo), ray.time);
@@ -364,6 +364,18 @@ Spectrum sample(Scene* scene, Sampler* sampler, Intersection& its, const Ray& in
         }
     }
     return c;
+}
+
+std::uint64_t upperPo2(std::uint64_t v)
+{
+    v--;
+    v |= v >> 1;
+    v |= v >> 2;
+    v |= v >> 4;
+    v |= v >> 8;
+    v |= v >> 16;
+    v++;
+    return v;
 }
 
 MTS_NAMESPACE_END

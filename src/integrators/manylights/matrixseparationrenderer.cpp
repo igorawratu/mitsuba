@@ -82,7 +82,7 @@ std::unique_ptr<KDTNode<RowSample>> constructKDTree(Scene* scene, const std::vec
         }
     }
 
-    splitKDTree(kdt_root.get(), size_threshold, min_dist);
+    splitKDTree(kdt_root.get(), size_threshold, min_dist, 1);
 
     return kdt_root;
 }
@@ -762,7 +762,7 @@ void calculateNearestVPLNeighbours(const std::vector<VPL>& vpls, std::vector<std
     delete dataset.ptr();
 }
 
-bool MatrixSeparationRenderer::render(Scene* scene){
+bool MatrixSeparationRenderer::render(Scene* scene, std::uint32_t spp, const RenderJob *job){
     {
         std::lock_guard<std::mutex> lock(cancel_lock_);
         cancel_ = false;

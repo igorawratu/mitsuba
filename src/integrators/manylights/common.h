@@ -172,13 +172,26 @@ struct KDTNode{
 
     }
 
-    void Split(float norm_scale, std::uint32_t size_threshold){
+    void Split(float norm_scale, std::uint32_t min_size, std::uint32_t max_size){
         float maxf = std::numeric_limits<float>::max();
         Vector3f min_pos(maxf, maxf, maxf), max_pos(-maxf, -maxf, -maxf);
         Vector3f min_normal(maxf, maxf, maxf), max_normal(-maxf, -maxf, -maxf);
 
+        std::array<float, 6> means;
+        for(std::uint8_t i = 0; i < 6; ++i){
+            means[i] = 0.f;
+        }
+
         for(size_t i = 0; i < sample_indices.size(); ++i){
             auto& curr_sample = (*samples)[sample_indices[i]];
+
+            means[0] += curr_sample.its.p.x;
+            means[1] += curr_sample.its.p.y;
+            means[2] += curr_sample.its.p.z;
+
+            means[3] += curr_sample.its.geoFrame.n.x;
+            means[4] += curr_sample.its.geoFrame.n.y;
+            means[5] += curr_sample.its.geoFrame.n.z;
 
             min_pos.x = std::min(curr_sample.its.p.x, min_pos.x);
             min_pos.y = std::min(curr_sample.its.p.y, min_pos.y);
@@ -193,6 +206,9 @@ struct KDTNode{
             max_normal.x = std::max(curr_sample.its.geoFrame.n.x, max_normal.x);
             max_normal.y = std::max(curr_sample.its.geoFrame.n.y, max_normal.y);
             max_normal.z = std::max(curr_sample.its.geoFrame.n.z, max_normal.z);
+        }
+        for(std::uint8_t i = 0; i < 6; ++i){
+            means[i] /= sample_indices.size();
         }
 
         std::array<std::pair<std::uint8_t, float>, 6> ranges;
@@ -228,12 +244,19 @@ struct KDTNode{
             }
         }
 
-        if(left->sample_indices.size() == 0 || right->sample_indices.size() == 0){
-            std::uint32_t midpoint = sample_indices.size() / 2;
-            left->sample_indices.clear();
-            left->sample_indices.insert(left->sample_indices.end(), sample_indices.begin(), sample_indices.begin() + midpoint);
-            right->sample_indices.clear();
-            right->sample_indices.insert(right->sample_indices.end(), sample_indices.begin() + midpoint, sample_indices.end());
+        if(left->sample_indices.size() < min_size || right->sample_indices.size() < min_size){
+            if(sample_indices.size() > max_size * 2){
+                std::uint32_t midpoint = sample_indices.size() / 2;
+                left->sample_indices.clear();
+                left->sample_indices.insert(left->sample_indices.end(), sample_indices.begin(), sample_indices.begin() + midpoint);
+                right->sample_indices.clear();
+                right->sample_indices.insert(right->sample_indices.end(), sample_indices.begin() + midpoint, sample_indices.end());
+            }
+            else{
+                left.release();
+                right.release();
+                return;
+            }
         }
 
         sample_indices.clear();
@@ -297,15 +320,19 @@ private:
 };
 
 template<class Sample>
-void splitKDTree(KDTNode<Sample>* node, std::uint32_t size_threshold, float min_dist){
+void splitKDTree(KDTNode<Sample>* node, std::uint32_t size_threshold, std::uint32_t min_slice_size,
+    float min_dist){
     if(node == nullptr || node->sample_indices.size() < size_threshold){
         return;
     }
 
     if(node->left == nullptr && node->right == nullptr){
-        node->Split(min_dist / 10.f, size_threshold);
-        splitKDTree(node->left.get(), size_threshold, min_dist);
-        splitKDTree(node->right.get(), size_threshold, min_dist);
+        node->Split(min_dist / 10.f, min_slice_size, size_threshold);
+
+        if(node->left != nullptr && node->right != nullptr){
+            splitKDTree(node->left.get(), size_threshold, min_slice_size, min_dist);
+            splitKDTree(node->right.get(), size_threshold, min_slice_size, min_dist);
+        }
     }
 }
 
@@ -322,6 +349,8 @@ void getSlices(KDTNode<Sample>* curr, std::vector<KDTNode<Sample>*>& slices){
     getSlices(curr->left.get(), slices);
     getSlices(curr->right.get(), slices);
 }
+
+std::uint64_t upperPo2(std::uint64_t v);
 
 MTS_NAMESPACE_END
 
