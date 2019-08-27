@@ -1135,14 +1135,14 @@ struct GeneralParams{
     float sample_perc;
 };
 
-void sliceWorker(const std::vector<std::int32_t>& work, std::uint32_t thread_id, std::mutex& work_mutex, std::mutex& stats_mutex,
+void sliceWorker(std::vector<std::int32_t>& work, std::uint32_t thread_id, std::mutex& work_mutex, std::mutex& stats_mutex,
     const std::vector<KDTNode<ReconstructionSample>*>& slices, const std::vector<std::vector<std::uint32_t>>& cbsamp, 
-    const Eigen::MatrixXf& contribs, const std::vector<std::vector<int>>& nn, const std::vector<VPL>& total_vpls, Scene* scene;
+    const Eigen::MatrixXf& contribs, const std::vector<std::vector<int>>& nn, const std::vector<VPL>& total_vpls, Scene* scene,
     const GeneralParams& general_params, const SVTParams& svt_params, const AdaptiveConstructionParams& ac_params,
     std::uint32_t& total_samples, std::uint32_t& performed_samples){
 
     std::mt19937 rng(std::chrono::high_resolution_clock::now().time_since_epoch().count() * thread_id);
-    std::uint32_t split_num_clusters = std::min(vpls_.size(), 1000 - cbs.size());
+    std::uint32_t split_num_clusters = std::min(total_vpls.size(), 1000 - cbsamp.size());
 
     while(true){
         std::int32_t slice_id;
@@ -1182,8 +1182,8 @@ void sliceWorker(const std::vector<std::int32_t>& work, std::uint32_t thread_id,
                 general_params.sample_perc, rng, ac_params.vis_only, ac_params.rec_trans, ac_params.import_sample, 
                 ac_params.force_resample, basis_rank, general_params.vsl, cluster_contribs);
             
-            slices[slice_id].samples_ratio = float(samples) / (mat.rows() * mat.cols());
-            slices[slice_id].rank_ratio = float(basis_rank) / max_rank;
+            slices[slice_id]->sample_ratio = float(samples) / (mat.rows() * mat.cols());
+            slices[slice_id]->rank_ratio = float(basis_rank) / max_rank;
 
             updateSliceWithMatData(mat, slices[slice_id], ac_params.vis_only, ac_params.rec_trans, general_params.vsl, 
                 scene, vpls, general_params.min_dist);
@@ -1199,7 +1199,7 @@ void sliceWorker(const std::vector<std::int32_t>& work, std::uint32_t thread_id,
             Eigen::MatrixXd gmat = Eigen::MatrixXd::Zero(slices[slice_id]->sample_indices.size(), vpls.size());
             Eigen::MatrixXd bmat = Eigen::MatrixXd::Zero(slices[slice_id]->sample_indices.size(), vpls.size());
 
-            std::uint32_t num_samples = slices[slice_id]->sample_indices.size() * vpls.size() * sample_perc;
+            std::uint32_t num_samples = slices[slice_id]->sample_indices.size() * vpls.size() * general_params.sample_perc;
             
             auto indices = calculateSparseSamples(scene, slices[slice_id], vpls, rmat, gmat, bmat, num_samples, 
                 general_params.min_dist, general_params.vsl);
@@ -1334,8 +1334,8 @@ bool MatrixReconstructionRenderer::render(Scene* scene, std::uint32_t spp, const
         AdaptiveConstructionParams ac_params;
         ac_params.vis_only = visibility_only_;
         ac_params.rec_trans = adaptive_recover_transpose_;
-        ac_params.adaptive_importance_sampling_;
-        ac_params.adaptive_force_resample_;
+        ac_params.import_sample = adaptive_importance_sampling_;
+        ac_params.force_resample = adaptive_force_resample_;
         
         SVTParams svt_params;
         svt_params.tolerance = tolerance_;
@@ -1349,17 +1349,19 @@ bool MatrixReconstructionRenderer::render(Scene* scene, std::uint32_t spp, const
         general_params.vsl = vsl_;
         general_params.sample_perc = sample_percentage_;
 
-        std::uint32_t num_cores = std::min(slices.size(), std::thread::hardware_concurrency());
+        std::uint32_t num_cores = std::min(slices.size(), (size_t)std::thread::hardware_concurrency());
         std::uint32_t scheduled_slices = num_cores;
 
         std::vector<std::int32_t> work(num_cores);
-        std::iota(work.begin(), work.end(); 0);
+        std::iota(work.begin(), work.end(), 0);
         std::mutex work_mutex, stats_mutex;
-
         std::vector<std::thread> workers;
+
         for(std::uint32_t i = 0; i < num_cores; ++i){
-            workers.emplace_back(sliceWorker, work, i, work_mutex, stats_mutex, slices, clusters_by_sampling, cluster_contributions, 
-                nearest_neighbours, vpls_, scene, general_params, svt_params, ac_params, total_samples, amount_sampled);
+            workers.emplace_back(sliceWorker, std::ref(work), i, std::ref(work_mutex), std::ref(stats_mutex), std::ref(slices), 
+            std::ref(clusters_by_sampling), std::ref(cluster_contributions), std::ref(nearest_neighbours), 
+            std::ref(vpls_), scene, general_params, svt_params, ac_params, std::ref(total_samples), 
+            std::ref(amount_sampled));
         }
 
         std::uint32_t finished_slices = 0;
@@ -1387,7 +1389,11 @@ bool MatrixReconstructionRenderer::render(Scene* scene, std::uint32_t spp, const
                     work[free_worker_id] = scheduled_slices++;
                 }
                 else{
-                    work[free_worker_id].join();
+                    {
+                        std::lock_guard<std::mutex> lock(work_mutex);
+                        work[free_worker_id] = -2;
+                    }
+                    workers[free_worker_id].join();
                 }
             }
         }
