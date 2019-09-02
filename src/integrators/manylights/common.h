@@ -15,8 +15,6 @@
 
 MTS_NAMESPACE_BEGIN
 
-float calculateError(Scene* scene, const std::vector<VPL>& vpls, float min_dist, std::uint8_t* image_buffer);
-
 std::tuple<float, float, float> floatToRGB(float v);
 
 template<typename MatrixType>
@@ -135,7 +133,7 @@ Spectrum sample(Scene* scene, Sampler* sampler, Intersection& its, const Ray& ra
     float min_dist, bool check_occlusion, std::uint32_t max_specular_bounces, 
     bool perform_ray_intersection, bool& intersected, bool show_emitter, bool vsl, std::uint32_t& samples_taken);
 
-
+bool sampleVisibility(Scene* scene, const Intersection& its, const VPL& vpl, float min_dist);
 
 const std::array<std::function<bool(float, const Intersection&)>, 6> searchers {
     [](float value, const Intersection& its){

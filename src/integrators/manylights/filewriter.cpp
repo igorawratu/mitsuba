@@ -1,4 +1,5 @@
 #include "filewriter.h"
+
 #include "common.h"
 #include <fstream>
 #include <iostream>
@@ -6,12 +7,12 @@
 MTS_NAMESPACE_BEGIN
 
 ref<Film> createFilm(std::uint32_t width, std::uint32_t height, bool hdr){
-    Properties props;
+    Properties props = hdr ? Properties("hdrfilm") : Properties("ldrfilm");
     props.setInteger("width", width);
     props.setInteger("height", height);
     props.setFloat("gamma", 2.2);
 
-    ref<Film> film(hdr ? new HDRFilm(props) : new LDRFilm(props));
+    ref<Film> film = static_cast<Film*> (PluginManager::getInstance()->createObject(MTS_CLASS(Film), props));
 
     return film;
 }
@@ -21,20 +22,21 @@ void writeOutputImage(Scene* scene, std::string filename, std::uint32_t width, s
 
     ref<Film> film = createFilm(width, height, hdr);
 
-    Bitmap::EComponentFormat cf = hdr ? EUint16 : EUint8;
+    Bitmap::EComponentFormat cf = hdr ? Bitmap::EComponentFormat::EUInt16 : Bitmap::EComponentFormat::EUInt8;
     Vector2i size; size.x = width; size.y = height;
     ref<Bitmap> output_bitmap = new Bitmap(Bitmap::ERGB, cf, size);
 
     for(std::uint32_t i = 0; i < data.size(); ++i){
-        Vector2i curr_pixel;
+        Point2i curr_pixel;
         curr_pixel.x = i % width;
         curr_pixel.y = i / width;
 
-        output_bitmap.setPixel(curr_pixel, data[i]);
+        output_bitmap->setPixel(curr_pixel, data[i]);
     }
 
     film->setBitmap(output_bitmap);
-    film->setDestinationFile(fs::path(filename), 0);
+    fs::path scene_path = scene->getDestinationFile();
+    film->setDestinationFile(scene_path.parent_path() / filename, 0);
     film->develop(scene, 0.f);
 }
 
@@ -42,13 +44,13 @@ void writeOutputErrorImage(Scene* scene, std::string filename, std::uint32_t wid
     const std::vector<Spectrum>& data2, float max_error){
     assert(data1.size() == data2.size());
 
-    std::vector<Spectrum> error_col(data1.size());
+    std::vector<Spectrum> error_col(data1.size(), Spectrum(0.f));
 
     for(std::uint32_t i = 0; i < error_col.size(); ++i){
         Spectrum dif = data1[i] - data2[i];
         float r, g, b;
         dif.toLinearRGB(r, g, b);
-        float error = std::max(1.f, (std::abs(r) + std::abs(g) + std::abs(b)) / max_error);
+        float error = std::min(1.f, (std::abs(r) + std::abs(g) + std::abs(b)) / max_error);
         std::tie(r, g, b) = floatToRGB(error);
         error_col[i].fromLinearRGB(r, g, b);
     }
@@ -57,8 +59,8 @@ void writeOutputErrorImage(Scene* scene, std::string filename, std::uint32_t wid
 }
 
 void writeOutputData(std::string filename, bool new_file, const std::vector<float>& data, char delimiter){
-    ofstream file;
-    auto mode = new_file ? ios::out : ios::out | ios::app;
+    std::ofstream file;
+    auto mode = new_file ? std::ios::out : std::ios::out | std::ios::app;
     file.open(filename, mode);
 
     if(!new_file){

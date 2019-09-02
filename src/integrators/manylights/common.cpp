@@ -31,125 +31,6 @@ std::tuple<float, float, float> floatToRGB(float v){
     return std::make_tuple(r, g, b);
 }
 
-float calculateError(Scene* scene, const std::vector<VPL>& vpls, float min_dist, std::uint8_t* image_buffer){
-    float tot_error = 0.f;
-    ref<Sensor> sensor = scene->getSensor();
-    ref<Film> film = sensor->getFilm();
-
-    Properties props("independent");
-    Sampler *sampler = static_cast<Sampler*>(PluginManager::getInstance()->createObject(MTS_CLASS(Sampler), props));
-    sampler->configure();
-    sampler->generate(Point2i(0));
-
-    for (std::int32_t y = 0; y < film->getSize().y; ++y) {
-        #pragma omp parallel for
-        for (std::int32_t x = 0; x < film->getSize().x; ++x) {
-            Ray ray;
-
-            Point2 sample_position(x + 0.5f, y + 0.5f);
-
-            Point2 aperture_sample(0.5f, 0.5f);
-            Float time_sample(0.5f);
-
-            sensor->sampleRay(ray, sample_position, aperture_sample, time_sample);
-
-            Intersection its;
-
-            Point2i curr_pixel(x, y);
-            Spectrum accumulator(0.f);
-
-            if (scene->rayIntersect(ray, its)) {
-                Normal n = its.geoFrame.n;
-
-                Spectrum albedo(0.f);
-
-                if(its.isEmitter()){
-                    accumulator = its.Le(-ray.d);
-                }
-                else{
-                    for (std::uint32_t i = 0; i < vpls.size(); ++i) {
-                        Point ray_origin = its.p;
-                        Ray shadow_ray(ray_origin, normalize(vpls[i].its.p - ray_origin), ray.time);
-
-                        Float t;
-                        ConstShapePtr shape;
-                        Normal norm;
-                        Point2 uv;
-
-                        if(scene->rayIntersect(shadow_ray, t, shape, norm, uv)){
-                            if(vpls[i].type == EDirectionalEmitterVPL){
-                                continue;
-                            }
-
-                            if(abs((ray_origin - vpls[i].its.p).length() - t) > 0.0001f ){
-                                continue;
-                            }
-                        }
-
-                        BSDFSamplingRecord bsdf_sample_record(its, sampler, ERadiance);
-                        Spectrum albedo(0.f);
-                        for(std::uint8_t i = 0; i < 10; ++i){
-                            albedo += its.getBSDF()->sample(bsdf_sample_record, sampler->next2D());
-                        }
-                        albedo /= 10.f;
-
-                        float n_dot_ldir = std::max(0.f, dot(n, normalize(vpls[i].its.p - its.p)));
-
-                        Spectrum c = (vpls[i].P * n_dot_ldir * albedo) / PI;
-
-                        if(vpls[i].type == ESurfaceVPL){
-                            float ln_dot_ldir = std::max(0.f, dot(vpls[i].its.shFrame.n, normalize(its.p - vpls[i].its.p)));
-                            c *= ln_dot_ldir;
-                        }
-
-                        if(vpls[i].type != EDirectionalEmitterVPL){
-                            float d = std::max((its.p - vpls[i].its.p).length(), min_dist);
-                            float attenuation = 1.f / (d * d);
-                            c *= attenuation;
-                        }
-
-                        accumulator += c;
-                    }
-                }
-            }
-            else{
-                if(scene->hasEnvironmentEmitter()){
-                    accumulator = scene->evalEnvironment(RayDifferential(ray));
-                }
-            }
-
-            float r, g, b;
-            accumulator.toLinearRGB(r, g, b);
-            r = std::min(1.f, r);
-            g = std::min(1.f, g);
-            b = std::min(1.f, b);
-
-            //convert from srgb to linear for correct scaling
-            std::uint32_t offset = (x + y * film->getSize().x) * 3;
-            float ir, ig, ib;
-            Spectrum converter;
-            converter.fromSRGB((float)image_buffer[offset] / 255.f, (float)image_buffer[offset + 1] / 255.f,
-                (float)image_buffer[offset + 2] / 255.f);
-            converter.toLinearRGB(ir, ig, ib);
-
-            float error = fabs(ir - r) + fabs(ig - g) + fabs(ib - b);
-
-            tot_error += error;
-
-            error *= 20.f;
-
-            float er, eg, eb;
-            std::tie(er, eg, eb) = floatToRGB(std::min(1.f, error));
-
-            image_buffer[offset] = er * 255 + 0.5f;
-            image_buffer[offset + 1] = eg * 255 + 0.5f;
-            image_buffer[offset + 2] = eb * 255 + 0.5f;
-        }
-    }
-
-    return tot_error;
-}
-
 bool raySphereIntersect(Point ray_origin, Vector3f ray_d, Point sphere_center, float sphere_radius){
     float d_sq = (ray_origin - sphere_center).lengthSquared();
     float sr2 = sphere_radius * sphere_radius;
@@ -367,6 +248,28 @@ Spectrum sample(Scene* scene, Sampler* sampler, Intersection& its, const Ray& in
         }
     }
     return c;
+}
+
+bool sampleVisibility(Scene* scene, const Intersection& its, const VPL& vpl, float min_dist){
+    Point ray_origin = its.p;
+    Vector dir = vpl.type == EDirectionalEmitterVPL ? -Vector3f(vpl.its.shFrame.n) : 
+        normalize(vpl.its.p - ray_origin);
+    Ray shadow_ray(ray_origin, dir, 0.f);
+
+    bool visible = true;
+
+    Float t;
+    ConstShapePtr shape;
+    Normal norm;
+    Point2 uv;
+
+    if(scene->rayIntersect(shadow_ray, t, shape, norm, uv)){
+        if((ray_origin - vpl.its.p).length() - t > std::numeric_limits<float>::epsilon() * min_dist * 10.f){
+            visible = false;
+        }
+    }
+
+    return visible;
 }
 
 std::uint64_t upperPo2(std::uint64_t v)

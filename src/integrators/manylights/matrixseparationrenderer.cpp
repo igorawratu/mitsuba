@@ -952,11 +952,6 @@ bool MatrixSeparationRenderer::render(Scene* scene, std::uint32_t spp, const Ren
         }
     }
 
-    if(show_error_){
-        float error = calculateError(scene, vpls, min_dist_, output_image);
-        std::cout << "Error: " << error << std::endl;
-    }
-
     film->setBitmap(output_bitmap);
 
     if(!show_slices_){

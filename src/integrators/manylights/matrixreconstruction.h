@@ -16,11 +16,13 @@ struct ReconstructionSample{
     }
 
     ReconstructionSample(std::uint32_t x, std::uint32_t y, bool in_scene, Intersection intersection, const Ray& r) : 
-        image_x(x), image_y(y), intersected_scene(in_scene), its(intersection), ray(r), color(0.f){
+        image_x(x), image_y(y), intersected_scene(in_scene), its(intersection), ray(r), color(0.f), 
+        fully_sampled_color(0.f){
     }
 
     ReconstructionSample(ReconstructionSample&& other) : image_x(other.image_x), image_y(other.image_y), 
-        intersected_scene(other.intersected_scene), its(other.its), ray(other.ray), color(other.color){
+        intersected_scene(other.intersected_scene), its(other.its), ray(other.ray), color(other.color),
+        fully_sampled_color(other.fully_sampled_color), unoccluded_samples(other.unoccluded_samples){
     }
 
     ReconstructionSample& operator = (ReconstructionSample&& other){
@@ -31,6 +33,8 @@ struct ReconstructionSample{
             its = other.its;
             ray = other.ray;
             color = other.color;
+            fully_sampled_color = other.fully_sampled_color;
+            unoccluded_samples = other.unoccluded_samples;
         }
 
         return *this;
@@ -41,6 +45,7 @@ struct ReconstructionSample{
     Intersection its;
     Ray ray;
     Spectrum color;
+    Spectrum fully_sampled_color;
     std::vector<Spectrum> unoccluded_samples;
 };
 
@@ -50,7 +55,8 @@ public:
     MatrixReconstructionRenderer(const std::vector<VPL>& vpls, float sample_percentage_, 
         float min_dist, float step_size_factor, float tolerance, float tau, std::uint32_t max_iterations,
         std::uint32_t slice_size, bool visibility_only, bool adaptive_col, bool adaptive_importance_sampling, 
-    bool adaptive_force_resample, bool adaptive_recover_transpose, bool truncated, bool show_slices, bool vsl);
+    bool adaptive_force_resample, bool adaptive_recover_transpose, bool truncated, bool show_slices, bool vsl,
+    bool gather_stat_images);
     MatrixReconstructionRenderer(const MatrixReconstructionRenderer& other) = delete;
     MatrixReconstructionRenderer(MatrixReconstructionRenderer&& other);
     MatrixReconstructionRenderer& operator = (const MatrixReconstructionRenderer& other) = delete;
@@ -78,6 +84,7 @@ private:
     bool truncated_;
     bool show_slices_;
     bool vsl_;
+    bool gather_stat_images_;
     std::mutex cancel_lock_;
     bool cancel_;
 
