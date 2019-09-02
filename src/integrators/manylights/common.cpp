@@ -248,9 +248,11 @@ Spectrum sampleBsdf(const VPL& vpl, const Intersection& its, Sampler* sampler, f
 
 Spectrum sample(Scene* scene, Sampler* sampler, Intersection& its, const Ray& initial_ray, const VPL& vpl, float min_dist, 
     bool check_occlusion, std::uint32_t max_specular_bounces, bool perform_ray_intersection, bool& intersected,
-    bool show_emitter, bool vsl){
+    bool show_emitter, bool vsl, std::uint32_t& samples_taken){
 
     Ray ray = initial_ray;
+
+    samples_taken = 1;
 
     if(perform_ray_intersection){
         std::uint32_t num_bounces = 0;
@@ -322,6 +324,7 @@ Spectrum sample(Scene* scene, Sampler* sampler, Intersection& its, const Ray& in
 
         float solid_angle = 2.f * M_PI * (1.f - cos_theta);
         std::uint32_t num_samples = std::max(1u, std::uint32_t(sqrt(1.f - cos_theta) * 100.f));
+        samples_taken = num_samples;
         Spectrum total(0.f);
 
         for(std::uint32_t i = 0; i < num_samples; ++i){

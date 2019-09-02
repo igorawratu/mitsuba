@@ -93,8 +93,9 @@ std::vector<float> calculateLightContributions(const std::vector<VPL>& vpls,
         bool intersected;
 
         for(size_t i = 0; i < vpls.size(); ++i){
+            std::uint32_t num_samples;
             Spectrum s = sample(const_cast<Scene*>(scene), sampler, its, ray, vpls[i], min_dist, true, 
-                    10, i == 0, intersected, true, vsl);
+                    10, i == 0, intersected, true, vsl, num_samples);
 
             if(!intersected || its.isEmitter()){
                 break;

@@ -41,6 +41,7 @@ struct ReconstructionSample{
     Intersection its;
     Ray ray;
     Spectrum color;
+    std::vector<Spectrum> unoccluded_samples;
 };
 
 class MatrixReconstructionRenderer : public ManyLightsRenderer{
