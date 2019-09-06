@@ -36,9 +36,7 @@ std::unique_ptr<LightTreeNode> createLightTree(const std::vector<VPL>& vpls, EVP
 		}
 		
 		nodes[current_level][i]->vpl = vpls[i];
-		float r, g, b;
-		vpls[i].P.toLinearRGB(r, g, b);
-		nodes[current_level][i]->emission_scale = Vector3f(r, g, b).length();
+		nodes[current_level][i]->emission_scale = nodes[current_level][i]->vpl.P.getLuminance();
 		nodes[current_level][i]->vpl.P /= nodes[current_level][i]->emission_scale;
 	}
 
@@ -56,9 +54,12 @@ std::unique_ptr<LightTreeNode> createLightTree(const std::vector<VPL>& vpls, EVP
 			break;
 		}
 
-		std::priority_queue<SimEntry, std::vector<SimEntry>, decltype(comparator)> similarity_matrix(comparator);
+		std::vector<SimEntry> similarity_matrix;
 
+		std::mutex mat_insert_mut;
+		//#pragma omp parallel for
 		for(size_t i = 0; i < nodes[current_level].size(); ++i){
+			//#pragma omp parallel for
 			for(size_t j = i + 1; j < nodes[current_level].size(); ++j){
 				float d = 0.f;
 				float union_angle_span = 0.f;
@@ -103,14 +104,18 @@ std::unique_ptr<LightTreeNode> createLightTree(const std::vector<VPL>& vpls, EVP
 						bcone = Vector(Transform::rotate(axis, union_angle_span).transformAffine(new_coneray));
 					}
 
-					
-
 					d += union_angle_span * union_angle_span * min_dist * 2.f;
 				}
 
-				similarity_matrix.push(std::make_tuple(d, i, j, bcone, union_angle_span));
+				{
+					std::lock_guard<std::mutex> lock(mat_insert_mut);
+					similarity_matrix.push_back(std::make_tuple(d, i, j, bcone, union_angle_span));
+				}
+				
 			}
 		}
+
+		std::make_heap(similarity_matrix.begin(), similarity_matrix.end(), comparator);
 
 		size_t nodes_left = nodes[current_level].size();
 		std::uint8_t next_level = (current_level + 1) % 2;
@@ -134,8 +139,9 @@ std::unique_ptr<LightTreeNode> createLightTree(const std::vector<VPL>& vpls, EVP
 				exit(0);
  			}
 
-			SimEntry entry = similarity_matrix.top();
-			similarity_matrix.pop();
+			std::pop_heap(similarity_matrix.begin(), similarity_matrix.end(), comparator);
+			SimEntry entry = similarity_matrix.back();
+			similarity_matrix.pop_back();
 
 			std::uint32_t id1 = std::get<1>(entry), id2 = std::get<2>(entry);
 
@@ -424,8 +430,6 @@ LightTree::LightTree(const std::vector<VPL>& vpls, float min_dist, std::uint32_t
 	point_tree_root_ = createLightTree(point_vpls_, EPointEmitterVPL, min_dist_);
 	oriented_tree_root_ = createLightTree(oriented_vpls_, ESurfaceVPL, min_dist_);
 	directional_tree_root_ = createLightTree(directional_vpls_, EDirectionalEmitterVPL, min_dist_);
-
-	std::cout << "Light trees created" << std::endl;
 }
 
 LightTree::LightTree(const LightTree& other) : point_vpls_(other.point_vpls_), directional_vpls_(other.directional_vpls_),
@@ -506,9 +510,9 @@ std::vector<VPL> LightTree::getClusteringForPoint(const Intersection& its) {
 		pqueue.pop();
 		
 		//if the worst node is below threshold, then all nodes must be
-		if(std::get<1>(entry) < error_threshold_){
-			break;
-		}
+		//if(std::get<1>(entry) < error_threshold_){
+		//	break;
+		//}
 
 		LightTreeNode* node = std::get<0>(entry);
 		
@@ -524,23 +528,23 @@ std::vector<VPL> LightTree::getClusteringForPoint(const Intersection& its) {
 		}
 
 		if(node->left.get() != nullptr){
-			float actual_rad = calculateExactClusterContribution(its.p, its.geoFrame.n, node->left.get(), node->left->vpl.type, min_dist_, contribution_cache);
+			//float actual_rad = calculateExactClusterContribution(its.p, its.geoFrame.n, node->left.get(), node->left->vpl.type, min_dist_, contribution_cache);
 			float rad = calculateClusterContribution(its.p, its.geoFrame.n, node->left.get(), node->left->vpl.type, min_dist_, contribution_cache);
 			
-			if(actual_rad > 0.f){
-				float error = fabs(rad - actual_rad) / actual_rad;
-				pqueue.push(std::make_tuple(node->left.get(), error));
-			}
+			//if(actual_rad > 0.f){
+				//float error = fabs(rad - actual_rad) / actual_rad;
+				pqueue.push(std::make_tuple(node->left.get(), rad));
+			//}
 		}
 
 		if(node->right.get() != nullptr){
-			float actual_rad = calculateExactClusterContribution(its.p, its.geoFrame.n, node->right.get(), node->right->vpl.type, min_dist_, contribution_cache);
+			//float actual_rad = calculateExactClusterContribution(its.p, its.geoFrame.n, node->right.get(), node->right->vpl.type, min_dist_, contribution_cache);
 			float rad = calculateClusterContribution(its.p, its.geoFrame.n, node->right.get(), node->right->vpl.type, min_dist_, contribution_cache);
 			
-			if(actual_rad > 0.f){
-				float error = fabs(rad - actual_rad) / actual_rad;
-				pqueue.push(std::make_tuple(node->right.get(), error));
-			}
+			//if(actual_rad > 0.f){
+			//	float error = fabs(rad - actual_rad) / actual_rad;
+				pqueue.push(std::make_tuple(node->right.get(), rad));
+			//}
 		}
 	}
 
@@ -603,28 +607,28 @@ std::vector<VPL> LightTree::getClusteringForPoints(const std::vector<Intersectio
 			float rad = 0.f;
 			float actual_rad = 0.f;
 			for(std::uint32_t i = 0; i < points.size(); ++i){
-				rad += calculateClusterContribution(points[i].p, points[i].geoFrame.n, node->left.get(), node->left->vpl.type, min_dist_, contribution_cache);
-				actual_rad = calculateExactClusterContribution(points[i].p, points[i].geoFrame.n, node->left.get(), node->left->vpl.type, min_dist_, contribution_cache);
+				rad += calculateClusterContribution(points[i].p, points[i].geoFrame.n, node->left.get(), node->left->vpl.type, min_dist_, contribution_cache) / points.size();
+				//actual_rad += calculateExactClusterContribution(points[i].p, points[i].geoFrame.n, node->left.get(), node->left->vpl.type, min_dist_, contribution_cache);
 			}
 
-			if(actual_rad > 0.f){
-				float error = fabs(rad - actual_rad) / actual_rad;
-				pqueue.push(std::make_tuple(node->left.get(), error));
-			}
+			//if(actual_rad > 0.f){
+				//float error = fabs(rad - actual_rad) / actual_rad;
+				pqueue.push(std::make_tuple(node->left.get(), rad));
+			//}
 		}
 
 		if(node->right.get() != nullptr){
 			float rad = 0.f;
 			float actual_rad = 0.f;
 			for(std::uint32_t i = 0; i < points.size(); ++i){
-				rad += calculateClusterContribution(points[i].p, points[i].geoFrame.n, node->right.get(), node->right->vpl.type, min_dist_, contribution_cache);
-				actual_rad += calculateExactClusterContribution(points[i].p, points[i].geoFrame.n, node->right.get(), node->right->vpl.type, min_dist_, contribution_cache);
+				rad += calculateClusterContribution(points[i].p, points[i].geoFrame.n, node->right.get(), node->right->vpl.type, min_dist_, contribution_cache) / points.size();
+				//actual_rad += calculateExactClusterContribution(points[i].p, points[i].geoFrame.n, node->right.get(), node->right->vpl.type, min_dist_, contribution_cache);
 			}
 
-			if(actual_rad > 0.f){
-				float error = fabs(rad - actual_rad) / actual_rad;
-				pqueue.push(std::make_tuple(node->right.get(), error));
-			}
+			//if(actual_rad > 0.f){
+			//	float error = fabs(rad - actual_rad) / actual_rad;
+				pqueue.push(std::make_tuple(node->right.get(), rad));
+			//}
 		}
 	}
 

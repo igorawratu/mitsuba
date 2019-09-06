@@ -32,7 +32,6 @@ bool LightClustererRenderer::render(Scene* scene, std::uint32_t spp, const Rende
         std::lock_guard<std::mutex> lock(cancel_lock_);
         cancel_ = false;
     }
-
     ref<Sensor> sensor = scene->getSensor();
     ref<Film> film = sensor->getFilm();
     ref<Bitmap> output_image = new Bitmap(Bitmap::ERGB, Bitmap::EUInt8, film->getSize());
@@ -46,7 +45,6 @@ bool LightClustererRenderer::render(Scene* scene, std::uint32_t spp, const Rende
     std::uint64_t total_lights = 0;
     std::uint64_t total_rendered_pixels = 0;
     std::mutex light_counter_mutex;
-
     for (std::int32_t y = 0; y < output_image->getSize().y; ++y) {
         {
             std::lock_guard<std::mutex> lock(cancel_lock_);
@@ -54,7 +52,6 @@ bool LightClustererRenderer::render(Scene* scene, std::uint32_t spp, const Rende
                 break;
             }
         }
-
         #pragma omp parallel for
         for (std::int32_t x = 0; x < output_image->getSize().x; ++x) {
             Spectrum accumulator(0.f);
