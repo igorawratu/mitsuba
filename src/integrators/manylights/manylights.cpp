@@ -162,7 +162,7 @@ size_t generateVPLs(const Scene *scene, size_t offset, size_t count, int max_dep
 
 	Properties props("halton");
 	props.setInteger("scramble", 0);
-	Sampler *sampler = static_cast<Sampler*>(PluginManager::getInstance()->createObject(MTS_CLASS(Sampler), props));
+	ref<Sampler> sampler = static_cast<Sampler*>(PluginManager::getInstance()->createObject(MTS_CLASS(Sampler), props));
 	sampler->configure();
 	sampler->generate(Point2i(0));
 

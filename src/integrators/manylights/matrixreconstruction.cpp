@@ -82,7 +82,7 @@ Eigen::MatrixXf calculateClusterContributions(const std::vector<VPL>& vpls,
     Eigen::MatrixXf contributions = Eigen::MatrixXf::Zero(slices.size() * 3 * samples_per_slice, vpls.size());
 
     Properties props("independent");
-    Sampler *sampler = static_cast<Sampler*>(PluginManager::getInstance()->createObject(MTS_CLASS(Sampler), props));
+    ref<Sampler> sampler = static_cast<Sampler*>(PluginManager::getInstance()->createObject(MTS_CLASS(Sampler), props));
     sampler->configure();
     sampler->generate(Point2i(0));
 
@@ -368,7 +368,7 @@ std::vector<std::vector<std::uint32_t>> clusterVPLsBySplitting(const std::vector
         std::vector<std::uint32_t> new_cluster1;
         std::vector<std::uint32_t> new_cluster2;
 
-        float midpoint = (max_d + min_d) / 2.f;
+        /*float midpoint = (max_d + min_d) / 2.f;
 
         for(std::uint32_t i = 0; i < vpl_projection_distances.size(); ++i){
             if(vpl_projection_distances[i].second < midpoint){
@@ -377,9 +377,9 @@ std::vector<std::vector<std::uint32_t>> clusterVPLsBySplitting(const std::vector
             else{
                 new_cluster2.push_back(vpl_projection_distances[i].first);
             }
-        }
+        }*/
 
-        /*std::sort(vpl_projection_distances.begin(), vpl_projection_distances.end(),
+        std::sort(vpl_projection_distances.begin(), vpl_projection_distances.end(),
             [](const std::pair<std::uint32_t, float>& lhs, const std::pair<std::uint32_t, float>& rhs){
                 return lhs.second < rhs.second;
             });
@@ -391,7 +391,7 @@ std::vector<std::vector<std::uint32_t>> clusterVPLsBySplitting(const std::vector
             else{
                 new_cluster2.push_back(vpl_projection_distances[i].first);
             }
-        }*/
+        }
 
         //in case all the points are the same, which is possible in the case of full occlusion
         if(new_cluster1.size() == 0 || new_cluster2.size() == 0){
@@ -483,12 +483,12 @@ std::unique_ptr<KDTNode<ReconstructionSample>> constructKDTree(Scene* scene, std
     samples.resize(film->getSize().y * film->getSize().x * spp);
 
     Properties props("independent");
-    Sampler *sampler = static_cast<Sampler*>(PluginManager::getInstance()->createObject(MTS_CLASS(Sampler), props));
+    ref<Sampler> sampler = static_cast<Sampler*>(PluginManager::getInstance()->createObject(MTS_CLASS(Sampler), props));
     sampler->configure();
     sampler->generate(Point2i(0));
 
     for (std::int32_t y = 0; y < film->getSize().y; ++y) {
-        #pragma omp parallel for
+        //#pragma omp parallel for
         for (std::int32_t x = 0; x < film->getSize().x; ++x) {
             std::uint32_t cell_dim = sqrt(spp) + 0.5f;
             float cell_side_len = 1.f / cell_dim;
@@ -582,7 +582,7 @@ std::vector<std::uint32_t> calculateSparseSamples(Scene* scene, KDTNode<Reconstr
     indices.erase(indices.begin() + num_samples, indices.end());
 
     Properties props("independent");
-	Sampler *sampler = static_cast<Sampler*>(PluginManager::getInstance()->createObject(MTS_CLASS(Sampler), props));
+	ref<Sampler> sampler = static_cast<Sampler*>(PluginManager::getInstance()->createObject(MTS_CLASS(Sampler), props));
 	sampler->configure();
 	sampler->generate(Point2i(0));
 
@@ -618,7 +618,7 @@ std::vector<std::uint32_t> calculateSparseSamples(Scene* scene, KDTNode<Reconstr
     indices.erase(indices.begin() + num_samples, indices.end());
 
     Properties props("independent");
-	Sampler *sampler = static_cast<Sampler*>(PluginManager::getInstance()->createObject(MTS_CLASS(Sampler), props));
+	ref<Sampler> sampler = static_cast<Sampler*>(PluginManager::getInstance()->createObject(MTS_CLASS(Sampler), props));
 	sampler->configure();
 	sampler->generate(Point2i(0));
 
@@ -640,7 +640,7 @@ std::uint32_t computeUnoccludedSamples(KDTNode<ReconstructionSample>* slice, boo
     
     std::uint32_t total_samples = 0;
     Properties props("independent");
-    Sampler *sampler = static_cast<Sampler*>(PluginManager::getInstance()->createObject(MTS_CLASS(Sampler), props));
+    ref<Sampler> sampler = static_cast<Sampler*>(PluginManager::getInstance()->createObject(MTS_CLASS(Sampler), props));
     sampler->configure();
     sampler->generate(Point2i(0));
     
@@ -673,11 +673,9 @@ void updateSliceWithMatData(const Eigen::MatrixXf& rmat, const Eigen::MatrixXf& 
 void updateSliceWithMatData(const Eigen::MatrixXf& mat, KDTNode<ReconstructionSample>* slice, 
     bool visibility_only, bool recover_transpose, bool vsl, Scene* scene, const std::vector<VPL>& vpls,
     float min_dist, bool fully_compute_occlusion){
-    
-    Sampler *sampler = nullptr;
 
     Properties props("independent");
-    sampler = static_cast<Sampler*>(PluginManager::getInstance()->createObject(MTS_CLASS(Sampler), props));
+    ref<Sampler> sampler = static_cast<Sampler*>(PluginManager::getInstance()->createObject(MTS_CLASS(Sampler), props));
     sampler->configure();
     sampler->generate(Point2i(0));
 
@@ -715,6 +713,9 @@ void updateSliceWithMatData(const Eigen::MatrixXf& mat, KDTNode<ReconstructionSa
                 slice->sample(i).color += c;
             }
         }
+
+        slice->sample(i).unoccluded_samples.clear();
+        slice->sample(i).unoccluded_samples.shrink_to_fit();
     }
 }
 
@@ -862,11 +863,6 @@ std::vector<std::uint32_t> sampleCol(Scene* scene, KDTNode<ReconstructionSample>
         sampled_indices = sample_set;
     }
 
-    Properties props("independent");
-	Sampler *sampler = static_cast<Sampler*>(PluginManager::getInstance()->createObject(MTS_CLASS(Sampler), props));
-	sampler->configure();
-	sampler->generate(Point2i(0));
-
     for(size_t i = 0; i < sampled_indices.size(); ++i){
         std::uint32_t vpl_index = recover_transpose ? sampled_indices[i] : col;
         std::uint32_t sample_index = recover_transpose ? col : sampled_indices[i];
@@ -878,6 +874,11 @@ std::vector<std::uint32_t> sampleCol(Scene* scene, KDTNode<ReconstructionSample>
             mat(i, 0) = los ? 1.f : -1.f;
         }
         else{
+            Properties props("independent");
+            ref<Sampler> sampler = static_cast<Sampler*>(PluginManager::getInstance()->createObject(MTS_CLASS(Sampler), props));
+            sampler->configure();
+            sampler->generate(Point2i(0));
+
             std::uint32_t num_samples;
             Spectrum lightContribution = sample(scene, sampler, scene_sample.its, scene_sample.ray, vpl, 
                 min_dist, true, 5, false, scene_sample.intersected_scene, false, vsl, num_samples);
@@ -949,8 +950,11 @@ std::uint32_t adaptiveMatrixReconstruction(Eigen::MatrixXf& mat, Scene* scene, K
         //if the basis is not empty, we can try reproject, otherwise a full sample is required to populate the basis
         if(q.cols() > 0){
             std::uint32_t expected_omega_rows = visibility_only ? num_samples : num_samples * 3;
-            sample_omega.resize(expected_omega_rows, 1);
-            sample_omega.setZero();
+            if(sample_omega.cols() != expected_omega_rows){
+                sample_omega.resize(expected_omega_rows, 1);
+            }
+            
+            //sample_omega.setZero();
 
             //we may want to regenerate the sample indices for a variety of reasons, in which case the indices are generated and
             //the pseudoinverse is recalculated
@@ -972,26 +976,6 @@ std::uint32_t adaptiveMatrixReconstruction(Eigen::MatrixXf& mat, Scene* scene, K
                     }
                 }
 
-                /*q_normalized = q;
-
-                for(std::uint32_t j = 0; j < q_omega.cols(); ++j){
-                    float l2 = q_omega.col(j).norm();
-                    if(l2 < std::numeric_limits<float>::epsilon()){
-                        q_omega.col(j).setZero();
-                        q_normalized.col(j).setZero();
-                    }
-                    else{
-                        q_omega.col(j).normalize();
-
-                        for(std::uint32_t k = j + 1; k < q_omega.cols(); ++k){
-                            q_omega.col(k) = q_omega.col(k) - q_omega.col(j).dot(q_omega.col(k)) * q_omega.col(j);
-                        }
-                        q_normalized.col(j) /= l2;
-                    }
-                }
-
-                q_omega.transposeInPlace();*/
-
                 auto svd = q_omega.jacobiSvd(Eigen::ComputeThinU | Eigen::ComputeThinV);
                 auto sv = svd.singularValues();
                 Eigen::MatrixXf singular_val_inv = Eigen::MatrixXf::Zero(sv.size(), sv.size());
@@ -1010,8 +994,7 @@ std::uint32_t adaptiveMatrixReconstruction(Eigen::MatrixXf& mat, Scene* scene, K
             samples_for_col = num_samples;
 
             //no need to reconstruct if full sample
-            reconstructed = sample_omega.rows() == reconstructed.rows() ? sample_omega : q * q_omega_pseudoinverse * sample_omega;
-            //reconstructed = sample_omega.rows() == reconstructed.rows() ? sample_omega : q_normalized * q_omega * sample_omega;            
+            reconstructed = sample_omega.rows() == reconstructed.rows() ? sample_omega : q * q_omega_pseudoinverse * sample_omega;           
 
             float d = 0;
             for(std::uint32_t j = 0; j < sampled.size(); ++j){
@@ -1402,7 +1385,6 @@ void sliceWorkerMDLC(std::vector<std::int32_t>& work, std::uint32_t thread_id, s
         float sample_t, recover_t;
         std::tie(sample_t, recover_t) = recover(slices[slice_id], stats_mutex, vpls, scene, general_params, svt_params, ac_params,
             total_samples, performed_samples, gather_stat_images, rng);
-
         {
             std::lock_guard<std::mutex> lock(work_mutex);
             work[thread_id] = -1;
@@ -1442,7 +1424,7 @@ bool MatrixReconstructionRenderer::render(Scene* scene, std::uint32_t spp, const
     std::uint8_t* output_image = output_bitmap->getUInt8Data();
     memset(output_image, 0, output_bitmap->getBytesPerPixel() * size.x * size.y);
 
-    ProgressReporter kdt_pr("Constring kd-tree", 1, job);
+    ProgressReporter kdt_pr("Constructing kd-tree", 1, job);
     auto kdt_root = constructKDTree(scene, slice_size_, samples_, min_dist_, samples_per_slice, spp);
     kdt_pr.finish();
     std::cout << std::endl;
