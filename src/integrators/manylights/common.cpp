@@ -264,7 +264,7 @@ bool sampleVisibility(Scene* scene, const Intersection& its, const VPL& vpl, flo
     Point2 uv;
 
     if(scene->rayIntersect(shadow_ray, t, shape, norm, uv)){
-        if((ray_origin - vpl.its.p).length() - t > std::numeric_limits<float>::epsilon() * min_dist * 10.f){
+        if(std::abs((ray_origin - vpl.its.p).length() - t) > std::numeric_limits<float>::epsilon() * min_dist * 10.f){
             visible = false;
         }
     }

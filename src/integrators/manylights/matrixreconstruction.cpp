@@ -514,6 +514,7 @@ std::unique_ptr<KDTNode<ReconstructionSample>> constructKDTree(Scene* scene, std
                 curr_sample.image_y = y;
                 curr_sample.ray = ray;
                 curr_sample.color = Spectrum(0.f);
+                curr_sample.fully_sampled_color = Spectrum(0.f);
 
                 std::uint32_t num_bounces = 0;
 
@@ -894,7 +895,7 @@ std::vector<std::uint32_t> sampleCol(Scene* scene, KDTNode<ReconstructionSample>
     return sampled_indices;
 }
 
-std::uint32_t adaptiveMatrixReconstruction(Eigen::MatrixXf& mat, Scene* scene, KDTNode<ReconstructionSample>* slice, 
+std::tuple<std::uint32_t, float, float> adaptiveMatrixReconstruction(Eigen::MatrixXf& mat, Scene* scene, KDTNode<ReconstructionSample>* slice, 
     const std::vector<VPL>& vpls, float min_dist, float sample_perc,
     std::mt19937& rng, bool visibility_only, bool recover_transpose, bool importance_sample, bool force_resample,
     std::uint32_t& basis_rank, bool vsl, const std::vector<float>& col_estimations){
@@ -935,16 +936,20 @@ std::uint32_t adaptiveMatrixReconstruction(Eigen::MatrixXf& mat, Scene* scene, K
     Eigen::MatrixXf sample_omega;
     Eigen::MatrixXf q_omega;
     Eigen::MatrixXf q_omega_pseudoinverse;
+    Eigen::MatrixXf qq_omega_pseudoinverse;
     Eigen::MatrixXf q_normalized;
 
     std::uint32_t total_samples = 0;
     std::uniform_real_distribution<float> gen(0.f, 1.f);
     std::vector<float> probabilities(num_rows, 1.f);
-    bool resampled_required = false;
+
+    float time_for_svd = 0.f;
+    float time_for_reconstruct = 0.f;
+    bool full_col_sampled = false;
 
     //The actual adaptive matrix recovery algorithm
     for(std::uint32_t i = 0; i < order.size(); ++i){
-        bool full_col_sampled = false;
+        
         std::uint32_t samples_for_col = 0;
 
         //if the basis is not empty, we can try reproject, otherwise a full sample is required to populate the basis
@@ -953,13 +958,11 @@ std::uint32_t adaptiveMatrixReconstruction(Eigen::MatrixXf& mat, Scene* scene, K
             if(sample_omega.cols() != expected_omega_rows){
                 sample_omega.resize(expected_omega_rows, 1);
             }
-            
-            //sample_omega.setZero();
 
             //we may want to regenerate the sample indices for a variety of reasons, in which case the indices are generated and
             //the pseudoinverse is recalculated
-            if(num_samples != sampled.size() || num_samples == total_rows || force_resample || resampled_required){
-                resampled_required = false;
+            if(full_col_sampled || force_resample){
+                full_col_sampled = false;
                 sampled = sampleCol(scene, slice, vpls, order[i], min_dist, num_samples, rng, sample_omega, sampled, 
                     true, visibility_only, recover_transpose, importance_sample, probabilities, vsl);
 
@@ -976,6 +979,7 @@ std::uint32_t adaptiveMatrixReconstruction(Eigen::MatrixXf& mat, Scene* scene, K
                     }
                 }
 
+                auto svd_start = std::chrono::high_resolution_clock::now();
                 auto svd = q_omega.jacobiSvd(Eigen::ComputeThinU | Eigen::ComputeThinV);
                 auto sv = svd.singularValues();
                 Eigen::MatrixXf singular_val_inv = Eigen::MatrixXf::Zero(sv.size(), sv.size());
@@ -985,6 +989,9 @@ std::uint32_t adaptiveMatrixReconstruction(Eigen::MatrixXf& mat, Scene* scene, K
                 }
 
                 q_omega_pseudoinverse = svd.matrixV() * singular_val_inv * svd.matrixU().transpose();
+                auto svd_end = std::chrono::high_resolution_clock::now();
+                time_for_svd += std::chrono::duration_cast<std::chrono::duration<float>>(svd_end - svd_start).count();
+                qq_omega_pseudoinverse = q * q_omega_pseudoinverse;
             }
                 //no new direction was added so no need to regenerate sample indices
             else{
@@ -993,26 +1000,27 @@ std::uint32_t adaptiveMatrixReconstruction(Eigen::MatrixXf& mat, Scene* scene, K
             }
             samples_for_col = num_samples;
 
+            auto recon_start = std::chrono::high_resolution_clock::now();
             //no need to reconstruct if full sample
-            reconstructed = sample_omega.rows() == reconstructed.rows() ? sample_omega : q * q_omega_pseudoinverse * sample_omega;           
+            reconstructed = sample_omega.rows() == reconstructed.rows() ? sample_omega : qq_omega_pseudoinverse * sample_omega;           
+            auto recon_end = std::chrono::high_resolution_clock::now();
+
+            //std::cout << reconstructed.rows()  << std::endl;
+
+            time_for_reconstruct += std::chrono::duration_cast<std::chrono::duration<float>>(recon_end - recon_start).count();
 
             float d = 0;
             for(std::uint32_t j = 0; j < sampled.size(); ++j){
                 d += std::abs(reconstructed(sampled[j], 0) - sample_omega(j, 0));
             }
 
-            //this is just some heuristic on when to regenerate indices, need to investigate this better
-            if(visibility_only){
-                for(std::uint32_t j = 0; j < reconstructed.rows(); ++j){
-                    if(fabs(fabs(reconstructed(j, 0)) - 1.) > std::numeric_limits<float>::epsilon()){
-                        resampled_required = true;
-                        break;
-                    }
-                }
-            }
-            
+            float largest = col_estimations[order[0]];
+            float curr = col_estimations[order[i]];
+            float thresh = (largest - curr) / largest * float(sampled.size()) * 0.1f;
+            thresh = std::max(1e-3f, thresh);
             //sampled values can't be reconstructed accurately so fully sample
-            if(d > 1e-3f){
+            if(d > thresh){
+                //std::cout << d << std::endl;
                 sampled = sampleCol(scene, slice, vpls, order[i], min_dist, total_rows, rng, 
                     reconstructed, sampled, true, visibility_only, recover_transpose, importance_sample, probabilities, vsl);
                 samples_for_col = total_rows;
@@ -1032,13 +1040,12 @@ std::uint32_t adaptiveMatrixReconstruction(Eigen::MatrixXf& mat, Scene* scene, K
             //might want to change this to be above some epsilon instead
             if(reconstructed.norm() > 0.f){
                 q_normalized = q = reconstructed;
+                full_col_sampled = true;
             }
-
-            full_col_sampled = true;
         }
 
         //probability update for importance sampling. This needs to be revisited since this doesn't work well
-        if(full_col_sampled){
+        /*if(full_col_sampled){
             for(std::uint32_t j = 0; j < reconstructed.rows(); ++j){
                 int next_idx = std::min(int(j) + 1, int(reconstructed.rows()) - 1);
                 int prev_idx = std::max(int(j) - 1, 0);
@@ -1051,14 +1058,14 @@ std::uint32_t adaptiveMatrixReconstruction(Eigen::MatrixXf& mat, Scene* scene, K
 
                 probabilities[j] += std::min(grad, 1.f) * mul;
             }
-        }
+        }*/
         mat.col(order[i]) = reconstructed.col(0);
         total_samples += samples_for_col;
     }
 
     basis_rank = q.cols();
 
-    return total_samples;
+    return std::make_tuple(total_samples, time_for_svd, time_for_reconstruct);
 }
 
 //singular value thresholding algorithm for the non-adaptive version. Can use the RedSVD truncated svd, or just normal svd
@@ -1110,7 +1117,8 @@ MatrixReconstructionRenderer::MatrixReconstructionRenderer(const std::vector<VPL
     float sample_percentage, float min_dist, float step_size_factor, float tolerance, float tau, 
     std::uint32_t max_iterations, std::uint32_t slice_size, bool visibility_only, bool adaptive_col, 
     bool adaptive_importance_sampling, bool adaptive_force_resample, bool adaptive_recover_transpose,
-    bool truncated, bool show_slices, bool vsl, bool gather_stat_images, ClusteringStrategy clustering_strategy) : 
+    bool truncated, bool show_slices, bool vsl, bool gather_stat_images, ClusteringStrategy clustering_strategy,
+    float error_scale) : 
         vpls_(vpls), 
         sample_percentage_(sample_percentage), 
         min_dist_(min_dist), 
@@ -1129,6 +1137,7 @@ MatrixReconstructionRenderer::MatrixReconstructionRenderer(const std::vector<VPL
         vsl_(vsl),
         gather_stat_images_(gather_stat_images),
         clustering_strategy_(clustering_strategy),
+        error_scale_(error_scale),
         cancel_(false){
 }
 
@@ -1150,6 +1159,7 @@ MatrixReconstructionRenderer::MatrixReconstructionRenderer(MatrixReconstructionR
     vsl_(other.vsl_),
     gather_stat_images_(other.gather_stat_images_),
     clustering_strategy_(other.clustering_strategy_),
+    error_scale_(other.error_scale_),
     cancel_(other.cancel_){
 }
 
@@ -1173,6 +1183,7 @@ MatrixReconstructionRenderer& MatrixReconstructionRenderer::operator = (MatrixRe
         vsl_ = other.vsl_;
         gather_stat_images_ = other.gather_stat_images_;
         clustering_strategy_ = other.clustering_strategy_;
+        error_scale_ = other.error_scale_;
         cancel_ = other.cancel_;
     }
     return *this;
@@ -1203,10 +1214,10 @@ struct GeneralParams{
     float sample_perc;
 };
 
-std::tuple<float, float> recover(KDTNode<ReconstructionSample>* slice, std::mutex& stats_mutex, const std::vector<VPL>& vpls, Scene* scene,
+std::tuple<float, float, float, float> recover(KDTNode<ReconstructionSample>* slice, std::mutex& stats_mutex, const std::vector<VPL>& vpls, Scene* scene,
     const GeneralParams& general_params, const SVTParams& svt_params, const AdaptiveConstructionParams& ac_params,
     std::uint32_t& total_samples, std::uint32_t& performed_samples, bool gather_stat_images, std::mt19937& rng){
-    float sample_time, recovery_time;
+    float sample_time, recovery_time, svd_time = 0.f, reconstruct_time = 0.f;
     if(general_params.adaptive_col){
         auto start_t = std::chrono::high_resolution_clock::now();
         std::uint32_t total_slice_samples = 
@@ -1229,20 +1240,22 @@ std::tuple<float, float> recover(KDTNode<ReconstructionSample>* slice, std::mute
         Eigen::MatrixXf mat = Eigen::MatrixXf::Zero(mat_rows, vpls.size());
         std::uint32_t max_rank = std::min(mat.rows(), mat.cols());
         std::uint32_t basis_rank;
-        std::uint32_t samples = adaptiveMatrixReconstruction(mat, scene, slice, vpls, general_params.min_dist, 
+        std::uint32_t samples;
+        auto recover_start_t = std::chrono::high_resolution_clock::now();
+        std::tie(samples, svd_time, reconstruct_time) = adaptiveMatrixReconstruction(mat, scene, slice, vpls, general_params.min_dist, 
             general_params.sample_perc, rng, ac_params.vis_only, ac_params.rec_trans, ac_params.import_sample, 
             ac_params.force_resample, basis_rank, general_params.vsl, cluster_contribs);
-        
+        auto recover_t = std::chrono::high_resolution_clock::now();
         slice->sample_ratio = float(samples) / (mat.rows() * mat.cols());
         slice->rank_ratio = float(basis_rank) / max_rank;
 
         updateSliceWithMatData(mat, slice, ac_params.vis_only, ac_params.rec_trans, general_params.vsl, 
             scene, vpls, general_params.min_dist, gather_stat_images);
 
-        auto recover_t = std::chrono::high_resolution_clock::now();
+        
 
         sample_time = std::chrono::duration_cast<std::chrono::duration<float>>(sample_t - start_t).count();
-        recovery_time = std::chrono::duration_cast<std::chrono::duration<float>>(recover_t - sample_t).count();
+        recovery_time = std::chrono::duration_cast<std::chrono::duration<float>>(recover_t - recover_start_t).count();
 
         {
             std::lock_guard<std::mutex> lock(stats_mutex);
@@ -1295,7 +1308,7 @@ std::tuple<float, float> recover(KDTNode<ReconstructionSample>* slice, std::mute
             total_samples += slice->sample_indices.size() * vpls.size();
         }
     }
-    return std::make_tuple(sample_time, recovery_time);
+    return std::make_tuple(sample_time, recovery_time, svd_time, reconstruct_time);
 }
 
 void sliceWorkerLS(std::vector<std::int32_t>& work, std::uint32_t thread_id, std::mutex& work_mutex, std::mutex& stats_mutex,
@@ -1303,7 +1316,7 @@ void sliceWorkerLS(std::vector<std::int32_t>& work, std::uint32_t thread_id, std
     const Eigen::MatrixXf& contribs, const std::vector<std::vector<int>>& nn, const std::vector<VPL>& total_vpls, Scene* scene,
     const GeneralParams& general_params, const SVTParams& svt_params, const AdaptiveConstructionParams& ac_params,
     std::uint32_t& total_samples, std::uint32_t& performed_samples, float& clustering_time, float& recovery_time,
-    float& sample_time, bool gather_stat_images){
+    float& sample_time, float& svd_time, float& reconstruct_time, bool gather_stat_images){
 
     std::mt19937 rng(std::chrono::high_resolution_clock::now().time_since_epoch().count() * thread_id);
     std::uint32_t split_num_clusters = std::min(total_vpls.size(), 1000 - cbsamp.size());
@@ -1330,8 +1343,8 @@ void sliceWorkerLS(std::vector<std::int32_t>& work, std::uint32_t thread_id, std
 
         auto cluster_t = std::chrono::high_resolution_clock::now();
 
-        float sample_t, recover_t;
-        std::tie(sample_t, recover_t) = recover(slices[slice_id], stats_mutex, vpls, scene, general_params, svt_params, ac_params,
+        float sample_t, recover_t, svd_t, reconstruct_t;
+        std::tie(sample_t, recover_t, svd_t, reconstruct_t) = recover(slices[slice_id], stats_mutex, vpls, scene, general_params, svt_params, ac_params,
             total_samples, performed_samples, gather_stat_images, rng);
 
         {
@@ -1344,6 +1357,8 @@ void sliceWorkerLS(std::vector<std::int32_t>& work, std::uint32_t thread_id, std
             clustering_time += std::chrono::duration_cast<std::chrono::microseconds>(cluster_t - start_t).count() / 1000000.f;
             recovery_time += recover_t;
             sample_time += sample_t;
+            svd_time += svd_t;
+            reconstruct_time += reconstruct_t;
         }
     }
 }
@@ -1352,7 +1367,7 @@ void sliceWorkerMDLC(std::vector<std::int32_t>& work, std::uint32_t thread_id, s
     const std::vector<KDTNode<ReconstructionSample>*>& slices, LightTree* light_tree, const std::vector<VPL>& tot_vpls, Scene* scene,
     const GeneralParams& general_params, const SVTParams& svt_params, const AdaptiveConstructionParams& ac_params,
     std::uint32_t& total_samples, std::uint32_t& performed_samples, float& clustering_time, float& recovery_time, 
-    float& sample_time, bool gather_stat_images){
+    float& sample_time, float& svd_time, float& reconstruct_time, bool gather_stat_images){
 
     std::mt19937 rng(std::chrono::high_resolution_clock::now().time_since_epoch().count() * thread_id);
 
@@ -1382,8 +1397,8 @@ void sliceWorkerMDLC(std::vector<std::int32_t>& work, std::uint32_t thread_id, s
 
         auto cluster_t = std::chrono::high_resolution_clock::now();
 
-        float sample_t, recover_t;
-        std::tie(sample_t, recover_t) = recover(slices[slice_id], stats_mutex, vpls, scene, general_params, svt_params, ac_params,
+        float sample_t, recover_t, svd_t, reconstruct_t;
+        std::tie(sample_t, recover_t, svd_t, reconstruct_t) = recover(slices[slice_id], stats_mutex, vpls, scene, general_params, svt_params, ac_params,
             total_samples, performed_samples, gather_stat_images, rng);
         {
             std::lock_guard<std::mutex> lock(work_mutex);
@@ -1395,6 +1410,8 @@ void sliceWorkerMDLC(std::vector<std::int32_t>& work, std::uint32_t thread_id, s
             clustering_time += std::chrono::duration_cast<std::chrono::duration<double>>(cluster_t - start_t).count();
             recovery_time += recover_t;
             sample_time += sample_t;
+            svd_time += svd_t;
+            reconstruct_time += reconstruct_t;
         }
     }
 }
@@ -1453,7 +1470,7 @@ bool MatrixReconstructionRenderer::render(Scene* scene, std::uint32_t spp, const
     general_params.vsl = vsl_;
     general_params.sample_perc = sample_percentage_;
 
-    std::uint32_t num_cores = std::min(slices.size(), (size_t)std::thread::hardware_concurrency());
+    std::uint32_t num_cores = 8;//std::min(slices.size(), (size_t)std::thread::hardware_concurrency());
     std::uint32_t scheduled_slices = num_cores;
 
     std::vector<std::int32_t> work(num_cores);
@@ -1471,6 +1488,8 @@ bool MatrixReconstructionRenderer::render(Scene* scene, std::uint32_t spp, const
     float total_recovery_time = 0.f;
     float total_clustering_time = 0.f;
     float total_sample_time = 0.f;
+    float total_svd_time = 0.f;
+    float total_reconstruct_time = 0.f;
 
     if(clustering_strategy_ == ClusteringStrategy::LS){
         ProgressReporter lscc_pr("Calculating cluster contributions", 1, job);
@@ -1531,7 +1550,7 @@ bool MatrixReconstructionRenderer::render(Scene* scene, std::uint32_t spp, const
             std::ref(clusters_by_sampling), std::ref(cluster_contributions), std::ref(nearest_neighbours), 
             std::ref(vpls_), scene, general_params, svt_params, ac_params, std::ref(total_samples), 
             std::ref(amount_sampled), std::ref(total_clustering_time), std::ref(total_recovery_time), 
-            std::ref(total_sample_time), gather_stat_images_);
+            std::ref(total_sample_time), std::ref(total_svd_time), std::ref(total_reconstruct_time), gather_stat_images_);
         }
     }
     else{
@@ -1544,7 +1563,7 @@ bool MatrixReconstructionRenderer::render(Scene* scene, std::uint32_t spp, const
             workers.emplace_back(sliceWorkerMDLC, std::ref(work), i, std::ref(work_mutex), std::ref(stats_mutex), std::ref(slices), 
             light_tree.get(), std::ref(vpls_), scene, general_params, svt_params, ac_params, std::ref(total_samples), 
             std::ref(amount_sampled), std::ref(total_clustering_time), std::ref(total_recovery_time),
-            std::ref(total_sample_time), gather_stat_images_);
+            std::ref(total_sample_time), std::ref(total_svd_time), std::ref(total_reconstruct_time), gather_stat_images_);
         }
     }
     
@@ -1587,6 +1606,8 @@ bool MatrixReconstructionRenderer::render(Scene* scene, std::uint32_t spp, const
     std::cout << "Total clustering time: " << total_clustering_time << std::endl;
     std::cout << "Total sampling time: " << total_sample_time << std::endl;
     std::cout << "Total recovery time: " << total_recovery_time << std::endl;
+    std::cout << "Total svd time: " << total_svd_time << std::endl;
+    std::cout << "Total reconstruction time: " << total_reconstruct_time << std::endl;
     
     
     copySamplesToBuffer(output_image, samples_, size, spp);
@@ -1603,7 +1624,9 @@ bool MatrixReconstructionRenderer::render(Scene* scene, std::uint32_t spp, const
         writeOutputImage(scene, "rank", size.x, size.y, true, rank);
         writeOutputImage(scene, "sample_ratio", size.x, size.y, true, samples);
         writeOutputImage(scene, "slices", size.x, size.y, true, slice_cols);
-        writeOutputErrorImage(scene, "error", size.x, size.y, true, recovered, full_sample, 1.f);
+        writeOutputImage(scene, "full_sample", size.x, size.y, true, full_sample);
+        float err = writeOutputErrorImage(scene, "error", size.x, size.y, true, recovered, full_sample, error_scale_);
+        std::cout << "Total error: " << err << std::endl;
     }
 
     if(adaptive_col_sampling_){

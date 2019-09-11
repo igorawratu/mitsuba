@@ -57,8 +57,8 @@ public:
     MatrixReconstructionRenderer(const std::vector<VPL>& vpls, float sample_percentage_, 
         float min_dist, float step_size_factor, float tolerance, float tau, std::uint32_t max_iterations,
         std::uint32_t slice_size, bool visibility_only, bool adaptive_col, bool adaptive_importance_sampling, 
-    bool adaptive_force_resample, bool adaptive_recover_transpose, bool truncated, bool show_slices, bool vsl,
-    bool gather_stat_images, ClusteringStrategy clustering_strategy);
+        bool adaptive_force_resample, bool adaptive_recover_transpose, bool truncated, bool show_slices, bool vsl,
+        bool gather_stat_images, ClusteringStrategy clustering_strategy, float error_scale);
     MatrixReconstructionRenderer(const MatrixReconstructionRenderer& other) = delete;
     MatrixReconstructionRenderer(MatrixReconstructionRenderer&& other);
     MatrixReconstructionRenderer& operator = (const MatrixReconstructionRenderer& other) = delete;
@@ -88,6 +88,7 @@ private:
     bool vsl_;
     bool gather_stat_images_;
     ClusteringStrategy clustering_strategy_;
+    float error_scale_;
     std::mutex cancel_lock_;
     bool cancel_;
 

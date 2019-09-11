@@ -40,22 +40,27 @@ void writeOutputImage(Scene* scene, std::string filename, std::uint32_t width, s
     film->develop(scene, 0.f);
 }
 
-void writeOutputErrorImage(Scene* scene, std::string filename, std::uint32_t width, std::uint32_t height, bool hdr, const std::vector<Spectrum>& data1,
+float writeOutputErrorImage(Scene* scene, std::string filename, std::uint32_t width, std::uint32_t height, bool hdr, const std::vector<Spectrum>& data1,
     const std::vector<Spectrum>& data2, float max_error){
     assert(data1.size() == data2.size());
 
     std::vector<Spectrum> error_col(data1.size(), Spectrum(0.f));
+    float total_err = 0.f;
 
     for(std::uint32_t i = 0; i < error_col.size(); ++i){
         Spectrum dif = data1[i] - data2[i];
         float r, g, b;
         dif.toLinearRGB(r, g, b);
-        float error = std::min(1.f, (std::abs(r) + std::abs(g) + std::abs(b)) / max_error);
+        float curr_err = std::abs(r) + std::abs(g) + std::abs(b);
+        total_err += curr_err;
+        float error = std::min(1.f, curr_err / max_error);
         std::tie(r, g, b) = floatToRGB(error);
         error_col[i].fromLinearRGB(r, g, b);
     }
 
     writeOutputImage(scene, filename, width, height, hdr, error_col);
+
+    return total_err;
 }
 
 void writeOutputData(std::string filename, bool new_file, const std::vector<float>& data, char delimiter){
