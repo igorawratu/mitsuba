@@ -1470,7 +1470,7 @@ bool MatrixReconstructionRenderer::render(Scene* scene, std::uint32_t spp, const
     general_params.vsl = vsl_;
     general_params.sample_perc = sample_percentage_;
 
-    std::uint32_t num_cores = 8;//std::min(slices.size(), (size_t)std::thread::hardware_concurrency());
+    std::uint32_t num_cores = 16;//std::min(slices.size(), (size_t)std::thread::hardware_concurrency());
     std::uint32_t scheduled_slices = num_cores;
 
     std::vector<std::int32_t> work(num_cores);
