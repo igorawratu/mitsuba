@@ -63,10 +63,12 @@ float writeOutputErrorImage(Scene* scene, std::string filename, std::uint32_t wi
     return total_err;
 }
 
-void writeOutputData(std::string filename, bool new_file, const std::vector<float>& data, char delimiter){
+void writeOutputData(Scene* scene, std::string filename, bool new_file, const std::vector<float>& data, char delimiter){
     std::ofstream file;
     auto mode = new_file ? std::ios::out : std::ios::out | std::ios::app;
-    file.open(filename, mode);
+    fs::path scene_path = scene->getDestinationFile();
+    std::string filename_and_path = (scene_path.parent_path() / filename).string();
+    file.open(filename_and_path, mode);
 
     if(!new_file){
         file << std::endl;

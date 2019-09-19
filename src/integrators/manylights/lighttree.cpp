@@ -12,6 +12,8 @@
 #include <math.h>
 #include <unordered_map>
 
+#include <eigen3/Eigen/Dense>
+
 MTS_NAMESPACE_BEGIN
 
 const std::array<std::function<bool(float, const Intersection&)>, 6> divider_comp {
@@ -35,34 +37,37 @@ const std::array<std::function<bool(float, const Intersection&)>, 6> divider_com
     }
 };
 
-const std::array<std::function<bool(float, const Intersection&)>, 6> divider_sorter{
-    [](const Intersection& lhs, const Intersection& rhs){
-        return lhs.p.x < rhs.p.x;
+const std::array<std::function<bool(const VPL&, const VPL&)>, 6> divider_sorter{
+    [](const VPL& lhs, const VPL& rhs){
+        return lhs.its.p.x < rhs.its.p.x;
     },
-    [](const Intersection& lhs, const Intersection& rhs){
-        return lhs.p.y < rhs.p.y;
+    [](const VPL& lhs, const VPL& rhs){
+        return lhs.its.p.y < rhs.its.p.y;
     },
-    [](const Intersection& rhs, const Intersection& lhs){
-        return lhs.p.z < rhs.p.z;
+    [](const VPL& rhs, const VPL& lhs){
+        return lhs.its.p.z < rhs.its.p.z;
     },
-    [](const Intersection& lhs, const Intersection& rhs){
-        return lhs.shFrame.n.x < rhs.shFrame.n.x;
+    [](const VPL& lhs, const VPL& rhs){
+        return lhs.its.shFrame.n.x < rhs.its.shFrame.n.x;
     },
-    [](const Intersection& lhs, const Intersection& rhs){
-        return lhs.shFrame.n.y < rhs.shFrame.n.y;
+    [](const VPL& lhs, const VPL& rhs){
+        return lhs.its.shFrame.n.y < rhs.its.shFrame.n.y;
     },
-    [](const Intersection& lhs, const Intersection& rhs){
-        return lhs.shFrame.n.z < rhs.shFrame.n.z;
+    [](const VPL& lhs, const VPL& rhs){
+        return lhs.its.shFrame.n.z < rhs.its.shFrame.n.z;
     }
 };
 
-void divideByGreatestDim(const std::vector<VPL>& vpls, std::vector<VPL>& left, std::vector<VPL>& right, std::uint32_t min_size){
+void divideByGreatestDim(const std::vector<VPL>& vpls, std::vector<VPL>& left, std::vector<VPL>& right, std::uint32_t min_size,
+	float norm_scale){
 	left.clear();
 	right.clear();
 
-	float maxf = std::numeric_limits<float>::max();
+	/*float maxf = std::numeric_limits<float>::max();
 	Vector3f min_pos(maxf, maxf, maxf), max_pos(-maxf, -maxf, -maxf);
 	Vector3f min_normal(maxf, maxf, maxf), max_normal(-maxf, -maxf, -maxf);
+
+	std::array<float, 6> averages{0.f};
 
 	for(std::uint32_t i = 0; i < vpls.size(); ++i){
 		min_pos.x = std::min(vpls[i].its.p.x, min_pos.x);
@@ -78,6 +83,17 @@ void divideByGreatestDim(const std::vector<VPL>& vpls, std::vector<VPL>& left, s
 		max_normal.x = std::max(vpls[i].its.shFrame.n.x, max_normal.x);
 		max_normal.y = std::max(vpls[i].its.shFrame.n.y, max_normal.y);
 		max_normal.z = std::max(vpls[i].its.shFrame.n.z, max_normal.z);
+
+		averages[0] += vpls[i].its.p.x;
+		averages[1] += vpls[i].its.p.y;
+		averages[2] += vpls[i].its.p.z;
+		averages[3] += vpls[i].its.shFrame.n.x;
+		averages[4] += vpls[i].its.shFrame.n.y;
+		averages[5] += vpls[i].its.shFrame.n.z;
+	}
+
+	for(std::uint32_t i = 0; i < 6; ++i){
+		averages[i] /= vpls.size();
 	}
 
 	std::array<std::pair<std::uint8_t, float>, 6> ranges;
@@ -101,8 +117,8 @@ void divideByGreatestDim(const std::vector<VPL>& vpls, std::vector<VPL>& left, s
 			return lhs.second > rhs.second;
 		});
 
-	for(std::uint32_t i = 0; i < sample_indices.size(); ++i){
-		if(divider_comp[ranges[0].first](midpoints[ranges[0].first], vpls[i].its)){
+	for(std::uint32_t i = 0; i < vpls.size(); ++i){
+		if(divider_comp[ranges[0].first](averages[ranges[0].first], vpls[i].its)){
 			right.push_back(vpls[i]);
 		}
 		else{
@@ -116,89 +132,72 @@ void divideByGreatestDim(const std::vector<VPL>& vpls, std::vector<VPL>& left, s
 		left.clear();
 		right.clear();
 		std::uint32_t midpoint = vpl_sorted.size() / 2;
-		left.insert(left->sample_indices.end(), vpl_sorted.begin(), vpl_sorted.begin() + midpoint);
-		right.insert(right->sample_indices.end(), vpl_sorted.begin() + midpoint, vpl_sorted.end());
-	}
-}
+		left.insert(left.end(), vpl_sorted.begin(), vpl_sorted.begin() + midpoint);
+		right.insert(right.end(), vpl_sorted.begin() + midpoint, vpl_sorted.end());
+	}*/
 
-std::unique_ptr<LightTreeNode> tdCreateLightTree(const std::vector<VPL>& vpls, EVPLType vpl_type, float min_dist, std::uint32_t bottom_up_thresh, std::mt19937& rng){
-	if(vpls.size() < bottom_up_thresh){
-		return createLightTree(vpls, vpl_type, min_dist);
-	}
-
-	std::vector<VPL> left_vpls;
-	std::vector<VPL> right_vpls;
-	divideByGreatestDim(vpls, left_vpls, right_vpls, bottom_up_thresh / 4);
-
-	auto lc = tdCreateLightTree(left_vpls, vpl_type, min_dist, bottom_up_thresh);
-	auto rc = tdCreateLightTree(right_vpls, vpl_type, min_dist, bottom_up_thresh);
-
-	std::unique_ptr<LightTreeNode> curr_node(new LightTreeNode());
-	float union_angle_span = 0.f;
-	Vector3f bcone(0.f);
-
-	if(vpl_type != EDirectionalEmitterVPL){
-		curr_node->min_bounds = Point(std::min(lc->min_bounds[0], rc->min_bounds[0]), 
-			std::min(lc->min_bounds[1], rc->min_bounds[1]), 
-			std::min(lc->min_bounds[2], rc->min_bounds[2]));
-		curr_node->max_bounds = Point(std::max(lc->max_bounds[0], rc->max_bounds[0]), 
-			std::max(lc->max_bounds[1], rc->max_bounds[1]), 
-			std::max(lc->max_bounds[2], rc->max_bounds[2]));
+	Eigen::MatrixXf mean = Eigen::MatrixXf::Zero(6, 1);
+	for(std::uint32_t i = 0; i < vpls.size(); ++i){
+		mean(0, 0) += vpls[i].its.p.x;
+		mean(1, 0) += vpls[i].its.p.y;
+		mean(2, 0) += vpls[i].its.p.z;
+		mean(3, 0) += vpls[i].its.shFrame.n.x * norm_scale;
+		mean(4, 0) += vpls[i].its.shFrame.n.y * norm_scale;
+		mean(5, 0) += vpls[i].its.shFrame.n.z * norm_scale;
 	}
 
-	if(vpl_type != EPointEmitterVPL){
-		Vector3 ray1 = lc->cone_ray;
-		Vector3 ray2 = rc->cone_ray;
-		float ha1 = lc->cone_halfangle;
-		float ha2 = rc->cone_halfangle;
+	mean /= vpls.size();
 
-		float angle = atan2(cross(ray1, ray2).length(), dot(ray1, ray2));
-		float max_child_half = std::max(ha1, ha2);
-		float min_child_half = std::min(ha1, ha2);
+	Eigen::MatrixXf cov_mat = Eigen::MatrixXf::Zero(6, 6);
+	for(std::uint32_t i = 0; i < vpls.size(); ++i){
+		Eigen::MatrixXf curr_pt(6, 1);
+		curr_pt(0, 0) = vpls[i].its.p.x;
+		curr_pt(1, 0) = vpls[i].its.p.y;
+		curr_pt(2, 0) = vpls[i].its.p.z;
+		curr_pt(3, 0) = vpls[i].its.shFrame.n.x * norm_scale;
+		curr_pt(4, 0) = vpls[i].its.shFrame.n.y * norm_scale;
+		curr_pt(5, 0) = vpls[i].its.shFrame.n.z * norm_scale;
 
-		if((angle < max_child_half && (max_child_half - angle) > min_child_half) || (ray1 - ray2).length() < std::numeric_limits<float>::epsilon()){
-			union_angle_span = max_child_half;
-			bcone = ha1 > ha2 ? ray1 : ray2;
+		cov_mat += curr_pt * curr_pt.transpose();
+	}
+
+	cov_mat /= vpls.size() - 1;
+
+	auto svd = cov_mat.jacobiSvd(Eigen::ComputeThinU);
+	Eigen::VectorXf axis = svd.matrixU().col(0);
+
+	float proj_max = -std::numeric_limits<float>::max();
+	float proj_min = std::numeric_limits<float>::max();
+
+	std::vector<std::pair<float, std::uint32_t>> projections(vpls.size());
+	float proj_mean = 0.f;
+	for(std::uint32_t i = 0; i < vpls.size(); ++i){
+		Eigen::VectorXf curr_pt(6);
+		curr_pt(0) = vpls[i].its.p.x;
+		curr_pt(1) = vpls[i].its.p.y;
+		curr_pt(2) = vpls[i].its.p.z;
+		curr_pt(3) = vpls[i].its.shFrame.n.x * norm_scale;
+		curr_pt(4) = vpls[i].its.shFrame.n.y * norm_scale;
+		curr_pt(5) = vpls[i].its.shFrame.n.z * norm_scale;
+
+		float proj_rat = curr_pt.dot(axis);
+		proj_mean += proj_rat;
+		projections[i] = std::make_pair(proj_rat, i);
+
+		proj_max = std::max(proj_rat, proj_max);
+		proj_min = std::min(proj_rat, proj_min);
+	}
+	proj_mean /= vpls.size();
+
+	float midpoint = (proj_max + proj_min) / 2.f;
+	for(std::uint32_t i = 0; i < projections.size(); ++i){
+		if(projections[i].first < midpoint){
+			left.push_back(vpls[projections[i].second]);
 		}
 		else{
-			union_angle_span = angle + ha1 + ha2;
-			union_angle_span = union_angle_span > M_PI ? 2 * M_PI : union_angle_span;
-			union_angle_span = std::min(union_angle_span / 2.f, M_PI);
-
-			Vector3f axis = cross(ray1, ray2);
-			if(axis.length() < std::numeric_limits<float>::epsilon()){
-				axis = cross(ray1, Vector3f(gen(rng), gen(rng), gen(rng)));
-			}
-
-			Point new_coneray = Transform::rotate(axis, -ha1).transformAffine(Point(ray1));
-			bcone = Vector(Transform::rotate(axis, union_angle_span).transformAffine(new_coneray));
+			right.push_back(vpls[projections[i].second]);
 		}
 	}
-
-	curr_node->cone_ray = bcone;
-	curr_node->cone_halfangle = union_angle_span;
-	
-	float lc_intensity = lc->emission_scale;
-	float rc_intensity = rc->emission_scale;
-
-	std::uniform_real_distribution<float> gen(0, 1);
-	float sample = gen(rng);
-
-	if(lc_intensity > 0.f || rc_intensity > 0.f){
-		if (sample < lc_intensity / (lc_intensity + rc_intensity)) {
-			curr_node->vpl = lc->vpl;
-		}
-		else {
-			curr_node->vpl = rc->vpl;
-		}
-	}
-
-	curr_node->emission_scale = c1_intensity + c2_intensity;
-
-	curr_node->left = std::move(lc);
-	curr_node->right = std::move(rc);
-
-	return curr_node;
 }
 
 std::unique_ptr<LightTreeNode> createLightTree(const std::vector<VPL>& vpls, EVPLType vpl_type, float min_dist, std::mt19937& rng) {
@@ -243,9 +242,9 @@ std::unique_ptr<LightTreeNode> createLightTree(const std::vector<VPL>& vpls, EVP
 		std::vector<SimEntry> similarity_matrix;
 
 		std::mutex mat_insert_mut;
-		//#pragma omp parallel for
+		#pragma omp parallel for
 		for(size_t i = 0; i < nodes[current_level].size(); ++i){
-			//#pragma omp parallel for
+			#pragma omp parallel for
 			for(size_t j = i + 1; j < nodes[current_level].size(); ++j){
 				float d = 0.f;
 				float union_angle_span = 0.f;
@@ -386,6 +385,87 @@ std::unique_ptr<LightTreeNode> createLightTree(const std::vector<VPL>& vpls, EVP
 		current_level = next_level;
 	}
 	return std::move(nodes[current_level][0]);
+}
+
+std::unique_ptr<LightTreeNode> tdCreateLightTree(const std::vector<VPL>& vpls, EVPLType vpl_type, float min_dist, std::uint32_t bottom_up_thresh, std::mt19937& rng){
+	if(vpls.size() <= bottom_up_thresh){
+		return createLightTree(vpls, vpl_type, min_dist, rng);
+	}
+
+	std::vector<VPL> left_vpls;
+	std::vector<VPL> right_vpls;
+	divideByGreatestDim(vpls, left_vpls, right_vpls, bottom_up_thresh, min_dist / 10.f);
+
+	auto lc = tdCreateLightTree(left_vpls, vpl_type, min_dist, bottom_up_thresh, rng);
+	auto rc = tdCreateLightTree(right_vpls, vpl_type, min_dist, bottom_up_thresh, rng);
+
+	std::uniform_real_distribution<float> gen(0, 1);
+
+	std::unique_ptr<LightTreeNode> curr_node(new LightTreeNode());
+	float union_angle_span = 0.f;
+	Vector3f bcone(0.f);
+
+	if(vpl_type != EDirectionalEmitterVPL){
+		curr_node->min_bounds = Point(std::min(lc->min_bounds[0], rc->min_bounds[0]), 
+			std::min(lc->min_bounds[1], rc->min_bounds[1]), 
+			std::min(lc->min_bounds[2], rc->min_bounds[2]));
+		curr_node->max_bounds = Point(std::max(lc->max_bounds[0], rc->max_bounds[0]), 
+			std::max(lc->max_bounds[1], rc->max_bounds[1]), 
+			std::max(lc->max_bounds[2], rc->max_bounds[2]));
+	}
+
+	if(vpl_type != EPointEmitterVPL){
+		Vector3 ray1 = lc->cone_ray;
+		Vector3 ray2 = rc->cone_ray;
+		float ha1 = lc->cone_halfangle;
+		float ha2 = rc->cone_halfangle;
+
+		float angle = atan2(cross(ray1, ray2).length(), dot(ray1, ray2));
+		float max_child_half = std::max(ha1, ha2);
+		float min_child_half = std::min(ha1, ha2);
+
+		if((angle < max_child_half && (max_child_half - angle) > min_child_half) || (ray1 - ray2).length() < std::numeric_limits<float>::epsilon()){
+			union_angle_span = max_child_half;
+			bcone = ha1 > ha2 ? ray1 : ray2;
+		}
+		else{
+			union_angle_span = angle + ha1 + ha2;
+			union_angle_span = union_angle_span > M_PI ? 2 * M_PI : union_angle_span;
+			union_angle_span = std::min(union_angle_span / 2.f, M_PI);
+
+			Vector3f axis = cross(ray1, ray2);
+			if(axis.length() < std::numeric_limits<float>::epsilon()){
+				axis = cross(ray1, Vector3f(gen(rng), gen(rng), gen(rng)));
+			}
+
+			Point new_coneray = Transform::rotate(axis, -ha1).transformAffine(Point(ray1));
+			bcone = Vector(Transform::rotate(axis, union_angle_span).transformAffine(new_coneray));
+		}
+	}
+
+	curr_node->cone_ray = bcone;
+	curr_node->cone_halfangle = union_angle_span;
+	
+	float lc_intensity = lc->emission_scale;
+	float rc_intensity = rc->emission_scale;
+
+	float sample = gen(rng);
+
+	if(lc_intensity > 0.f || rc_intensity > 0.f){
+		if (sample < lc_intensity / (lc_intensity + rc_intensity)) {
+			curr_node->vpl = lc->vpl;
+		}
+		else {
+			curr_node->vpl = rc->vpl;
+		}
+	}
+
+	curr_node->emission_scale = lc_intensity + rc_intensity;
+
+	curr_node->left = std::move(lc);
+	curr_node->right = std::move(rc);
+
+	return curr_node;
 }
 
 float distToBox(Point p, Point box_min, Point box_max){
@@ -615,9 +695,9 @@ LightTree::LightTree(const std::vector<VPL>& vpls, float min_dist, std::uint32_t
 
 	std::mt19937 rng(std::chrono::high_resolution_clock::now().time_since_epoch().count());
 
-	point_tree_root_ = tdCreateLightTree(point_vpls_, EPointEmitterVPL, min_dist_, 2000, rng);
-	oriented_tree_root_ = tdCreateLightTree(oriented_vpls_, ESurfaceVPL, min_dist_, 2000, rng);
-	directional_tree_root_ = tdCreateLightTree(directional_vpls_, EDirectionalEmitterVPL, min_dist_, 2000, rng);
+	point_tree_root_ = tdCreateLightTree(point_vpls_, EPointEmitterVPL, min_dist_, 10000, rng);
+	oriented_tree_root_ = tdCreateLightTree(oriented_vpls_, ESurfaceVPL, min_dist_, 10000, rng);
+	directional_tree_root_ = tdCreateLightTree(directional_vpls_, EDirectionalEmitterVPL, min_dist_, 10000, rng);
 }
 
 LightTree::LightTree(const LightTree& other) : point_vpls_(other.point_vpls_), directional_vpls_(other.directional_vpls_),

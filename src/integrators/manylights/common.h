@@ -164,8 +164,11 @@ struct KDTNode{
     std::unique_ptr<KDTNode> right;
     std::vector<std::vector<int>> nearest_neighbours;
     std::vector<std::vector<float>> neighbour_distances;
-    float rank_ratio;
+    std::vector<float> rank_ratio;
     float sample_ratio;
+    float rank_ratio2;
+    std::vector<std::vector<float>> singular_values;
+    std::vector<float> singular_values2;
 
     KDTNode(std::vector<Sample>* sample_set) : sample_indices(), samples(sample_set), 
         left(nullptr), right(nullptr), rank_ratio(0.f), sample_ratio(0.f){
