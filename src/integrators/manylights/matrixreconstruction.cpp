@@ -497,10 +497,10 @@ std::unique_ptr<KDTNode<ReconstructionSample>> constructKDTree(Scene* scene, std
                 //calculates the position the ray intersects with
                 Ray ray;
 
-                float x_jitter = 0.5f;//sampler->next1D() / cell_dim;
-                float y_jitter = 0.5f;//sampler->next1D() / cell_dim;
-                float x_off = (i % spp) * cell_side_len;
-                float y_off = (i / spp) * cell_side_len;
+                float x_jitter = sampler->next1D() * cell_side_len;
+                float y_jitter = sampler->next1D() * cell_side_len;
+                float x_off = (i % cell_dim) * cell_side_len;
+                float y_off = (i / cell_dim) * cell_side_len;
 
                 Point2 sample_position(x + x_off + x_jitter, y + y_off + y_jitter);
 
@@ -971,7 +971,7 @@ std::tuple<std::uint32_t, float, float, float, float> adaptiveMatrixReconstructi
 
             //we may want to regenerate the sample indices for a variety of reasons, in which case the indices are generated and
             //the pseudoinverse is recalculated
-            if(full_col_sampled || force_resample){
+            if(sample_omega.rows() != reconstructed.rows() && (full_col_sampled || force_resample)){
                 full_col_sampled = false;
                 auto sample_t = std::chrono::high_resolution_clock::now();
                 sampled = sampleCol(scene, slice, vpls, order[i], min_dist, num_samples, rng, sample_omega, sampled, 
@@ -1343,11 +1343,17 @@ std::tuple<float, float, float, float, float, float> recover(KDTNode<Reconstruct
             std::uint32_t basis_rank;
             std::uint32_t samples;
             auto recover_start_t = std::chrono::high_resolution_clock::now();
-            std::tie(samples, svd_time, reconstruct_time, adaptive_sample_time, other_time) = 
+            float svd_t, recon_t, adaptive_sample_t, other_t;
+            std::tie(samples, svd_t, recon_t, adaptive_sample_t, other_t) = 
                 adaptiveMatrixReconstruction(mat, scene, slice, quadranted_vpls[i], general_params.min_dist, 
                 general_params.sample_perc, rng, ac_params.vis_only, ac_params.rec_trans, ac_params.import_sample, 
                 ac_params.force_resample, basis_rank, general_params.vsl, cluster_contribs, gather_stat_images,
                 slice->singular_values[i]);
+            svd_time += svd_t;
+            reconstruct_time += recon_t;
+            adaptive_sample_time += adaptive_sample_t;
+            other_time += other_t;
+
             auto recover_t = std::chrono::high_resolution_clock::now();
             total_performed_samples += samples;
             slice->rank_ratio[i] = float(basis_rank) / std::min(mat.rows(), mat.cols());

@@ -59,7 +59,7 @@ const std::array<std::function<bool(const VPL&, const VPL&)>, 6> divider_sorter{
 };
 
 void divideByGreatestDim(const std::vector<VPL>& vpls, std::vector<VPL>& left, std::vector<VPL>& right, std::uint32_t min_size,
-	float norm_scale){
+	float norm_scale, EVPLType vpl_type){
 	left.clear();
 	right.clear();
 
@@ -136,14 +136,17 @@ void divideByGreatestDim(const std::vector<VPL>& vpls, std::vector<VPL>& left, s
 		right.insert(right.end(), vpl_sorted.begin() + midpoint, vpl_sorted.end());
 	}*/
 
+	bool has_directional = vpl_type != EPointEmitterVPL;
+	bool has_positional = vpl_type != EDirectionalEmitterVPL;
+
 	Eigen::MatrixXf mean = Eigen::MatrixXf::Zero(6, 1);
 	for(std::uint32_t i = 0; i < vpls.size(); ++i){
-		mean(0, 0) += vpls[i].its.p.x;
-		mean(1, 0) += vpls[i].its.p.y;
-		mean(2, 0) += vpls[i].its.p.z;
-		mean(3, 0) += vpls[i].its.shFrame.n.x * norm_scale;
-		mean(4, 0) += vpls[i].its.shFrame.n.y * norm_scale;
-		mean(5, 0) += vpls[i].its.shFrame.n.z * norm_scale;
+		mean(0, 0) += has_positional ? vpls[i].its.p.x : 0.f;
+		mean(1, 0) += has_positional ? vpls[i].its.p.y : 0.f;
+		mean(2, 0) += has_positional ? vpls[i].its.p.z : 0.f;
+		mean(3, 0) += has_directional ? vpls[i].its.shFrame.n.x * norm_scale : 0.f;
+		mean(4, 0) += has_directional ? vpls[i].its.shFrame.n.y * norm_scale : 0.f;
+		mean(5, 0) += has_directional ? vpls[i].its.shFrame.n.z * norm_scale : 0.f;
 	}
 
 	mean /= vpls.size();
@@ -151,12 +154,12 @@ void divideByGreatestDim(const std::vector<VPL>& vpls, std::vector<VPL>& left, s
 	Eigen::MatrixXf cov_mat = Eigen::MatrixXf::Zero(6, 6);
 	for(std::uint32_t i = 0; i < vpls.size(); ++i){
 		Eigen::MatrixXf curr_pt(6, 1);
-		curr_pt(0, 0) = vpls[i].its.p.x;
-		curr_pt(1, 0) = vpls[i].its.p.y;
-		curr_pt(2, 0) = vpls[i].its.p.z;
-		curr_pt(3, 0) = vpls[i].its.shFrame.n.x * norm_scale;
-		curr_pt(4, 0) = vpls[i].its.shFrame.n.y * norm_scale;
-		curr_pt(5, 0) = vpls[i].its.shFrame.n.z * norm_scale;
+		curr_pt(0, 0) = has_positional ? vpls[i].its.p.x : 0.f;
+		curr_pt(1, 0) = has_positional ? vpls[i].its.p.y : 0.f;
+		curr_pt(2, 0) = has_positional ? vpls[i].its.p.z : 0.f;
+		curr_pt(3, 0) = has_directional ? vpls[i].its.shFrame.n.x * norm_scale : 0.f;
+		curr_pt(4, 0) = has_directional ? vpls[i].its.shFrame.n.y * norm_scale : 0.f;
+		curr_pt(5, 0) = has_directional ? vpls[i].its.shFrame.n.z * norm_scale : 0.f;
 
 		cov_mat += curr_pt * curr_pt.transpose();
 	}
@@ -173,12 +176,12 @@ void divideByGreatestDim(const std::vector<VPL>& vpls, std::vector<VPL>& left, s
 	float proj_mean = 0.f;
 	for(std::uint32_t i = 0; i < vpls.size(); ++i){
 		Eigen::VectorXf curr_pt(6);
-		curr_pt(0) = vpls[i].its.p.x;
-		curr_pt(1) = vpls[i].its.p.y;
-		curr_pt(2) = vpls[i].its.p.z;
-		curr_pt(3) = vpls[i].its.shFrame.n.x * norm_scale;
-		curr_pt(4) = vpls[i].its.shFrame.n.y * norm_scale;
-		curr_pt(5) = vpls[i].its.shFrame.n.z * norm_scale;
+		curr_pt(0) = has_positional ? vpls[i].its.p.x : 0.f;
+		curr_pt(1) = has_positional ? vpls[i].its.p.y : 0.f;
+		curr_pt(2) = has_positional ? vpls[i].its.p.z : 0.f;
+		curr_pt(3) = has_directional ? vpls[i].its.shFrame.n.x * norm_scale : 0.f;
+		curr_pt(4) = has_directional ? vpls[i].its.shFrame.n.y * norm_scale : 0.f;
+		curr_pt(5) = has_directional ? vpls[i].its.shFrame.n.z * norm_scale : 0.f;
 
 		float proj_rat = curr_pt.dot(axis);
 		proj_mean += proj_rat;
@@ -394,7 +397,7 @@ std::unique_ptr<LightTreeNode> tdCreateLightTree(const std::vector<VPL>& vpls, E
 
 	std::vector<VPL> left_vpls;
 	std::vector<VPL> right_vpls;
-	divideByGreatestDim(vpls, left_vpls, right_vpls, bottom_up_thresh, min_dist / 10.f);
+	divideByGreatestDim(vpls, left_vpls, right_vpls, bottom_up_thresh, min_dist / 10.f, vpl_type);
 
 	auto lc = tdCreateLightTree(left_vpls, vpl_type, min_dist, bottom_up_thresh, rng);
 	auto rc = tdCreateLightTree(right_vpls, vpl_type, min_dist, bottom_up_thresh, rng);
