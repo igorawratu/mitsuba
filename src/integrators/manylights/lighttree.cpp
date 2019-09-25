@@ -194,7 +194,7 @@ void divideByGreatestDim(const std::vector<VPL>& vpls, std::vector<VPL>& left, s
 
 	float midpoint = (proj_max + proj_min) / 2.f;
 	for(std::uint32_t i = 0; i < projections.size(); ++i){
-		if(projections[i].first < midpoint){
+		if(projections[i].first < proj_mean){
 			left.push_back(vpls[projections[i].second]);
 		}
 		else{
@@ -685,7 +685,7 @@ LightTree::LightTree(const std::vector<VPL>& vpls, float min_dist, std::uint32_t
 			case EPointEmitterVPL:
 				point_vpls_.push_back(vpls[i]);
 				break;
-			case ESurfaceVPL:
+			case ESurfaceVPL: 
 				oriented_vpls_.push_back(vpls[i]);
 				break;
 			case EDirectionalEmitterVPL:

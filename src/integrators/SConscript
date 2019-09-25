@@ -19,10 +19,15 @@ plugins += env.SharedLibrary('irrcache', ['misc/irrcache.cpp', 'misc/irrcache_pr
 plugins += env.SharedLibrary('multichannel', ['misc/multichannel.cpp'])
 plugins += env.SharedLibrary('field', ['misc/field.cpp'])
 plugins += env.SharedLibrary('motion', ['misc/motion.cpp'])
+
+env.Prepend(CPPPATH="/disc/swang/flann/src/cpp")
+env.Prepend(LIBPATH="/disc/swang/flann/build/lib")
+env.Prepend(LIBS="OpenCL")
+
 plugins += env.SharedLibrary('manylights', ['manylights/manylights.cpp', 'manylights/lighttree.cpp', 
     'manylights/rowcolumnsampling.cpp', 'manylights/matrixreconstruction.cpp', 
     'manylights/lightclustererrenderer.cpp', 'manylights/matrixseparationrenderer.cpp',
-    'manylights/common.cpp', 'manylights/filewriter.cpp'])
+    'manylights/common.cpp', 'manylights/filewriter.cpp', 'manylights/hwshader.cpp'])
 
 env.Append()
 env.Append()

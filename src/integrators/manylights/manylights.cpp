@@ -308,7 +308,8 @@ public:
 				"(e.g. perspective/thinlens/orthographic/telecentric)!");
 
 		vpls_.clear();
-		spp_ = upperPo2(scene->getSampler()->getSampleCount());
+		std::uint32_t upper_sqrt = ceil(sqrt(scene->getSampler()->getSampleCount())) + 0.5f;
+		spp_ = upper_sqrt * upper_sqrt;//upperPo2(scene->getSampler()->getSampleCount());
 		size_t sample_count = properties_.getInteger("vpls", 1024);
 		vpls_.reserve(sample_count);
 		float normalization = 1.f / generateVPLs(scene, 0, sample_count, max_depth_, true, vpls_);
@@ -387,6 +388,7 @@ private:
 				bool truncated = props.getInteger("completion-use_truncated", 0) > 0;
 				bool show_slices = props.getInteger("completion-show_slices", 0) > 0;
 				bool show_stats = props.getInteger("completion-show_stats", 0) > 0;
+				bool show_svd = props.getInteger("completion-show_svd", 0) > 0;
 				float error_scale = props.getFloat("completion-error_scale", 1.f);
 				ClusteringStrategy cs = props.getString("completion-cluster_strat", "ls") == "ls" ? 
 					ClusteringStrategy::LS : ClusteringStrategy::MDLC;
@@ -395,7 +397,7 @@ private:
 				return std::unique_ptr<ManyLightsRenderer>(new MatrixReconstructionRenderer(vpls_, sample_percentage, min_dist_, 
 					step_size_factor, tolerance, tau, max_iterations, slice_size, visibility_only, adaptive_col_sampling, 
 					adaptive_importance_sampling, adaptive_force_resample, adaptive_recover_transpose, truncated, show_slices, vsl,
-					show_stats, cs, error_scale));
+					show_stats, show_svd, cs, error_scale));
 			}
 			case MATRIXSEPARATION:
 			{
