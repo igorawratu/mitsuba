@@ -225,6 +225,10 @@ public:
         return result * Frame::cosTheta(bRec.wo);
     }
 
+    Spectrum getEtaSpec(Vector wi) const{
+        return Spectrum(1.f);
+    }
+
     Float pdf(const BSDFSamplingRecord &bRec, EMeasure measure) const {
         if (Frame::cosTheta(bRec.wi) <= 0 ||
             Frame::cosTheta(bRec.wo) <= 0 || measure != ESolidAngle)

@@ -70,6 +70,14 @@ public:
         BSDF::configure();
     }
 
+    Spectrum getEtaSpec(Vector wi) const{
+        return m_nested->getEtaSpec(wi);
+    }
+
+    Spectrum getK(Vector wi) const{
+        return m_nested->getK(wi);
+    }
+
     void serialize(Stream *stream, InstanceManager *manager) const {
         BSDF::serialize(stream, manager);
 

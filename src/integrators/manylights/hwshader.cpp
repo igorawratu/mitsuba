@@ -115,17 +115,22 @@ HWShader::~HWShader(){
 }
 
 struct PixelElement{
-
+    cl_float r, g, b;
+    cl_float x, y, z;
+    cl_float nx, ny, nz;
+    cl_float roughness;
+    cl_float eta, k;
 };
 
 struct LightElement{
-
+    cl_float r, g, b;
+    cl_float nx, ny, nz;
+    cl_float x, y, z;
+    cl_float rad;
 };
 
 struct OutputElement{
-    cl_float r;
-    cl_float g;
-    cl_float b;
+    cl_float r, g, b;
 };
 
 bool HWShader::initializeBuffers(std::uint32_t size){

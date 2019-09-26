@@ -213,6 +213,14 @@ public:
         configure();
     }
 
+    Spectrum getEtaSpec(Vector wi) const{
+        return m_eta;
+    }
+
+    Spectrum getK(Vector wi) const{
+        return m_k;
+    }
+
     void serialize(Stream *stream, InstanceManager *manager) const {
         BSDF::serialize(stream, manager);
 

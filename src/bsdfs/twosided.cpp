@@ -119,6 +119,24 @@ public:
         }
     }
 
+    Spectrum getEtaSpec(Vector wi) const{
+        //if(Frame::cosTheta(wi) > 0){
+            return m_nestedBRDF[0]->getEtaSpec(wi);
+        //}
+        //else{
+        //    return m_nestedBRDF[1]->getEtaSpec(wi);
+        //}
+    }
+
+    Spectrum getK(Vector wi) const{
+        //if(Frame::cosTheta(wi) > 0){
+            return m_nestedBRDF[0]->getK(wi);
+        //}
+        //else{
+        //    return m_nestedBRDF[1]->getK(wi);
+        //}
+    }
+
     Float pdf(const BSDFSamplingRecord &bRec, EMeasure measure) const {
         BSDFSamplingRecord b(bRec);
 

@@ -515,7 +515,7 @@ std::unique_ptr<KDTNode<ReconstructionSample>> constructKDTree(Scene* scene, std
                         break;
                     }
 
-                    if(curr_sample.its.getBSDF()->getType() & BSDF::ESmooth || curr_sample.its.isEmitter()){
+                    if(!(curr_sample.its.getBSDF()->getType() & BSDF::EDelta) || curr_sample.its.isEmitter()){
                         break;
                     }
 
@@ -538,11 +538,10 @@ std::unique_ptr<KDTNode<ReconstructionSample>> constructKDTree(Scene* scene, std
                 }
                 else if(curr_sample.its.isEmitter()){
                     curr_sample.color = curr_sample.its.Le(-curr_sample.ray.d);
-                }    
-                
+                }
+
                 samples[y * film->getSize().x * spp + x * spp + i] = std::move(curr_sample);
             }
-            
         }
     }
 

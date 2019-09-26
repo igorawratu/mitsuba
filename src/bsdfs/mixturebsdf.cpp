@@ -102,6 +102,14 @@ public:
             m_bsdfs[i]->decRef();
     }
 
+    Spectrum getEtaSpec(Vector wi) const{
+        return m_bsdfs[0]->getEtaSpec(wi);
+    }
+
+    Spectrum getK(Vector wi) const{
+        return m_bsdfs[0]->getEtaSpec(wi);
+    }
+
     void serialize(Stream *stream, InstanceManager *manager) const {
         BSDF::serialize(stream, manager);
 

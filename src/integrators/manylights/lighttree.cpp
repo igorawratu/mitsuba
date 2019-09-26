@@ -876,7 +876,7 @@ std::vector<VPL> LightTree::getClusteringForPoints(const std::vector<Intersectio
 
 		if(node->left.get() != nullptr){
 			float rad = 0.f;
-			float actual_rad = 0.f;
+			//float actual_rad = 0.f;
 			for(std::uint32_t i = 0; i < points.size(); ++i){
 				rad += calculateClusterContribution(points[i].p, points[i].geoFrame.n, node->left.get(), node->left->vpl.type, min_dist_, contribution_cache) / points.size();
 				//actual_rad += calculateExactClusterContribution(points[i].p, points[i].geoFrame.n, node->left.get(), node->left->vpl.type, min_dist_, contribution_cache);
@@ -890,7 +890,7 @@ std::vector<VPL> LightTree::getClusteringForPoints(const std::vector<Intersectio
 
 		if(node->right.get() != nullptr){
 			float rad = 0.f;
-			float actual_rad = 0.f;
+			//float actual_rad = 0.f;
 			for(std::uint32_t i = 0; i < points.size(); ++i){
 				rad += calculateClusterContribution(points[i].p, points[i].geoFrame.n, node->right.get(), node->right->vpl.type, min_dist_, contribution_cache) / points.size();
 				//actual_rad += calculateExactClusterContribution(points[i].p, points[i].geoFrame.n, node->right.get(), node->right->vpl.type, min_dist_, contribution_cache);

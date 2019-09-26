@@ -288,6 +288,14 @@ public:
         return 0.0f;
     }
 
+    Spectrum getEtaSpec(Vector wi) const{
+        return m_eta;
+    }
+
+    Spectrum getK(Vector wi) const{
+        return m_k;
+    }
+
     std::string toString() const {
         std::ostringstream oss;
         oss << "SmoothConductor[" << endl

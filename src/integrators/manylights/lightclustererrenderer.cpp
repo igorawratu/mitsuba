@@ -62,10 +62,10 @@ bool LightClustererRenderer::render(Scene* scene, std::uint32_t spp, const Rende
             for(std::uint32_t j = 0; j < spp; ++j){
                 Ray ray;
 
-                float x_jitter = sampler->next1D() / cell_dim;
-                float y_jitter = sampler->next1D() / cell_dim;
-                float x_off = (j % spp) * cell_side_len;
-                float y_off = (j / spp) * cell_side_len;
+                float x_jitter = /*sampler->next1D()*/ 0.5f * cell_side_len;
+                float y_jitter = /*sampler->next1D()*/ 0.5f * cell_side_len;
+                float x_off = (j % cell_dim) * cell_side_len;
+                float y_off = (j / cell_dim) * cell_side_len;
 
                 Point2 sample_position(x + x_off + x_jitter, y + y_off + y_jitter);
                 

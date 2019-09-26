@@ -158,6 +158,10 @@ public:
         }
     }
 
+    Spectrum getEtaSpec(Vector wi) const{
+        return Spectrum(1.f);
+    }
+
     void serialize(Stream *stream, InstanceManager *manager) const {
         BSDF::serialize(stream, manager);
 
