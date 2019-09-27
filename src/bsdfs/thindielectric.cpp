@@ -97,6 +97,10 @@ public:
         configure();
     }
 
+    Spectrum getSpecularReflectance(const Intersection &its) const{
+        return m_specularReflectance->eval(its);
+    }
+
     Spectrum getEtaSpec(Vector wi) const{
         return Spectrum(m_eta);
     }

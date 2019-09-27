@@ -119,6 +119,10 @@ public:
         }
     }
 
+    Spectrum getSpecularReflectance(const Intersection &its) const{
+        return m_nestedBRDF[0]->getSpecularReflectance(its);
+    }
+
     Spectrum getEtaSpec(Vector wi) const{
         //if(Frame::cosTheta(wi) > 0){
             return m_nestedBRDF[0]->getEtaSpec(wi);

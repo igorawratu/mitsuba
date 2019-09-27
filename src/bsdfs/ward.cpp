@@ -136,6 +136,10 @@ public:
         configure();
     }
 
+    Spectrum getSpecularReflectance(const Intersection &its) const{
+        return m_specularReflectance->eval(its);
+    }
+
     void configure() {
         unsigned int extraFlags = 0;
         if (m_alphaU != m_alphaV)

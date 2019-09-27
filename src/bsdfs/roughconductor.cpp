@@ -221,6 +221,10 @@ public:
         return m_k;
     }
 
+    Spectrum getSpecularReflectance(const Intersection &its) const{
+        return m_specularReflectance->eval(its);
+    }
+
     void serialize(Stream *stream, InstanceManager *manager) const {
         BSDF::serialize(stream, manager);
 

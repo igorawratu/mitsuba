@@ -184,6 +184,10 @@ public:
         configure();
     }
 
+    Spectrum getSpecularReflectance(const Intersection &its) const{
+        return m_specularReflectance->eval(its);
+    }
+
     void configure() {
         /* Verify the input parameters and fix them if necessary */
         m_specularReflectance = ensureEnergyConservation(

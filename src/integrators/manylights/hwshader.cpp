@@ -119,7 +119,7 @@ struct PixelElement{
     cl_float x, y, z;
     cl_float nx, ny, nz;
     cl_float roughness;
-    cl_float eta, k;
+    cl_float eta_r, eta_g, eta_b, k_r, k_g, k_b;
 };
 
 struct LightElement{
@@ -226,8 +226,15 @@ void HWShader::renderSlices(const std::vector<KDTNode<ReconstructionSample>*>& s
     std::uint32_t curr_element = 0;
     for(std::uint32_t i = 0; i < slices.size(); ++i){
         for(std::uint32_t j = 0; j < slices[i]->sample_indices.size(); ++j){
-            //assign input elements here
-
+            struct PixelElement{
+    cl_float r, g, b;
+    cl_float x, y, z;
+    cl_float nx, ny, nz;
+    cl_float roughness;
+    cl_float eta_r, eta_g, eta_b, k_r, k_g, k_b;
+};
+            Spectrum albedo;
+            host_pixel_buffer[curr_element].r = 
             curr_element++;
         }
     }

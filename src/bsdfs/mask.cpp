@@ -91,6 +91,10 @@ public:
     Spectrum getK(Vector wi) const{
         return m_nestedBSDF->getK(wi);
     }
+    
+    Spectrum getSpecularReflectance(const Intersection &its) const{
+        return m_nestedBSDF->getSpecularReflectance(its);
+    }
 
     void serialize(Stream *stream, InstanceManager *manager) const {
         BSDF::serialize(stream, manager);

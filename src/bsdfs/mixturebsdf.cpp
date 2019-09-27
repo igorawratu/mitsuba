@@ -110,6 +110,10 @@ public:
         return m_bsdfs[0]->getEtaSpec(wi);
     }
 
+    Spectrum getSpecularReflectance(const Intersection &its) const{
+        return m_bsdfs[0]->getSpecularReflectance(its);
+    }
+
     void serialize(Stream *stream, InstanceManager *manager) const {
         BSDF::serialize(stream, manager);
 
