@@ -96,6 +96,10 @@ public:
         return m_nestedBSDF->getSpecularReflectance(its);
     }
 
+    Spectrum getDiffuseReflectance(const Intersection& its) const{
+        return m_nestedBSDF->getDiffuseReflectance(its);
+    }
+
     void serialize(Stream *stream, InstanceManager *manager) const {
         BSDF::serialize(stream, manager);
 

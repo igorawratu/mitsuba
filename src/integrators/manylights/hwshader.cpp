@@ -3,6 +3,7 @@
 #include <iostream>
 #include <memory>
 #include <fstream>
+#include "hwshader_ocl.h"
 
 MTS_NAMESPACE_BEGIN
 
@@ -70,7 +71,7 @@ HWShader::HWShader() :
         return;
     }
 
-    kernel_ = clCreateKernel(program_, "vector_add", &ret);
+    kernel_ = clCreateKernel(program_, "shade", &ret);
     if(ret != 0){
         std::cerr << "Unable to create shading kernel" << std::endl;
         return;
@@ -115,11 +116,13 @@ HWShader::~HWShader(){
 }
 
 struct PixelElement{
-    cl_float r, g, b;
+    cl_float dr, dg, db;
+    cl_float sr, sg, sb;
     cl_float x, y, z;
     cl_float nx, ny, nz;
     cl_float roughness;
     cl_float eta_r, eta_g, eta_b, k_r, k_g, k_b;
+    cl_float wi_x, wi_y, wi_z;
 };
 
 struct LightElement{
@@ -226,15 +229,38 @@ void HWShader::renderSlices(const std::vector<KDTNode<ReconstructionSample>*>& s
     std::uint32_t curr_element = 0;
     for(std::uint32_t i = 0; i < slices.size(); ++i){
         for(std::uint32_t j = 0; j < slices[i]->sample_indices.size(); ++j){
-            struct PixelElement{
-    cl_float r, g, b;
-    cl_float x, y, z;
-    cl_float nx, ny, nz;
-    cl_float roughness;
-    cl_float eta_r, eta_g, eta_b, k_r, k_g, k_b;
-};
-            Spectrum albedo;
-            host_pixel_buffer[curr_element].r = 
+            ReconstructionSample& sample = slices[i]->sample(j);
+            const BSDF* bsdf = sample.its.getBSDF();
+
+            Spectrum diffuse_col = bsdf->getDiffuseReflectance(sample.its);
+            diffuse_col.toLinearRGB(host_pixel_buffer[curr_element].dr, 
+                host_pixel_buffer[curr_element].dg, host_pixel_buffer[curr_element].db);
+            
+            Spectrum spec_col = bsdf->getSpecularReflectance(sample.its);
+            spec_col.toLinearRGB(host_pixel_buffer[curr_element].sr, 
+                host_pixel_buffer[curr_element].sg, host_pixel_buffer[curr_element].sb);
+
+            host_pixel_buffer[curr_element].x = sample.its.p.x;
+            host_pixel_buffer[curr_element].y = sample.its.p.y;
+            host_pixel_buffer[curr_element].z = sample.its.p.z;
+            host_pixel_buffer[curr_element].nx = sample.its.geoFrame.n.x;
+            host_pixel_buffer[curr_element].ny = sample.its.geoFrame.n.y;
+            host_pixel_buffer[curr_element].nz = sample.its.geoFrame.n.z;
+
+            host_pixel_buffer[curr_element].roughness = std::min(1.f, bsdf->getRoughness(sample.its, 0));
+            
+            Spectrum eta = bsdf->getEtaSpec(sample.its.wi);
+            eta.toLinearRGB(host_pixel_buffer[curr_element].eta_r, 
+                host_pixel_buffer[curr_element].eta_g, host_pixel_buffer[curr_element].eta_b);
+
+            Spectrum k = bsdf->getK(sample.its.wi);
+            k.toLinearRGB(host_pixel_buffer[curr_element].k_r, host_pixel_buffer[curr_element].k_g,
+                host_pixel_buffer[curr_element].k_b);
+
+            host_pixel_buffer[curr_element].wi_x = sample.its.wi.x;
+            host_pixel_buffer[curr_element].wi_y = sample.its.wi.y;
+            host_pixel_buffer[curr_element].wi_z = sample.its.wi.z;
+            
             curr_element++;
         }
     }
@@ -251,7 +277,20 @@ void HWShader::renderSlices(const std::vector<KDTNode<ReconstructionSample>*>& s
         curr_element = 0;
         for(std::uint32_t j = 0; j < slices.size(); ++j){
             for(std::uint32_t k = 0; k < slices[i]->sample_indices.size(); ++k){
-                //assign ith light props here
+                VPL& vpl = (*vpls[j])[i];
+
+                 vpl.P.toLinearRGB(host_light_buffer[curr_element].r, host_light_buffer[curr_element].g,
+                    host_light_buffer[curr_element].b);
+
+                host_light_buffer[curr_element].nx = vpl.its.geoFrame.n.x;
+                host_light_buffer[curr_element].ny = vpl.its.geoFrame.n.y;
+                host_light_buffer[curr_element].nz = vpl.its.geoFrame.n.z;
+
+                host_light_buffer[curr_element].x = vpl.its.p.x;
+                host_light_buffer[curr_element].y = vpl.its.p.y;
+                host_light_buffer[curr_element].z = vpl.its.p.z;
+
+                host_light_buffer[curr_element].rad = vpl.radius;
                 
                 curr_element++;
             }

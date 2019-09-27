@@ -188,6 +188,10 @@ public:
         return m_specularReflectance->eval(its);
     }
 
+    Spectrum getDiffuseReflectance(const Intersection& its) const{
+        return Spectrum(0.f);
+    }
+
     void configure() {
         /* Verify the input parameters and fix them if necessary */
         m_specularReflectance = ensureEnergyConservation(

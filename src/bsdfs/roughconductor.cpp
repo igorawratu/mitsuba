@@ -378,6 +378,10 @@ public:
         return F * weight;
     }
 
+    Spectrum getDiffuseReflectance(const Intersection& its) const{
+        return Spectrum(0.f);
+    }
+
     Spectrum sample(BSDFSamplingRecord &bRec, Float &pdf, const Point2 &sample) const {
         if (Frame::cosTheta(bRec.wi) < 0 ||
             ((bRec.component != -1 && bRec.component != 0) ||

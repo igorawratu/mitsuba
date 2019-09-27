@@ -120,7 +120,12 @@ public:
     }
 
     Spectrum getSpecularReflectance(const Intersection &its) const{
-        return m_nestedBRDF[0]->getSpecularReflectance(its);
+        if (its.wi.z > 0){
+            return m_nestedBRDF[0]->getSpecularReflectance(its);
+        }
+        else{
+            return m_nestedBRDF[1]->getSpecularReflectance(its);
+        }
     }
 
     Spectrum getEtaSpec(Vector wi) const{

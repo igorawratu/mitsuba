@@ -355,6 +355,10 @@ public:
         }
     }
 
+    Spectrum getDiffuseReflectance(const Intersection& its) const{
+        return Spectrum(0.f);
+    }
+
     Float pdf(const BSDFSamplingRecord &bRec, EMeasure measure) const {
         if (measure != ESolidAngle)
             return 0.0f;

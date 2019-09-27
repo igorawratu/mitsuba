@@ -82,6 +82,10 @@ public:
             * (INV_PI * std::abs(Frame::cosTheta(bRec.wo)));
     }
 
+    Spectrum getDiffuseReflectance(const Intersection& its) const{
+        return Spectrum(0.f);
+    }
+
     Float pdf(const BSDFSamplingRecord &bRec, EMeasure measure) const {
         if (!(bRec.typeMask & EDiffuseTransmission) || measure != ESolidAngle
             || Frame::cosTheta(bRec.wi) * Frame::cosTheta(bRec.wo) >= 0)

@@ -1,0 +1,30 @@
+#ifndef hwshader_OCL
+#define hwshader_OCL
+const char *hwshader_ocl =
+"struct PixelElement{\n"
+"    cl_float dr, dg, db;\n"
+"    cl_float sr, sg, sb;\n"
+"    cl_float x, y, z;\n"
+"    cl_float nx, ny, nz;\n"
+"    cl_float roughness;\n"
+"    cl_float eta_r, eta_g, eta_b, k_r, k_g, k_b;\n"
+"    cl_float wi_x, wi_y, wi_z;\n"
+"};\n"
+"\n"
+"struct LightElement{\n"
+"    cl_float r, g, b;\n"
+"    cl_float nx, ny, nz;\n"
+"    cl_float x, y, z;\n"
+"    cl_float rad;\n"
+"};\n"
+"\n"
+"struct OutputElement{\n"
+"    cl_float r, g, b;\n"
+"};\n"
+"\n"
+"__kernel void shade(__global const PixelElement* A, __global const LightElement* B, __global OutputElement *C){\n"
+"    int i = get_global_id(0);\n"
+"    \n"
+"    \n"
+"}\n";
+#endif

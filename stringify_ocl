@@ -1,0 +1,11 @@
+#!/bin/bash
+IN=$1
+NAME=${IN%.cl}
+OUT=${NAME}_ocl.h
+echo "#ifndef $(basename ${NAME})_OCL" > $OUT
+echo "#define $(basename ${NAME})_OCL" >> $OUT
+echo "const char *"$(basename ${NAME})"_ocl =" >>$OUT
+sed -e 's/\\/\\\\/g;s/"/\\"/g;s/^/"/;s/$/\\n"/' \
+ $IN >>$OUT
+echo ";" >>$OUT	
+echo "#endif" >> $OUT

@@ -177,6 +177,10 @@ public:
         return m_specularReflectance->eval(its);
     }
 
+    Spectrum getDiffuseReflectance(const Intersection& its) const{
+        return Spectrum(0.f);
+    }
+
     Spectrum getEtaSpec(Vector wi) const{
         return Spectrum(m_eta);
     }
