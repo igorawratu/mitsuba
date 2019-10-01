@@ -198,14 +198,14 @@ void HWShader::renderSlices(const std::vector<KDTNode<ReconstructionSample>*>& s
 
     assert(vpls.size() == slices.size());
 
-    if(!initialized_){
-        return;
-    }
-
     for(std::uint32_t i = 0; i < slices.size(); ++i){
         for(std::uint32_t j = 0; j < slices[i]->sample_indices.size(); ++j){
-            slices[i]->sample(j).unoccluded_samples.resize(cluster_size);
+            slices[i]->sample(j).unoccluded_samples.resize(cluster_size, Spectrum(0.f));
         }
+    }
+
+    if(!initialized_){
+        return;
     }
 
     std::uint32_t num_elements = 0;

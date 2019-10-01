@@ -21,6 +21,7 @@
 
 #include "common.h"
 #include "hwshader.h"
+#include "blockingqueue.hpp"
 
 MTS_NAMESPACE_BEGIN
 
@@ -258,8 +259,8 @@ double computeCost(const Eigen::MatrixXf& contrib_mat, const std::vector<int>& n
 
 std::vector<std::vector<std::uint32_t>> clusterVPLsBySplitting(const std::vector<std::vector<std::uint32_t>>& sampling_clusters, 
     const Eigen::MatrixXf& cluster_contributions, const std::vector<int>& nn, std::uint32_t num_clusters,
-     std::mt19937& rng, std::vector<float>& norm_cache){
-    
+     std::mt19937& rng){
+
     std::vector<std::vector<std::uint32_t>> splitting_clusters = sampling_clusters;
 
     typedef std::pair<std::uint32_t, double> ClusterContributionPair;
@@ -280,7 +281,7 @@ std::vector<std::vector<std::uint32_t>> clusterVPLsBySplitting(const std::vector
     std::priority_queue<ClusterContributionPair, std::vector<ClusterContributionPair>, 
         decltype(cluster_comparator)> split_queue(cluster_comparator);
 
-    norm_cache.reserve(cluster_contributions.cols());
+    std::vector<float> norm_cache(cluster_contributions.cols());
     for(std::uint32_t i = 0; i < cluster_contributions.cols(); ++i){
         norm_cache[i] = 0.f;
         for(std::uint32_t j = 0; j < nn.size(); ++j){
@@ -1176,7 +1177,7 @@ MatrixReconstructionRenderer::MatrixReconstructionRenderer(const std::vector<VPL
     std::uint32_t max_iterations, std::uint32_t slice_size, bool visibility_only, bool adaptive_col, 
     bool adaptive_importance_sampling, bool adaptive_force_resample, bool adaptive_recover_transpose,
     bool truncated, bool show_slices, bool vsl, bool gather_stat_images, bool show_svd,
-    ClusteringStrategy clustering_strategy, float error_scale) : 
+    ClusteringStrategy clustering_strategy, float error_scale, bool hw, std::uint32_t num_clusters) : 
         vpls_(vpls), 
         sample_percentage_(sample_percentage), 
         min_dist_(min_dist), 
@@ -1197,6 +1198,8 @@ MatrixReconstructionRenderer::MatrixReconstructionRenderer(const std::vector<VPL
         show_svd_(show_svd),
         clustering_strategy_(clustering_strategy),
         error_scale_(error_scale),
+        hw_(hw),
+        num_clusters_(num_clusters),
         cancel_(false){
 }
 
@@ -1220,6 +1223,8 @@ MatrixReconstructionRenderer::MatrixReconstructionRenderer(MatrixReconstructionR
     show_svd_(other.show_svd_),
     clustering_strategy_(other.clustering_strategy_),
     error_scale_(other.error_scale_),
+    hw_(other.hw_),
+    num_clusters_(other.num_clusters_),
     cancel_(other.cancel_){
 }
 
@@ -1245,6 +1250,8 @@ MatrixReconstructionRenderer& MatrixReconstructionRenderer::operator = (MatrixRe
         show_svd_ = other.show_svd_;
         clustering_strategy_ = other.clustering_strategy_;
         error_scale_ = other.error_scale_;
+        hw_ = other.hw_;
+        num_clusters_ = other.num_clusters_;
         cancel_ = other.cancel_;
     }
     return *this;
@@ -1299,14 +1306,9 @@ std::tuple<float, float, float, float, float, float> recover(KDTNode<Reconstruct
     float sample_time, recovery_time = 0.f, svd_time = 0.f, reconstruct_time = 0.f, adaptive_sample_time = 0.f, other_time = 0.f;
     if(general_params.adaptive_col){
         auto start_t = std::chrono::high_resolution_clock::now();
-        std::uint32_t total_slice_samples = 
-            computeUnoccludedSamples(slice, general_params.vsl, scene, vpls, general_params.min_dist);
+        computeUnoccludedSamples(slice, general_params.vsl, scene, vpls, general_params.min_dist);
 
         auto sample_t = std::chrono::high_resolution_clock::now();
-        //std::uint32_t base = slice->sample_indices.size() * vpls.size();
-
-        //std::cout << total_slice_samples << " " << base << " " <<
-        //    (float)total_slice_samples / base << std::endl;
 
         Point3f slice_center_of_mass(0.f, 0.f, 0.f);
         for(std::uint32_t i = 0; i < slice->sample_indices.size(); ++i){
@@ -1477,10 +1479,10 @@ void sliceWorkerLS(std::vector<std::int32_t>& work, std::uint32_t thread_id, std
     const GeneralParams& general_params, const SVTParams& svt_params, const AdaptiveConstructionParams& ac_params,
     std::uint64_t& total_samples, std::uint64_t& performed_samples, float& clustering_time, float& recovery_time,
     float& sample_time, float& svd_time, float& reconstruct_time, float& adaptive_sample_time, 
-    float& other_time, bool gather_stat_images, bool show_svd){
+    float& other_time, bool gather_stat_images, bool show_svd, std::uint32_t num_clusters){
 
     std::mt19937 rng(std::chrono::high_resolution_clock::now().time_since_epoch().count() * thread_id);
-    std::uint32_t split_num_clusters = std::min(total_vpls.size(), 1000 - cbsamp.size());
+    std::uint32_t split_num_clusters = std::min(total_vpls.size(), num_clusters - cbsamp.size());
 
     while(true){
         std::int32_t slice_id;
@@ -1498,8 +1500,7 @@ void sliceWorkerLS(std::vector<std::int32_t>& work, std::uint32_t thread_id, std
 
         auto start_t = std::chrono::high_resolution_clock::now();
 
-        std::vector<float> norm_cache;
-        std::vector<std::vector<std::uint32_t>> cbsplit = clusterVPLsBySplitting(cbsamp, contribs, nn[slice_id], split_num_clusters, rng, norm_cache);
+        std::vector<std::vector<std::uint32_t>> cbsplit = clusterVPLsBySplitting(cbsamp, contribs, nn[slice_id], split_num_clusters, rng);
         auto vpls = sampleRepresentatives(contribs, total_vpls, cbsplit, rng, general_params.min_dist);
 
         auto cluster_t = std::chrono::high_resolution_clock::now();
@@ -1583,41 +1584,178 @@ void sliceWorkerMDLC(std::vector<std::int32_t>& work, std::uint32_t thread_id, s
     }
 }
 
-bool MatrixReconstructionRenderer::render(Scene* scene, std::uint32_t spp, const RenderJob *job){
-    srand(time(0));
-    if(scene == nullptr){
-        return true;
-    }
+typedef std::pair<KDTNode<ReconstructionSample>*, std::uint32_t> HWWorkUnit;
 
-    {
-        std::lock_guard<std::mutex> lock(cancel_lock_);
-        cancel_ = false;
-    }
-
-    HWShader hwshader;
-
-    ref<Sensor> sensor = scene->getSensor();
-	ref<Film> film = sensor->getFilm();
-
-    auto size = film->getSize();
-    if(size.x == 0 || size.y == 0){
-        return true;
-    }
-
-    std::uint32_t samples_per_slice = 1;
-
-    ref<Bitmap> output_bitmap = new Bitmap(Bitmap::ERGB, Bitmap::EUInt8, size);
-    std::uint8_t* output_image = output_bitmap->getUInt8Data();
-    memset(output_image, 0, output_bitmap->getBytesPerPixel() * size.x * size.y);
-
-    ProgressReporter kdt_pr("Constructing kd-tree", 1, job);
-    auto kdt_root = constructKDTree(scene, slice_size_, samples_, min_dist_, samples_per_slice, spp);
-    kdt_pr.finish();
-    std::cout << std::endl;
-
+void processBatch(const std::vector<HWWorkUnit>& batch, HWShader& hw_shader, 
+    std::vector<std::vector<VPL>>& vpls, std::uint32_t cluster_size){
+    
     std::vector<KDTNode<ReconstructionSample>*> slices;
-    getSlices(kdt_root.get(), slices);
+    std::vector<std::vector<VPL>*> slice_vpls;
+    for(std::uint32_t i = 0; i < batch.size(); ++i){
+        slices.push_back(batch[i].first);
+        slice_vpls.push_back(&vpls[batch[i].second]);
+    }
 
+    hw_shader.renderSlices(slices, slice_vpls, cluster_size);
+}
+
+void unoccludedHWWorker(BlockingQueue<HWWorkUnit>& input, BlockingQueue<HWWorkUnit>& output, 
+    std::vector<std::vector<VPL>>& vpls, float min_dist, bool vsl, std::uint32_t cluster_size, 
+    std::uint32_t batch_size){
+    
+    HWShader hw_shader;
+
+    HWWorkUnit work_unit;
+    std::vector<HWWorkUnit> batch;
+    
+    while(input.pop(work_unit)){
+        batch.push_back(work_unit);
+
+        if(batch.size() >= batch_size){
+            processBatch(batch, hw_shader, vpls, cluster_size);
+            for(std::uint32_t i = 0; i < batch.size(); ++i){
+                output.push(batch[i]);
+            }
+
+            batch.clear();
+        }
+    }
+
+    if(batch.size() >= batch_size){
+        processBatch(batch, hw_shader, vpls, cluster_size);
+        for(std::uint32_t i = 0; i < batch.size(); ++i){
+            output.push(batch[i]);
+        }
+
+        output.close();
+    }
+}
+
+void clusterWorkerMDLC(BlockingQueue<HWWorkUnit>& input, BlockingQueue<HWWorkUnit>& output,
+    std::vector<std::vector<VPL>>& vpls, LightTree* light_tree, float min_dist){
+    
+    HWWorkUnit work_unit;
+    while(input.pop(work_unit)){
+        std::vector<Intersection> slice_points(work_unit.first->sample_indices.size());
+
+        for(std::uint32_t i = 0; i < slice_points.size(); ++i){
+            slice_points[i] = work_unit.first->sample(i).its;
+        }
+
+        vpls[work_unit.second] = light_tree->getClusteringForPoints(slice_points);
+        //not sure if this should change to a radius union approach instead
+        updateVPLRadii(vpls[work_unit.second], min_dist);
+
+        output.push(work_unit);
+    }
+
+    output.close();
+}
+
+void clusterWorkerLS(BlockingQueue<HWWorkUnit>& input, BlockingQueue<HWWorkUnit>& output,
+    std::vector<std::vector<VPL>>& vpls, const std::vector<std::vector<std::uint32_t>>& cbsamp, 
+    const Eigen::MatrixXf& contribs, const std::vector<std::vector<int>>& nn, 
+    const std::vector<VPL>& total_vpls, float min_dist, std::uint32_t num_clusters,
+    std::uint32_t thread_id){
+    
+    std::mt19937 rng(std::chrono::high_resolution_clock::now().time_since_epoch().count() * thread_id);
+    std::uint32_t split_num_clusters = std::min(total_vpls.size(), num_clusters - cbsamp.size());
+
+    HWWorkUnit work_unit;
+    while(input.pop(work_unit)){
+        std::vector<std::vector<std::uint32_t>> cbsplit = 
+            clusterVPLsBySplitting(cbsamp, contribs, nn[work_unit.second], split_num_clusters, rng);
+        vpls[work_unit.second] = sampleRepresentatives(contribs, total_vpls, cbsplit, rng, min_dist);
+
+        updateVPLRadii(vpls[work_unit.second], min_dist);
+
+        output.push(work_unit);
+    }
+
+    output.close();
+}
+
+void recover(KDTNode<ReconstructionSample>* slice, const std::vector<VPL>& vpls, Scene* scene,
+    bool gather_stat_images, bool show_svd, float sample_perc, float min_dist, std::mt19937& rng){
+    Point3f slice_center_of_mass(0.f, 0.f, 0.f);
+    for(std::uint32_t i = 0; i < slice->sample_indices.size(); ++i){
+        slice_center_of_mass += slice->sample(i).its.p;
+    }
+    slice_center_of_mass /= slice->sample_indices.size();
+
+    std::vector<std::vector<VPL>> quadranted_vpls(8);
+    std::vector<std::vector<std::uint32_t>> actual_vpl_index(8);
+
+    for(std::uint32_t i = 0; i < vpls.size(); ++i){
+        Vector3f dir = vpls[i].type == EDirectionalEmitterVPL ? Vector3f(vpls[i].its.shFrame.n) : 
+            slice_center_of_mass - vpls[i].its.p;
+        std::uint32_t quadrant = getQuadrant(dir);
+        quadranted_vpls[quadrant].push_back(vpls[i]);
+        actual_vpl_index[quadrant].push_back(i);
+    }
+
+    std::uint32_t total_performed_samples = 0;
+
+    slice->singular_values.resize(8);
+    slice->rank_ratio.resize(8);
+
+    for(std::uint32_t i = 0; i < quadranted_vpls.size(); ++i){
+        if(quadranted_vpls[i].size() == 0){
+            continue;
+        }
+
+        std::vector<float> cluster_contribs(quadranted_vpls[i].size(), 0.f);
+        for(std::uint32_t j = 0; j < slice->sample_indices.size(); ++j){
+            for(std::uint32_t k = 0; k < quadranted_vpls[i].size(); ++k){
+                cluster_contribs[k] += slice->sample(j).unoccluded_samples[actual_vpl_index[i][k]].getLuminance();
+            }
+        }
+
+        std::uint32_t mat_rows = slice->sample_indices.size();
+        Eigen::MatrixXf mat = Eigen::MatrixXf::Zero(mat_rows, quadranted_vpls[i].size());
+        std::uint32_t max_rank = std::min(mat.rows(), mat.cols());
+        std::uint32_t basis_rank;
+        std::uint32_t samples;
+        
+        float svd_t, recon_t, adaptive_sample_t, other_t;
+        std::tie(samples, svd_t, recon_t, adaptive_sample_t, other_t) = 
+            adaptiveMatrixReconstruction(mat, scene, slice, quadranted_vpls[i], min_dist, sample_perc, rng, 
+            true, false, true, false, basis_rank, false, cluster_contribs, gather_stat_images, show_svd,
+            slice->singular_values[i]);
+
+        total_performed_samples += samples;
+        slice->rank_ratio[i] = float(basis_rank) / max_rank;
+
+        updateSliceWithMatData(mat, slice, true, false, false, scene, vpls, actual_vpl_index[i], min_dist, 
+            gather_stat_images);    
+    }
+
+    for(std::uint32_t i = 0; i < slice->sample_indices.size(); ++i){
+        slice->sample(i).unoccluded_samples.clear();
+        slice->sample(i).unoccluded_samples.shrink_to_fit();
+    }
+
+    slice->sample_ratio = float(total_performed_samples) / (slice->sample_indices.size() * vpls.size());
+}
+
+void matrecWorker(BlockingQueue<HWWorkUnit>& input, BlockingQueue<HWWorkUnit>& output, 
+    std::vector<std::vector<VPL>>& vpls, Scene* scene, bool gather_stats, bool show_svd, 
+    float sample_perc, float min_dist, std::uint32_t thread_id){
+    
+    std::mt19937 rng(std::chrono::high_resolution_clock::now().time_since_epoch().count() * thread_id);
+    
+    HWWorkUnit work_unit;
+    while(input.pop(work_unit)){
+        recover(work_unit.first, vpls[work_unit.second], scene, gather_stats, show_svd, sample_perc,
+            min_dist, rng);
+        output.push(work_unit);
+    }
+}
+
+void MatrixReconstructionRenderer::renderNonHW(Scene* scene, std::uint32_t spp, const RenderJob *job,
+    std::vector<float>& timings, const std::vector<KDTNode<ReconstructionSample>*>& slices, 
+    std::uint32_t samples_per_slice){
+    
     std::uint64_t amount_sampled = 0;
     std::uint64_t total_samples = 0;
 
@@ -1664,7 +1802,7 @@ bool MatrixReconstructionRenderer::render(Scene* scene, std::uint32_t spp, const
 
     if(clustering_strategy_ == ClusteringStrategy::LS){
         ProgressReporter lscc_pr("Calculating cluster contributions", 1, job);
-        std::uint32_t num_clusters = std::min(std::uint32_t(vpls_.size()), std::uint32_t(1000 * 0.3f));
+        std::uint32_t num_clusters = std::min(std::uint32_t(vpls_.size()), std::uint32_t(num_clusters_ * 0.3f));
         sampled_slice_rows.resize(slices.size() * samples_per_slice);
         cluster_contributions = calculateClusterContributions(vpls_, slices, scene, min_dist_,
             sampled_slice_rows, samples_per_slice, vsl_);
@@ -1722,12 +1860,13 @@ bool MatrixReconstructionRenderer::render(Scene* scene, std::uint32_t spp, const
             std::ref(vpls_), scene, general_params, svt_params, ac_params, std::ref(total_samples), 
             std::ref(amount_sampled), std::ref(total_clustering_time), std::ref(total_recovery_time), 
             std::ref(total_sample_time), std::ref(total_svd_time), std::ref(total_reconstruct_time), 
-            std::ref(total_adaptive_sample_time), std::ref(total_other_time), gather_stat_images_, show_svd_);
+            std::ref(total_adaptive_sample_time), std::ref(total_other_time), gather_stat_images_, show_svd_,
+            num_clusters_);
         }
     }
     else{
         ProgressReporter lt_pr("Constructing light tree", 1, job);
-        light_tree = std::unique_ptr<LightTree>(new LightTree(vpls_, min_dist_, 1000, 0.f));
+        light_tree = std::unique_ptr<LightTree>(new LightTree(vpls_, min_dist_, num_clusters_, 0.f));
         lt_pr.finish();
         std::cout << std::endl;
 
@@ -1784,7 +1923,6 @@ bool MatrixReconstructionRenderer::render(Scene* scene, std::uint32_t spp, const
     std::cout << "Total adaptive sampling time: " << total_adaptive_sample_time << std::endl;
     std::cout << "Total other time: " << total_other_time << std::endl;
 
-    std::vector<float> timings;
     timings.push_back(total_clustering_time);
     timings.push_back(total_sample_time);
     timings.push_back(total_recovery_time);
@@ -1798,7 +1936,164 @@ bool MatrixReconstructionRenderer::render(Scene* scene, std::uint32_t spp, const
         timings.push_back(sample_perc);
         std::cout << "Sample percentage: " << sample_perc << std::endl;
     }
+}
+
+void MatrixReconstructionRenderer::renderHW(Scene* scene, std::uint32_t spp, const RenderJob *job, 
+    std::vector<float>& timings, const std::vector<KDTNode<ReconstructionSample>*>& slices, 
+    std::uint32_t samples_per_slice, std::uint32_t batch_size){
     
+    BlockingQueue<HWWorkUnit> to_cluster;
+    BlockingQueue<HWWorkUnit> to_shade(batch_size * 2);
+    BlockingQueue<HWWorkUnit> to_reconstruct(batch_size * 2);
+    BlockingQueue<HWWorkUnit> to_finish;
+
+    for(std::uint32_t i = 0; i < slices.size(); ++i){
+        to_cluster.push(std::make_pair(slices[i], i));
+    }
+    to_cluster.close();
+
+    std::vector<std::vector<VPL>> vpls(slices.size());
+
+    std::vector<std::thread> clusterers;
+
+    std::uint32_t num_workers = std::max(size_t(1), std::min(slices.size(), size_t(std::thread::hardware_concurrency() / 2)));
+
+    std::vector<std::vector<std::uint32_t>> cbsamp;
+    std::vector<std::uint32_t> sampled_slice_rows;
+    Eigen::MatrixXf cluster_contributions;
+    std::vector<std::vector<int>> nearest_neighbours;
+    std::vector<std::vector<float>> neighbour_distances;
+    std::unique_ptr<LightTree> light_tree;
+
+    if(clustering_strategy_ == ClusteringStrategy::LS){
+        std::uint32_t num_clusters = std::min(std::uint32_t(vpls_.size()), std::uint32_t(num_clusters_ * 0.3f));
+        sampled_slice_rows.resize(slices.size() * samples_per_slice);
+        cluster_contributions = calculateClusterContributions(vpls_, slices, scene, min_dist_,
+            sampled_slice_rows, samples_per_slice, vsl_);
+
+        cbsamp = clusterVPLsBySampling(cluster_contributions, num_clusters, vpls_, min_dist_);
+
+        //approx nearest neighbours here
+        flann::Matrix<float> data_points(new float[sampled_slice_rows.size() * 3], 
+            sampled_slice_rows.size(), 3);
+        flann::Matrix<float> slice_centroids(new float[slices.size() * 3], 
+            slices.size(), 3);
+
+        for(std::uint32_t i = 0; i < sampled_slice_rows.size(); ++i){
+            float* curr_col = (float*)data_points[i];
+
+            std::uint32_t slice_idx = i / samples_per_slice;
+            auto& sample = slices[slice_idx]->sample(sampled_slice_rows[i]);
+
+            curr_col[0] = sample.its.p.x;
+            curr_col[1] = sample.its.p.y;
+            curr_col[2] = sample.its.p.z;
+        }
+
+        for(std::uint32_t i = 0; i < slices.size(); ++i){
+            Point slice_centroid(0.f, 0.f, 0.f);
+            for(std::uint32_t j = 0; j < slices[i]->sample_indices.size(); ++j){
+                slice_centroid += slices[i]->sample(j).its.p;
+            }
+            slice_centroid /= slices[i]->sample_indices.size();
+
+            float* curr_centroid = (float*)slice_centroids[i];
+            curr_centroid[0] = slice_centroid.x;
+            curr_centroid[1] = slice_centroid.y;
+            curr_centroid[2] = slice_centroid.z;
+        }
+
+        flann::Index<flann::L2<float>> index(data_points, flann::KDTreeIndexParams(4));
+        index.buildIndex();
+
+        index.knnSearch(slice_centroids, nearest_neighbours, neighbour_distances, 10 * samples_per_slice, flann::SearchParams(128));
+
+        for(std::uint32_t i = 0; i < num_workers; ++i){
+            clusterers.emplace_back(clusterWorkerLS, std::ref(to_cluster), std::ref(to_shade), std::ref(vpls),
+                std::ref(cbsamp), std::ref(cluster_contributions), std::ref(nearest_neighbours), std::ref(vpls_),
+                min_dist_, num_clusters_, i);
+        }
+        
+    }
+    else{
+        light_tree = std::unique_ptr<LightTree>(new LightTree(vpls_, min_dist_, num_clusters_, 0.f));
+        for(std::uint32_t i = 0; i < num_workers; ++i){
+            clusterers.emplace_back(clusterWorkerMDLC, std::ref(to_cluster), std::ref(to_shade), std::ref(vpls),
+            light_tree.get(), min_dist_);
+        }
+    }
+
+    std::thread shader(unoccludedHWWorker, std::ref(to_shade), std::ref(to_reconstruct), std::ref(vpls), 
+        min_dist_, vsl_, num_clusters_, batch_size);
+
+    std::vector<std::thread> recoverers;
+
+    for(std::uint32_t i = 0; i < num_workers; ++i){
+        recoverers.emplace_back(matrecWorker, std::ref(to_reconstruct), std::ref(to_finish), std::ref(vpls),
+            scene, gather_stat_images_, show_svd_, sample_percentage_, min_dist_, i);
+    }
+
+    std::uint32_t slice_counter = 0;
+    ProgressReporter progress("Reconstructing slices", slices.size(), job);
+    HWWorkUnit unit;
+    while(to_finish.pop(unit)){
+        progress.update(slice_counter++);
+    }
+    progress.finish();
+
+    for(std::uint32_t i = 0; i < clusterers.size(); ++i){
+        clusterers[i].join();
+    }
+
+    shader.join();
+
+    for(std::uint32_t i = 0; i < recoverers.size(); ++i){
+        recoverers[i].join();
+    }
+}
+
+bool MatrixReconstructionRenderer::render(Scene* scene, std::uint32_t spp, const RenderJob *job){
+    srand(time(0));
+    if(scene == nullptr){
+        return true;
+    }
+
+    {
+        std::lock_guard<std::mutex> lock(cancel_lock_);
+        cancel_ = false;
+    }
+
+    ref<Sensor> sensor = scene->getSensor();
+	ref<Film> film = sensor->getFilm();
+
+    auto size = film->getSize();
+    if(size.x == 0 || size.y == 0){
+        return true;
+    }
+
+    std::uint32_t samples_per_slice = 1;
+
+    ref<Bitmap> output_bitmap = new Bitmap(Bitmap::ERGB, Bitmap::EUInt8, size);
+    std::uint8_t* output_image = output_bitmap->getUInt8Data();
+    memset(output_image, 0, output_bitmap->getBytesPerPixel() * size.x * size.y);
+
+    ProgressReporter kdt_pr("Constructing kd-tree", 1, job);
+    auto kdt_root = constructKDTree(scene, slice_size_, samples_, min_dist_, std::max(10u, samples_per_slice), spp);
+    kdt_pr.finish();
+    std::cout << std::endl;
+
+    std::vector<KDTNode<ReconstructionSample>*> slices;
+    getSlices(kdt_root.get(), slices);
+
+    std::vector<float> timings;
+
+    if(hw_){
+        renderHW(scene, spp, job, timings, slices, samples_per_slice, 64);
+    }
+    else{
+        renderNonHW(scene, spp, job, timings, slices, samples_per_slice);
+    }
+
     copySamplesToBuffer(output_image, samples_, size, spp);
 
     std::uint32_t image_size = size.x * size.y;

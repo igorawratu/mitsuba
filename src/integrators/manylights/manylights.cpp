@@ -392,12 +392,14 @@ private:
 				float error_scale = props.getFloat("completion-error_scale", 1.f);
 				ClusteringStrategy cs = props.getString("completion-cluster_strat", "ls") == "ls" ? 
 					ClusteringStrategy::LS : ClusteringStrategy::MDLC;
+				bool hw = props.getInteger("completion-hw", 0) > 0;
+				int num_clusters = props.getInteger("completion-clusters_per_slice", 1000);
 
 				//std::unique_ptr<ManyLightsClusterer> clusterer(new PassthroughClusterer(vpls_));
 				return std::unique_ptr<ManyLightsRenderer>(new MatrixReconstructionRenderer(vpls_, sample_percentage, min_dist_, 
 					step_size_factor, tolerance, tau, max_iterations, slice_size, visibility_only, adaptive_col_sampling, 
 					adaptive_importance_sampling, adaptive_force_resample, adaptive_recover_transpose, truncated, show_slices, vsl,
-					show_stats, show_svd, cs, error_scale));
+					show_stats, show_svd, cs, error_scale, hw, num_clusters));
 			}
 			case MATRIXSEPARATION:
 			{

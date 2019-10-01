@@ -8,6 +8,7 @@
 #include <memory>
 
 #include "manylightsbase.h"
+#include "common.h"
 
 MTS_NAMESPACE_BEGIN
 
@@ -58,7 +59,8 @@ public:
         float min_dist, float step_size_factor, float tolerance, float tau, std::uint32_t max_iterations,
         std::uint32_t slice_size, bool visibility_only, bool adaptive_col, bool adaptive_importance_sampling, 
         bool adaptive_force_resample, bool adaptive_recover_transpose, bool truncated, bool show_slices, bool vsl,
-        bool gather_stat_images, bool show_svd, ClusteringStrategy clustering_strategy, float error_scale);
+        bool gather_stat_images, bool show_svd, ClusteringStrategy clustering_strategy, float error_scale, bool hw,
+        std::uint32_t num_clusters);
     MatrixReconstructionRenderer(const MatrixReconstructionRenderer& other) = delete;
     MatrixReconstructionRenderer(MatrixReconstructionRenderer&& other);
     MatrixReconstructionRenderer& operator = (const MatrixReconstructionRenderer& other) = delete;
@@ -72,6 +74,14 @@ public:
 
         cancel_ = cancel;
     }
+
+private:
+    void renderNonHW(Scene* scene, std::uint32_t spp, const RenderJob *job,
+        std::vector<float>& timings, const std::vector<KDTNode<ReconstructionSample>*>& slices, 
+        std::uint32_t samples_per_slice);
+    void renderHW(Scene* scene, std::uint32_t spp, const RenderJob *job,
+        std::vector<float>& timings, const std::vector<KDTNode<ReconstructionSample>*>& slices, 
+        std::uint32_t samples_per_slice, std::uint32_t batch_size);
 
 private:
     std::vector<VPL> vpls_;
@@ -90,6 +100,8 @@ private:
     bool show_svd_;
     ClusteringStrategy clustering_strategy_;
     float error_scale_;
+    bool hw_;
+    std::uint32_t num_clusters_;
     std::mutex cancel_lock_;
     bool cancel_;
 

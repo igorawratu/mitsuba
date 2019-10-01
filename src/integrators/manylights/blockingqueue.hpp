@@ -9,13 +9,13 @@
 template <class T, class Container = std::deque<T>>
 class BlockingQueue{
 public:
-    BlockQueue(std::uint32_t max_size = 0) : max_size_(max_size), open_(true){}
+    BlockingQueue(std::uint32_t max_size = 0) : max_size_(max_size), open_(true){}
 
-    ~BlockQueue(){}
+    ~BlockingQueue(){}
     
     void close(){
         {
-            std::lock_guard<std::mutex> lock(mutex_);
+            std::unique_lock<std::mutex> lock(mutex_);
             open_ = false;
         }
         pull_cond_.notify_all();
@@ -23,10 +23,10 @@ public:
 
     void push(T&& item){
         {
-            std::lock_guard<std::mutex> lock(mutex_);
+            std::unique_lock<std::mutex> lock(mutex_);
             
             if(max_size_ > 0){
-                push_cond_.wait(lock, [this](){return this->queue.size() < max_size_;});
+                push_cond_.wait(lock, [this](){return this->queue_.size() < max_size_;});
             }
 
             queue_.push(item);
@@ -35,9 +35,23 @@ public:
         pull_cond_.notify_one();
     }
 
-    bool pull(T& item){
+    void push(const T& item){
         {
-            std::lock_guard<std::mutex> lock(mutex_);
+            std::unique_lock<std::mutex> lock(mutex_);
+            
+            if(max_size_ > 0){
+                push_cond_.wait(lock, [this](){return this->queue_.size() < max_size_;});
+            }
+
+            queue_.push(item);
+        }
+
+        pull_cond_.notify_one();
+    }
+
+    bool pop(T& item){
+        {
+            std::unique_lock<std::mutex> lock(mutex_);
 
             pull_cond_.wait(lock, [this](){return !this->queue_.empty() || !this->open_;});
             if(queue_.empty()){
@@ -45,7 +59,7 @@ public:
             }
             
             item = std::move(queue_.front());
-            queue_.pop_front();
+            queue_.pop();
         }
 
         push_cond_.notify_one();
@@ -59,6 +73,6 @@ private:
     std::condition_variable pull_cond_;
     std::uint32_t max_size_;
     bool open_;
-}
+};
 
 #endif
