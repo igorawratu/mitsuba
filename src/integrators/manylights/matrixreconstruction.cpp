@@ -1621,14 +1621,16 @@ void unoccludedHWWorker(BlockingQueue<HWWorkUnit>& input, BlockingQueue<HWWorkUn
         }
     }
 
-    if(batch.size() >= batch_size){
+    if(batch.size() > 0){
         processBatch(batch, hw_shader, vpls, cluster_size);
         for(std::uint32_t i = 0; i < batch.size(); ++i){
             output.push(batch[i]);
         }
 
-        output.close();
+        batch.clear();
     }
+
+    output.close();
 }
 
 void clusterWorkerMDLC(BlockingQueue<HWWorkUnit>& input, BlockingQueue<HWWorkUnit>& output,
@@ -1750,6 +1752,8 @@ void matrecWorker(BlockingQueue<HWWorkUnit>& input, BlockingQueue<HWWorkUnit>& o
             min_dist, rng);
         output.push(work_unit);
     }
+
+    output.close();
 }
 
 void MatrixReconstructionRenderer::renderNonHW(Scene* scene, std::uint32_t spp, const RenderJob *job,
@@ -1940,8 +1944,11 @@ void MatrixReconstructionRenderer::renderNonHW(Scene* scene, std::uint32_t spp, 
 
 void MatrixReconstructionRenderer::renderHW(Scene* scene, std::uint32_t spp, const RenderJob *job, 
     std::vector<float>& timings, const std::vector<KDTNode<ReconstructionSample>*>& slices, 
-    std::uint32_t samples_per_slice, std::uint32_t batch_size){
+    std::uint32_t samples_per_slice){
     
+    std::uint32_t num_workers = std::max(size_t(1), std::min(slices.size(), size_t(std::thread::hardware_concurrency() / 2)));
+    std::uint32_t batch_size = 500;//std::max(num_workers * 2, 64u);
+
     BlockingQueue<HWWorkUnit> to_cluster;
     BlockingQueue<HWWorkUnit> to_shade(batch_size * 2);
     BlockingQueue<HWWorkUnit> to_reconstruct(batch_size * 2);
@@ -1954,9 +1961,10 @@ void MatrixReconstructionRenderer::renderHW(Scene* scene, std::uint32_t spp, con
 
     std::vector<std::vector<VPL>> vpls(slices.size());
 
-    std::vector<std::thread> clusterers;
+    std::thread shader(unoccludedHWWorker, std::ref(to_shade), std::ref(to_reconstruct), std::ref(vpls), 
+        min_dist_, vsl_, num_clusters_, batch_size);
 
-    std::uint32_t num_workers = std::max(size_t(1), std::min(slices.size(), size_t(std::thread::hardware_concurrency() / 2)));
+    std::vector<std::thread> clusterers;
 
     std::vector<std::vector<std::uint32_t>> cbsamp;
     std::vector<std::uint32_t> sampled_slice_rows;
@@ -2016,15 +2024,13 @@ void MatrixReconstructionRenderer::renderHW(Scene* scene, std::uint32_t spp, con
         
     }
     else{
+        std::cout << "Creating light tree" << std::endl;
         light_tree = std::unique_ptr<LightTree>(new LightTree(vpls_, min_dist_, num_clusters_, 0.f));
         for(std::uint32_t i = 0; i < num_workers; ++i){
             clusterers.emplace_back(clusterWorkerMDLC, std::ref(to_cluster), std::ref(to_shade), std::ref(vpls),
             light_tree.get(), min_dist_);
         }
     }
-
-    std::thread shader(unoccludedHWWorker, std::ref(to_shade), std::ref(to_reconstruct), std::ref(vpls), 
-        min_dist_, vsl_, num_clusters_, batch_size);
 
     std::vector<std::thread> recoverers;
 
@@ -2088,7 +2094,7 @@ bool MatrixReconstructionRenderer::render(Scene* scene, std::uint32_t spp, const
     std::vector<float> timings;
 
     if(hw_){
-        renderHW(scene, spp, job, timings, slices, samples_per_slice, 64);
+        renderHW(scene, spp, job, timings, slices, samples_per_slice);
     }
     else{
         renderNonHW(scene, spp, job, timings, slices, samples_per_slice);

@@ -12,6 +12,10 @@
 
 MTS_NAMESPACE_BEGIN
 
+struct RGBCol{
+    float r, g, b;
+};
+
 struct ReconstructionSample{
     ReconstructionSample() : intersected_scene(false){
     }
@@ -48,6 +52,7 @@ struct ReconstructionSample{
     Spectrum color;
     Spectrum fully_sampled_color;
     std::vector<Spectrum> unoccluded_samples;
+    std::vector<RGBCol> rgbunocc_samples;
 };
 
 enum ClusteringStrategy{MDLC, LS};
@@ -81,7 +86,7 @@ private:
         std::uint32_t samples_per_slice);
     void renderHW(Scene* scene, std::uint32_t spp, const RenderJob *job,
         std::vector<float>& timings, const std::vector<KDTNode<ReconstructionSample>*>& slices, 
-        std::uint32_t samples_per_slice, std::uint32_t batch_size);
+        std::uint32_t samples_per_slice);
 
 private:
     std::vector<VPL> vpls_;

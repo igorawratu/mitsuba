@@ -42,15 +42,10 @@ HWShader::HWShader() :
         return;
     }
 
-    std::ifstream source_file("/disc/swang/mitsuba/src/integrators/manylights/hwshader.cl");
-    std::string source_code;
-    source_code.assign(std::istreambuf_iterator<char>(source_file), std::istreambuf_iterator<char>());
-
-    const char* source_code_cstr = source_code.c_str();
-    size_t source_code_size = source_code.length();
+    size_t source_code_size = strlen(hwshader_ocl);
 
     program_ = clCreateProgramWithSource(context_, 1, 
-            (const char **)&source_code_cstr, (const size_t *)&source_code_size, &ret);
+            (const char **)&hwshader_ocl, (const size_t *)&source_code_size, &ret);
     if(ret != 0){
         std::cerr << "Unable to create CL program" << std::endl;
         return;
@@ -76,6 +71,8 @@ HWShader::HWShader() :
         std::cerr << "Unable to create shading kernel" << std::endl;
         return;
     }
+
+    std::cout << "OpenCL initialized" << std::endl;
 
     initialized_ = true;
 }
@@ -222,6 +219,15 @@ void HWShader::renderSlices(const std::vector<KDTNode<ReconstructionSample>*>& s
         curr_buffer_elements_ = num_elements;
     }
 
+    cl_int num_el_cl = num_elements;
+    cl_int ret = clSetKernelArg(kernel_, 3, sizeof(cl_int), (void *)&num_el_cl);
+
+    if(ret != 0){
+        initialized_ = false;
+        std::cerr << "Unable to copy to set kernel argument 2" << std::endl;
+        return;
+    }
+
     std::unique_ptr<PixelElement[]> host_pixel_buffer(new PixelElement[num_elements]);
     std::unique_ptr<LightElement[]> host_light_buffer(new LightElement[num_elements]);
     std::unique_ptr<OutputElement[]> host_output_buffer(new OutputElement[num_elements]);
@@ -265,7 +271,7 @@ void HWShader::renderSlices(const std::vector<KDTNode<ReconstructionSample>*>& s
         }
     }
 
-    cl_int ret = clEnqueueWriteBuffer(command_queue_, pixel_buffer_, CL_TRUE, 0,
+    ret = clEnqueueWriteBuffer(command_queue_, pixel_buffer_, CL_TRUE, 0,
         num_elements * sizeof(PixelElement), host_pixel_buffer.get(), 0, NULL, NULL);
     if(ret != 0){
         std::cerr << "Unable to copy to pixel opencl buffer" << std::endl;
@@ -273,26 +279,32 @@ void HWShader::renderSlices(const std::vector<KDTNode<ReconstructionSample>*>& s
         return;
     }
 
+    std::vector<std::vector<Spectrum>> transposed_unocc_cols(cluster_size);
     for(std::uint32_t i = 0; i < cluster_size; ++i){
+        transposed_unocc_cols[i].resize(num_elements);
+    }
+
+    for(std::uint32_t i = 0; i < cluster_size; ++i){
+        std::cout << i << std::endl;
         curr_element = 0;
         for(std::uint32_t j = 0; j < slices.size(); ++j){
-            for(std::uint32_t k = 0; k < slices[i]->sample_indices.size(); ++k){
-                VPL& vpl = (*vpls[j])[i];
+            VPL& vpl = (*vpls[j])[i];
 
-                 vpl.P.toLinearRGB(host_light_buffer[curr_element].r, host_light_buffer[curr_element].g,
-                    host_light_buffer[curr_element].b);
+            LightElement light_for_slice;
+            vpl.P.toLinearRGB(light_for_slice.r, light_for_slice.g,
+                    light_for_slice.b);
+            light_for_slice.nx = vpl.its.geoFrame.n.x;
+            light_for_slice.ny = vpl.its.geoFrame.n.y;
+            light_for_slice.nz = vpl.its.geoFrame.n.z;
 
-                host_light_buffer[curr_element].nx = vpl.its.geoFrame.n.x;
-                host_light_buffer[curr_element].ny = vpl.its.geoFrame.n.y;
-                host_light_buffer[curr_element].nz = vpl.its.geoFrame.n.z;
+            light_for_slice.x = vpl.its.p.x;
+            light_for_slice.y = vpl.its.p.y;
+            light_for_slice.z = vpl.its.p.z;
 
-                host_light_buffer[curr_element].x = vpl.its.p.x;
-                host_light_buffer[curr_element].y = vpl.its.p.y;
-                host_light_buffer[curr_element].z = vpl.its.p.z;
+            light_for_slice.rad = vpl.radius;
 
-                host_light_buffer[curr_element].rad = vpl.radius;
-                
-                curr_element++;
+            for(std::uint32_t k = 0; k < slices[j]->sample_indices.size(); ++k){
+                host_light_buffer[curr_element++] = light_for_slice;
             }
         }
 
@@ -303,13 +315,15 @@ void HWShader::renderSlices(const std::vector<KDTNode<ReconstructionSample>*>& s
             initialized_ = false;
             return;
         }
+        
 
-        size_t global_item_size = num_elements;
         size_t local_item_size = 64;
+        size_t global_item_size = (num_elements / local_item_size + 1) * local_item_size;
+        
         ret = clEnqueueNDRangeKernel(command_queue_, kernel_, 1, NULL, 
                 &global_item_size, &local_item_size, 0, NULL, NULL);
         if(ret != 0){
-            std::cerr << "Unable to run opencl kernel" << std::endl;
+            std::cerr << "Unable to run opencl kernel with code " << ret << std::endl;
             initialized_ = false;
             return;
         }
@@ -323,11 +337,15 @@ void HWShader::renderSlices(const std::vector<KDTNode<ReconstructionSample>*>& s
         }
 
         curr_element = 0;
-        for(std::uint32_t j = 0; j < slices.size(); ++j){
-            for(std::uint32_t k = 0; k < slices[i]->sample_indices.size(); ++k){
+        /*for(std::uint32_t j = 0; j < slices.size(); ++j){
+            for(std::uint32_t k = 0; k < slices[j]->sample_indices.size(); ++k){
                 OutputElement& curr_out = host_output_buffer[curr_element++];
                 slices[j]->sample(k).unoccluded_samples[i].fromLinearRGB(curr_out.r, curr_out.g, curr_out.b);
             }
+        }*/
+        for(std::uint32_t j = 0; j < num_elements; ++j){
+            OutputElement& curr_out = host_output_buffer[curr_element++];
+            transposed_unocc_cols[i][j].fromLinearRGB(curr_out.r, curr_out.g, curr_out.b);
         }
     }
 }
