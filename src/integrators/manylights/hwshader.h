@@ -4,6 +4,8 @@
 #include "common.h"
 #include "matrixreconstruction.h"
 #include <vector>
+
+#define CL_USE_DEPRECATED_OPENCL_1_2_APIS
 #include <CL/cl.h>
 
 MTS_NAMESPACE_BEGIN

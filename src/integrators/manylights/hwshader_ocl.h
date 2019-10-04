@@ -16,6 +16,7 @@ const char *hwshader_ocl =
 "    float nx, ny, nz;\n"
 "    float x, y, z;\n"
 "    float rad;\n"
+"    float coeff;\n"
 "};\n"
 "\n"
 "struct OutputElement{\n"
@@ -29,8 +30,8 @@ const char *hwshader_ocl =
 "        return;\n"
 "    }\n"
 "    \n"
-"    C[i].r = A[i].dr / 1000;\n"
-"    C[i].g = A[i].dg / 1000;\n"
-"    C[i].b = A[i].db / 1000;\n"
+"    C[i].r = A[i].dr;\n"
+"    C[i].g = A[i].dg;\n"
+"    C[i].b = A[i].db;\n"
 "}\n";
 #endif

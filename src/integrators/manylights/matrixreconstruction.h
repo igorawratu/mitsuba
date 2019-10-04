@@ -12,10 +12,6 @@
 
 MTS_NAMESPACE_BEGIN
 
-struct RGBCol{
-    float r, g, b;
-};
-
 struct ReconstructionSample{
     ReconstructionSample() : intersected_scene(false){
     }
@@ -52,7 +48,6 @@ struct ReconstructionSample{
     Spectrum color;
     Spectrum fully_sampled_color;
     std::vector<Spectrum> unoccluded_samples;
-    std::vector<RGBCol> rgbunocc_samples;
 };
 
 enum ClusteringStrategy{MDLC, LS};

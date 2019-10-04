@@ -3,6 +3,8 @@
 #include <iostream>
 #include <memory>
 #include <fstream>
+#include <chrono>
+
 #include "hwshader_ocl.h"
 
 MTS_NAMESPACE_BEGIN
@@ -127,6 +129,7 @@ struct LightElement{
     cl_float nx, ny, nz;
     cl_float x, y, z;
     cl_float rad;
+    cl_float coeff;
 };
 
 struct OutputElement{
@@ -162,7 +165,7 @@ bool HWShader::initializeBuffers(std::uint32_t size){
         return false;
     }
 
-    output_buffer_ = clCreateBuffer(context_, CL_MEM_WRITE_ONLY, 
+    output_buffer_ = clCreateBuffer(context_, CL_MEM_READ_WRITE, 
         size * sizeof(OutputElement), NULL, &ret);
     if(ret != 0){
         std::cerr << "Unable to create output opencl buffer" << std::endl;
@@ -194,12 +197,6 @@ void HWShader::renderSlices(const std::vector<KDTNode<ReconstructionSample>*>& s
     const std::vector<std::vector<VPL>*>& vpls, std::uint32_t cluster_size){
 
     assert(vpls.size() == slices.size());
-
-    for(std::uint32_t i = 0; i < slices.size(); ++i){
-        for(std::uint32_t j = 0; j < slices[i]->sample_indices.size(); ++j){
-            slices[i]->sample(j).unoccluded_samples.resize(cluster_size, Spectrum(0.f));
-        }
-    }
 
     if(!initialized_){
         return;
@@ -279,13 +276,7 @@ void HWShader::renderSlices(const std::vector<KDTNode<ReconstructionSample>*>& s
         return;
     }
 
-    std::vector<std::vector<Spectrum>> transposed_unocc_cols(cluster_size);
     for(std::uint32_t i = 0; i < cluster_size; ++i){
-        transposed_unocc_cols[i].resize(num_elements);
-    }
-
-    for(std::uint32_t i = 0; i < cluster_size; ++i){
-        std::cout << i << std::endl;
         curr_element = 0;
         for(std::uint32_t j = 0; j < slices.size(); ++j){
             VPL& vpl = (*vpls[j])[i];
@@ -304,7 +295,11 @@ void HWShader::renderSlices(const std::vector<KDTNode<ReconstructionSample>*>& s
             light_for_slice.rad = vpl.radius;
 
             for(std::uint32_t k = 0; k < slices[j]->sample_indices.size(); ++k){
-                host_light_buffer[curr_element++] = light_for_slice;
+                host_light_buffer[curr_element] = light_for_slice;
+
+                std::uint32_t idx = i * slices[j]->sample_indices.size() + k;
+                host_light_buffer[curr_element].coeff = slices[j]->visibility_coefficients[idx];
+                curr_element++;
             }
         }
 
@@ -316,7 +311,6 @@ void HWShader::renderSlices(const std::vector<KDTNode<ReconstructionSample>*>& s
             return;
         }
         
-
         size_t local_item_size = 64;
         size_t global_item_size = (num_elements / local_item_size + 1) * local_item_size;
         
@@ -327,25 +321,28 @@ void HWShader::renderSlices(const std::vector<KDTNode<ReconstructionSample>*>& s
             initialized_ = false;
             return;
         }
+    }
 
-        ret = clEnqueueReadBuffer(command_queue_, output_buffer_, CL_TRUE, 0, 
-                num_elements * sizeof(OutputElement), host_output_buffer.get(), 0, NULL, NULL);
-        if(ret != 0){
-            std::cerr << "Unable to read from output opencl buffer" << std::endl;
-            initialized_ = false;
-            return;
-        }
+    ret = clEnqueueReadBuffer(command_queue_, output_buffer_, CL_TRUE, 0, 
+            num_elements * sizeof(OutputElement), host_output_buffer.get(), 0, NULL, NULL);
+    if(ret != 0){
+        std::cerr << "Unable to read from output opencl buffer" << std::endl;
+        initialized_ = false;
+        return;
+    }
 
-        curr_element = 0;
-        /*for(std::uint32_t j = 0; j < slices.size(); ++j){
-            for(std::uint32_t k = 0; k < slices[j]->sample_indices.size(); ++k){
-                OutputElement& curr_out = host_output_buffer[curr_element++];
-                slices[j]->sample(k).unoccluded_samples[i].fromLinearRGB(curr_out.r, curr_out.g, curr_out.b);
-            }
-        }*/
-        for(std::uint32_t j = 0; j < num_elements; ++j){
-            OutputElement& curr_out = host_output_buffer[curr_element++];
-            transposed_unocc_cols[i][j].fromLinearRGB(curr_out.r, curr_out.g, curr_out.b);
+    curr_element = 0;
+    for(std::uint32_t i = 0; i < slices.size(); ++i){
+        slices[i]->visibility_coefficients.clear();
+        slices[i]->visibility_coefficients.shrink_to_fit();
+        
+        for(std::uint32_t j = 0; j < slices[i]->sample_indices.size(); ++j){
+            auto& sample = slices[i]->sample(j);
+
+            sample.color.fromLinearRGB(host_output_buffer[curr_element].r, host_output_buffer[curr_element].g,
+                host_output_buffer[curr_element].b);
+
+            curr_element++;
         }
     }
 }

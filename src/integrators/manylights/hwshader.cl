@@ -13,6 +13,7 @@ struct LightElement{
     float nx, ny, nz;
     float x, y, z;
     float rad;
+    float coeff;
 };
 
 struct OutputElement{
@@ -26,7 +27,7 @@ __kernel void shade(__global const struct PixelElement* A, __global const struct
         return;
     }
     
-    C[i].r = A[i].dr / 1000;
-    C[i].g = A[i].dg / 1000;
-    C[i].b = A[i].db / 1000;
+    C[i].r = A[i].dr;
+    C[i].g = A[i].dg;
+    C[i].b = A[i].db;
 }

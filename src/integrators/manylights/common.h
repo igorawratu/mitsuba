@@ -169,6 +169,7 @@ struct KDTNode{
     float rank_ratio2;
     std::vector<std::vector<float>> singular_values;
     std::vector<float> singular_values2;
+    std::vector<float> visibility_coefficients;
 
     KDTNode(std::vector<Sample>* sample_set) : sample_indices(), samples(sample_set), 
         left(nullptr), right(nullptr), rank_ratio(0.f), sample_ratio(0.f){
