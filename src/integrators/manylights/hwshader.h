@@ -17,7 +17,8 @@ public:
     ~HWShader();
 
     void renderSlices(const std::vector<KDTNode<ReconstructionSample>*>& slices,
-        const std::vector<std::vector<VPL>*>& vpls, std::uint32_t cluster_size);
+        const std::vector<std::vector<VPL>*>& vpls, std::uint32_t cluster_size,
+        float min_dist);
     
     bool initialized(){
         return initialized_;

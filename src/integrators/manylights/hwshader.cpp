@@ -115,25 +115,27 @@ HWShader::~HWShader(){
 }
 
 struct PixelElement{
-    cl_float dr, dg, db;
-    cl_float sr, sg, sb;
-    cl_float x, y, z;
-    cl_float nx, ny, nz;
+    cl_float3 diff_col;
+    cl_float3 spec_col;
+    cl_float3 p;
+    cl_float3 n;
     cl_float roughness;
-    cl_float eta_r, eta_g, eta_b, k_r, k_g, k_b;
-    cl_float wi_x, wi_y, wi_z;
+    cl_float3 eta;
+    cl_float3 k;
+    cl_float3 wi;
 };
 
 struct LightElement{
-    cl_float r, g, b;
-    cl_float nx, ny, nz;
-    cl_float x, y, z;
+    cl_float3 col;
+    cl_float3 n;
+    cl_float3 p;
     cl_float rad;
     cl_float coeff;
+    cl_int type;
 };
 
 struct OutputElement{
-    cl_float r, g, b;
+    cl_float3 col;
 };
 
 bool HWShader::initializeBuffers(std::uint32_t size){
@@ -194,7 +196,7 @@ bool HWShader::initializeBuffers(std::uint32_t size){
 }
 
 void HWShader::renderSlices(const std::vector<KDTNode<ReconstructionSample>*>& slices,
-    const std::vector<std::vector<VPL>*>& vpls, std::uint32_t cluster_size){
+    const std::vector<std::vector<VPL>*>& vpls, std::uint32_t cluster_size, float min_dist){
 
     assert(vpls.size() == slices.size());
 
@@ -218,54 +220,78 @@ void HWShader::renderSlices(const std::vector<KDTNode<ReconstructionSample>*>& s
 
     cl_int num_el_cl = num_elements;
     cl_int ret = clSetKernelArg(kernel_, 3, sizeof(cl_int), (void *)&num_el_cl);
-
     if(ret != 0){
         initialized_ = false;
         std::cerr << "Unable to copy to set kernel argument 2" << std::endl;
         return;
     }
 
+    cl_float cl_min_dist = min_dist;
+    ret = clSetKernelArg(kernel_, 4, sizeof(cl_float), (void *)&cl_min_dist);
+    if(ret != 0){
+        initialized_ = false;
+        std::cerr << "Unable to set kernel argument 4" << std::endl;
+        return;
+    }
+
     std::unique_ptr<PixelElement[]> host_pixel_buffer(new PixelElement[num_elements]);
     std::unique_ptr<LightElement[]> host_light_buffer(new LightElement[num_elements]);
     std::unique_ptr<OutputElement[]> host_output_buffer(new OutputElement[num_elements]);
+    for(std::uint32_t i = 0; i < num_elements; ++i){
+        host_output_buffer[i].col.s[0] = 0.f;
+        host_output_buffer[i].col.s[1] = 0.f;
+        host_output_buffer[i].col.s[2] = 0.f;
+    }
 
-    std::uint32_t curr_element = 0;
+    ret = clEnqueueWriteBuffer(command_queue_, output_buffer_, CL_TRUE, 0,
+        num_elements * sizeof(OutputElement), host_output_buffer.get(), 0, NULL, NULL);
+    if(ret != 0){
+        std::cerr << "Unable to copy to output opencl buffer" << std::endl;
+        initialized_ = false;
+        return;
+    }
+
+    std::uint32_t elements_processed = 0;
     for(std::uint32_t i = 0; i < slices.size(); ++i){
         for(std::uint32_t j = 0; j < slices[i]->sample_indices.size(); ++j){
+            std::uint32_t curr_element = elements_processed + j;
+
             ReconstructionSample& sample = slices[i]->sample(j);
             const BSDF* bsdf = sample.its.getBSDF();
 
             Spectrum diffuse_col = bsdf->getDiffuseReflectance(sample.its);
-            diffuse_col.toLinearRGB(host_pixel_buffer[curr_element].dr, 
-                host_pixel_buffer[curr_element].dg, host_pixel_buffer[curr_element].db);
+            diffuse_col.toLinearRGB(host_pixel_buffer[curr_element].diff_col.s[0], 
+                host_pixel_buffer[curr_element].diff_col.s[1], host_pixel_buffer[curr_element].diff_col.s[2]);
             
             Spectrum spec_col = bsdf->getSpecularReflectance(sample.its);
-            spec_col.toLinearRGB(host_pixel_buffer[curr_element].sr, 
-                host_pixel_buffer[curr_element].sg, host_pixel_buffer[curr_element].sb);
+            spec_col.toLinearRGB(host_pixel_buffer[curr_element].spec_col.s[0], 
+                host_pixel_buffer[curr_element].spec_col.s[1], host_pixel_buffer[curr_element].spec_col.s[2]);
 
-            host_pixel_buffer[curr_element].x = sample.its.p.x;
-            host_pixel_buffer[curr_element].y = sample.its.p.y;
-            host_pixel_buffer[curr_element].z = sample.its.p.z;
-            host_pixel_buffer[curr_element].nx = sample.its.geoFrame.n.x;
-            host_pixel_buffer[curr_element].ny = sample.its.geoFrame.n.y;
-            host_pixel_buffer[curr_element].nz = sample.its.geoFrame.n.z;
+            host_pixel_buffer[curr_element].p.s[0] = sample.its.p.x;
+            host_pixel_buffer[curr_element].p.s[1] = sample.its.p.y;
+            host_pixel_buffer[curr_element].p.s[2] = sample.its.p.z;
+            Normal n = sample.its.wi.z > 0.f ? sample.its.shFrame.n : -sample.its.shFrame.n;
+            host_pixel_buffer[curr_element].n.s[0] = n.x;
+            host_pixel_buffer[curr_element].n.s[1] = n.y;
+            host_pixel_buffer[curr_element].n.s[2] = n.z;
 
-            host_pixel_buffer[curr_element].roughness = std::min(1.f, bsdf->getRoughness(sample.its, 0));
+            host_pixel_buffer[curr_element].roughness = std::min(1.5f, bsdf->getRoughness(sample.its, 0));
             
             Spectrum eta = bsdf->getEtaSpec(sample.its.wi);
-            eta.toLinearRGB(host_pixel_buffer[curr_element].eta_r, 
-                host_pixel_buffer[curr_element].eta_g, host_pixel_buffer[curr_element].eta_b);
+            eta.toLinearRGB(host_pixel_buffer[curr_element].eta.s[0], 
+                host_pixel_buffer[curr_element].eta.s[1], host_pixel_buffer[curr_element].eta.s[2]);
 
             Spectrum k = bsdf->getK(sample.its.wi);
-            k.toLinearRGB(host_pixel_buffer[curr_element].k_r, host_pixel_buffer[curr_element].k_g,
-                host_pixel_buffer[curr_element].k_b);
+            k.toLinearRGB(host_pixel_buffer[curr_element].k.s[0], host_pixel_buffer[curr_element].k.s[1],
+                host_pixel_buffer[curr_element].k.s[2]);
 
-            host_pixel_buffer[curr_element].wi_x = sample.its.wi.x;
-            host_pixel_buffer[curr_element].wi_y = sample.its.wi.y;
-            host_pixel_buffer[curr_element].wi_z = sample.its.wi.z;
-            
-            curr_element++;
+            Vector wi = sample.its.toWorld(sample.its.wi);
+
+            host_pixel_buffer[curr_element].wi.s[0] = wi.x;
+            host_pixel_buffer[curr_element].wi.s[1] = wi.y;
+            host_pixel_buffer[curr_element].wi.s[2] = wi.z;
         }
+        elements_processed += slices[i]->sample_indices.size();
     }
 
     ret = clEnqueueWriteBuffer(command_queue_, pixel_buffer_, CL_TRUE, 0,
@@ -277,30 +303,40 @@ void HWShader::renderSlices(const std::vector<KDTNode<ReconstructionSample>*>& s
     }
 
     for(std::uint32_t i = 0; i < cluster_size; ++i){
-        curr_element = 0;
+        elements_processed = 0;
         for(std::uint32_t j = 0; j < slices.size(); ++j){
             VPL& vpl = (*vpls[j])[i];
 
             LightElement light_for_slice;
-            vpl.P.toLinearRGB(light_for_slice.r, light_for_slice.g,
-                    light_for_slice.b);
-            light_for_slice.nx = vpl.its.geoFrame.n.x;
-            light_for_slice.ny = vpl.its.geoFrame.n.y;
-            light_for_slice.nz = vpl.its.geoFrame.n.z;
+            vpl.P.toLinearRGB(light_for_slice.col.s[0], light_for_slice.col.s[1],
+                    light_for_slice.col.s[2]);
+            light_for_slice.n.s[0] = vpl.its.shFrame.n.x;
+            light_for_slice.n.s[1] = vpl.its.shFrame.n.y;
+            light_for_slice.n.s[2] = vpl.its.shFrame.n.z;
 
-            light_for_slice.x = vpl.its.p.x;
-            light_for_slice.y = vpl.its.p.y;
-            light_for_slice.z = vpl.its.p.z;
+            light_for_slice.p.s[0] = vpl.its.p.x;
+            light_for_slice.p.s[1] = vpl.its.p.y;
+            light_for_slice.p.s[2] = vpl.its.p.z;
 
             light_for_slice.rad = vpl.radius;
 
-            for(std::uint32_t k = 0; k < slices[j]->sample_indices.size(); ++k){
+            if(vpl.type == EDirectionalEmitterVPL){
+                light_for_slice.type = 0;
+            }
+            else if(vpl.type == EPointEmitterVPL){
+                light_for_slice.type = 1;
+            }
+            else light_for_slice.type = 2;
+
+            for(std::uint32_t sample_idx = 0; sample_idx < slices[j]->sample_indices.size(); ++sample_idx){
+                std::uint32_t curr_element = elements_processed + sample_idx;
                 host_light_buffer[curr_element] = light_for_slice;
 
-                std::uint32_t idx = i * slices[j]->sample_indices.size() + k;
+                std::uint32_t idx = i * slices[j]->sample_indices.size() + sample_idx;
                 host_light_buffer[curr_element].coeff = slices[j]->visibility_coefficients[idx];
-                curr_element++;
             }
+
+            elements_processed += slices[j]->sample_indices.size();
         }
 
         ret = clEnqueueWriteBuffer(command_queue_, light_buffer_, CL_TRUE, 0,
@@ -331,7 +367,7 @@ void HWShader::renderSlices(const std::vector<KDTNode<ReconstructionSample>*>& s
         return;
     }
 
-    curr_element = 0;
+    std::uint32_t curr_element = 0;
     for(std::uint32_t i = 0; i < slices.size(); ++i){
         slices[i]->visibility_coefficients.clear();
         slices[i]->visibility_coefficients.shrink_to_fit();
@@ -339,8 +375,8 @@ void HWShader::renderSlices(const std::vector<KDTNode<ReconstructionSample>*>& s
         for(std::uint32_t j = 0; j < slices[i]->sample_indices.size(); ++j){
             auto& sample = slices[i]->sample(j);
 
-            sample.color.fromLinearRGB(host_output_buffer[curr_element].r, host_output_buffer[curr_element].g,
-                host_output_buffer[curr_element].b);
+            sample.color = sample.its.isEmitter() ? sample.its.Le(-sample.ray.d) : 
+                Spectrum(host_output_buffer[curr_element].col.s);
 
             curr_element++;
         }

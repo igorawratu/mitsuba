@@ -13,6 +13,10 @@ public:
 
     ~BlockingQueue(){}
     
+    std::uint32_t size(){
+        return queue_.size();
+    }
+
     void close(){
         {
             std::unique_lock<std::mutex> lock(mutex_);

@@ -18,6 +18,8 @@
 #include "filewriter.h"
 #include "lighttree.h"
 #include <mitsuba/core/statistics.h>
+#include <set>
+#include <unistd.h>
 
 #include "common.h"
 #include "hwshader.h"
@@ -516,11 +518,9 @@ std::unique_ptr<KDTNode<ReconstructionSample>> constructKDTree(Scene* scene, std
                         break;
                     }
 
-                    if(!(curr_sample.its.getBSDF()->getType() & BSDF::EDelta) || curr_sample.its.isEmitter()){
-                        break;
-                    }
-
-                    if(++num_bounces > 5){
+                    if(!(curr_sample.its.getBSDF()->getType() & BSDF::EDelta) || curr_sample.its.isEmitter()
+                        || ++num_bounces > 5){
+                        //curr_sample.its.wi = -curr_sample.ray.d;
                         break;
                     }
 
@@ -912,7 +912,6 @@ std::tuple<std::uint32_t, float, float, float, float> adaptiveMatrixReconstructi
     std::vector<float>& singular_values){
 
     assert(sample_perc > 0.f && slice->sample_indices.size() > 0 && vpls.size() > 0);
-    std::random_shuffle(slice->sample_indices.begin(), slice->sample_indices.end());
 
     std::uint32_t total_rows = recover_transpose ? vpls.size() : slice->sample_indices.size();
     std::uint32_t num_rows = visibility_only ? total_rows : total_rows * 3;
@@ -948,7 +947,6 @@ std::tuple<std::uint32_t, float, float, float, float> adaptiveMatrixReconstructi
     Eigen::MatrixXf q_omega;
     Eigen::MatrixXf q_omega_pseudoinverse;
     Eigen::MatrixXf qq_omega_pseudoinverse;
-    Eigen::MatrixXf q_normalized;
 
     std::uint32_t total_samples = 0;
     std::uniform_real_distribution<float> gen(0.f, 1.f);
@@ -1035,13 +1033,6 @@ std::tuple<std::uint32_t, float, float, float, float> adaptiveMatrixReconstructi
                 d += std::abs(reconstructed(sampled[j], 0) - sample_omega(j, 0));
             }
 
-            /*for(std::uint32_t i = 0; i < reconstructed.rows(); ++i){
-                if(std::abs(std::abs(reconstructed(i, 0)) - 1.f) > 1e-3f){
-                    d = 10000;
-                    break;
-                }
-            }*/
-
             float largest = col_estimations[order[0]];
             float curr = col_estimations[order[i]];
             float thresh = (largest - curr) / largest * float(sampled.size()) * 0.1f;
@@ -1078,7 +1069,7 @@ std::tuple<std::uint32_t, float, float, float, float> adaptiveMatrixReconstructi
             }
         }
 
-        //probability update for importance sampling. This needs to be revisited since this doesn't work well
+        //probability update for importance sampling.
         if(full_col_sampled){
             std::vector<std::uint32_t> buckets;
             std::int32_t last_sign = 0;
@@ -1125,6 +1116,148 @@ std::tuple<std::uint32_t, float, float, float, float> adaptiveMatrixReconstructi
     else basis_rank = q.cols();
 
     return std::make_tuple(total_samples, time_for_svd, time_for_reconstruct, time_for_sampling, time_other);
+}
+
+std::uint32_t adaptiveMatrixReconstructionB(
+    std::vector<std::uint8_t>& mat, Scene* scene, KDTNode<ReconstructionSample>* slice, 
+    const std::vector<VPL>& vpls, float min_dist, float sample_perc, std::mt19937& rng, 
+    std::uint32_t& basis_rank, const std::vector<float>& col_estimations, bool gather_stats){
+
+    assert(sample_perc > 0.f && slice->sample_indices.size() > 0 && vpls.size() > 0);
+
+    std::uint32_t num_rows = slice->sample_indices.size();
+    std::uint32_t num_cols = vpls.size();
+    
+    //re-allocate matrix if it is of the incorrect size
+    if(mat.size() != slice->sample_indices.size() > 0 * vpls.size()){
+        mat.resize(slice->sample_indices.size() > 0 * vpls.size());
+    }
+
+    std::uint32_t num_samples = num_rows * sample_perc + 0.5f;
+    //just in case, this shouldn't ever really happen
+    if(num_samples == 0){
+        num_samples = total_rows;
+    }
+
+    //we recover from the brightest to least bright because there will be more full samples initially, allow for better coverage of
+    //higher energy sections
+    std::vector<std::uint32_t> order(num_cols);
+    std::iota(order.begin(), order.end(), 0);
+    std::sort(order.begin(), order.end(), 
+        [&col_estimations](const std::uint32_t& lhs, const std::uint32_t& rhs){
+            return col_estimations[lhs] > col_estimations[rhs];
+        });
+
+
+    std::vector<std::vector<std::uint32_t>> basis;
+
+    std::uint32_t total_samples = 0;
+    std::uniform_real_distribution<float> gen(0.f, 1.f);
+    std::vector<float> probabilities(num_rows, 1.f / num_rows);
+
+    std::vector<std::uint32_t> sample_omega(num_samples);
+    std::vector<std::uint32_t> col_to_add;
+    bool full_col_sampled = false;
+
+    //The actual adaptive matrix recovery algorithm
+    for(std::uint32_t i = 0; i < order.size(); ++i){
+        std::uint32_t samples_for_col = 0;
+
+       if(basis.size() > 0){
+            //auto sample_t = std::chrono::high_resolution_clock::now();
+            sampled = sampleColb(scene, slice, vpls, order[i], min_dist, num_samples, rng, sample_omega, 
+                probabilities);
+            //auto sample_end = std::chrono::high_resolution_clock::now();
+
+            samples_for_col = num_samples;
+            
+            std::vector<std::pair<std::uint32_t, bool>> matching_cols;
+
+            for(std::uint32_t j = 0; j < basis.size(); ++j){
+                bool matching = true;
+                bool opposite = true;
+
+                for(std::uint32_t k = 0; k < sampled.size(); ++k){
+                    bool sample_visible = sample_omega(k, 0) > 0.f;
+                    bool col_visible = q(sampled[k], j) > 0.f;
+                    if(sample_omega[k] == basis[j][sampled[k]]){
+                        opposite = false;
+                    }
+                    else{
+                        matching = false;
+                    }
+                }
+
+                if(matching || opposite){
+                    matching_cols.push_back(std::make_pair(j, matching));
+                }
+            }
+
+            if(matching_cols.size() > 0){
+                std::uniform_int_distribution<std::uint32_t> select_col(0, matching_cols.size() - 1);
+                std::uint32_t sel = select_col(rng);
+                col_to_add = basis[matching_cols[sel].first];
+                if(!matching_cols[sel].second){
+                    for(std::uint32_t j = 0; j < col_to_add.size(); ++j){
+                        col_to_add[j] = (col_to_add[j] + 1) % 2;
+                    }
+                }
+            }
+            else{
+                col_to_add.resize(num_rows);
+                sampled = sampleColb(scene, slice, vpls, order[i], min_dist, num_rows, rng, sample_omega, 
+                    probabilities);
+                samples_for_col = num_rows;
+ 
+                basis.push_back(col_to_add);
+                
+                full_col_sampled = true;
+            }
+        }
+        else{
+            col_to_add.resize(num_rows);
+            sampled = sampleColb(scene, slice, vpls, order[i], min_dist, num_rows, rng, sample_omega, 
+                probabilities);
+            samples_for_col = num_rows;
+
+            basis.push_back(col_to_add);
+            
+            full_col_sampled = true;
+        }
+
+        //probability update for importance sampling.
+        if(full_col_sampled){
+            std::vector<std::uint32_t> buckets;
+            std::uint8_t last_sign = 2;
+            for(std::uint32_t j = 0; j < col_to_add.size(); ++j){
+                if(last_sign != col_to_add[j]){
+                    buckets.push_back(j);
+                    last_sign = sign;
+                }
+            }
+
+            buckets.push_back(col_to_add.size());
+            float prob_per_bucket = 1.f / buckets.size();
+
+            for(std::uint32_t j = 0; j < buckets.size(); ++j){
+                std::uint32_t bucket_size = j == 0 ? buckets[0] : buckets[j] - buckets[j - 1];
+                float curr_bucket_prob = prob_per_bucket / bucket_size;
+                std::uint32_t bucket_start = j == 0 ? 0 : buckets[j - 1];
+                std::uint32_t bucket_end = buckets[j];
+
+                for(std::uint32_t k = bucket_start; k < bucket_end; ++k){
+                    probabilities[k] += curr_bucket_prob;
+                }
+            }
+        }
+
+        mat.col(order[i]) = reconstructed.col(0);
+        total_samples += samples_for_col;
+    }
+    
+    basis_rank = basis.size();
+
+    return total_samples;
 }
 
 //singular value thresholding algorithm for the non-adaptive version. Can use the RedSVD truncated svd, or just normal svd
@@ -1589,7 +1722,7 @@ void sliceWorkerMDLC(std::vector<std::int32_t>& work, std::uint32_t thread_id, s
 typedef std::pair<KDTNode<ReconstructionSample>*, std::uint32_t> HWWorkUnit;
 
 void processBatch(const std::vector<HWWorkUnit>& batch, HWShader& hw_shader, 
-    std::vector<std::vector<VPL>>& vpls, std::uint32_t cluster_size){
+    std::vector<std::vector<VPL>>& vpls, std::uint32_t cluster_size, float min_dist){
     
     std::vector<KDTNode<ReconstructionSample>*> slices;
     std::vector<std::vector<VPL>*> slice_vpls;
@@ -1598,7 +1731,7 @@ void processBatch(const std::vector<HWWorkUnit>& batch, HWShader& hw_shader,
         slice_vpls.push_back(&vpls[batch[i].second]);
     }
 
-    hw_shader.renderSlices(slices, slice_vpls, cluster_size);
+    hw_shader.renderSlices(slices, slice_vpls, cluster_size, min_dist);
 }
 
 void unoccludedHWWorker(BlockingQueue<HWWorkUnit>& input, BlockingQueue<HWWorkUnit>& output, 
@@ -1614,7 +1747,7 @@ void unoccludedHWWorker(BlockingQueue<HWWorkUnit>& input, BlockingQueue<HWWorkUn
         batch.push_back(work_unit);
 
         if(batch.size() >= batch_size){
-            processBatch(batch, hw_shader, vpls, cluster_size);
+            processBatch(batch, hw_shader, vpls, cluster_size, min_dist);
             for(std::uint32_t i = 0; i < batch.size(); ++i){
                 output.push(batch[i]);
             }
@@ -1624,7 +1757,7 @@ void unoccludedHWWorker(BlockingQueue<HWWorkUnit>& input, BlockingQueue<HWWorkUn
     }
 
     if(batch.size() > 0){
-        processBatch(batch, hw_shader, vpls, cluster_size);
+        processBatch(batch, hw_shader, vpls, cluster_size, min_dist);
         for(std::uint32_t i = 0; i < batch.size(); ++i){
             output.push(batch[i]);
         }
@@ -1667,7 +1800,7 @@ void recoverHW(KDTNode<ReconstructionSample>* slice, const std::vector<VPL>& vpl
     slice->singular_values.resize(8);
     slice->rank_ratio.resize(8);
 
-    slice->visibility_coefficients.resize(slice->sample_indices.size() * vpls.size());
+    slice->visibility_coefficients.resize(slice->sample_indices.size() * vpls.size(), 0.f);
 
     for(std::uint32_t i = 0; i < quadranted_vpls.size(); ++i){
         if(quadranted_vpls[i].size() == 0){
@@ -1728,7 +1861,6 @@ void recoverHW(KDTNode<ReconstructionSample>* slice, const std::vector<VPL>& vpl
 
         total_performed_samples += samples;
         slice->rank_ratio[i] = float(basis_rank) / max_rank;
-
         
         for(std::uint32_t j = 0; j < actual_vpl_index[i].size(); ++j){
             for(std::uint32_t k = 0; k < slice->sample_indices.size(); ++k){
@@ -1743,7 +1875,8 @@ void recoverHW(KDTNode<ReconstructionSample>* slice, const std::vector<VPL>& vpl
 
 void clusterWorkerMDLC(BlockingQueue<HWWorkUnit>& input, BlockingQueue<HWWorkUnit>& output,
     std::vector<std::vector<VPL>>& vpls, LightTree* light_tree, Scene* scene, bool gather_stats, 
-    bool show_svd, float sample_perc, float min_dist, std::uint32_t thread_id){
+    bool show_svd, float sample_perc, float min_dist, std::uint32_t thread_id, std::uint32_t num_threads, 
+    std::mutex& barrier_mutex, std::condition_variable& barrier){
     
     HWWorkUnit work_unit;
 
@@ -1756,7 +1889,7 @@ void clusterWorkerMDLC(BlockingQueue<HWWorkUnit>& input, BlockingQueue<HWWorkUni
             slice_points[i] = work_unit.first->sample(i).its;
         }
 
-        vpls[work_unit.second] = light_tree->getClusteringForPoints(slice_points);
+        //vpls[work_unit.second] = light_tree->getClusteringForPoints(slice_points);
         //not sure if this should change to a radius union approach instead
         updateVPLRadii(vpls[work_unit.second], min_dist);
 
@@ -1766,6 +1899,15 @@ void clusterWorkerMDLC(BlockingQueue<HWWorkUnit>& input, BlockingQueue<HWWorkUni
         output.push(work_unit);
     }
 
+    static std::uint32_t threads_completed = 0;
+    threads_completed++;
+    
+    {
+        std::unique_lock<std::mutex> lock(barrier_mutex);
+        barrier.wait(lock, [num_threads](){return threads_completed >= num_threads;});
+    }
+    barrier.notify_all();
+
     output.close();
 }
 
@@ -1773,7 +1915,8 @@ void clusterWorkerLS(BlockingQueue<HWWorkUnit>& input, BlockingQueue<HWWorkUnit>
     std::vector<std::vector<VPL>>& vpls, const std::vector<std::vector<std::uint32_t>>& cbsamp, 
     const Eigen::MatrixXf& contribs, const std::vector<std::vector<int>>& nn, 
     const std::vector<VPL>& total_vpls, std::uint32_t num_clusters, Scene* scene, bool gather_stats, bool show_svd, 
-    float sample_perc, float min_dist, std::uint32_t thread_id){
+    float sample_perc, float min_dist, std::uint32_t thread_id, std::uint32_t num_threads, std::mutex& barrier_mutex,
+    std::condition_variable& barrier){
     
     std::mt19937 rng(std::chrono::high_resolution_clock::now().time_since_epoch().count() * thread_id);
     std::uint32_t split_num_clusters = std::min(total_vpls.size(), num_clusters - cbsamp.size());
@@ -1791,6 +1934,15 @@ void clusterWorkerLS(BlockingQueue<HWWorkUnit>& input, BlockingQueue<HWWorkUnit>
 
         output.push(work_unit);
     }
+
+    static std::uint32_t threads_completed = 0;
+    threads_completed++;
+    {
+        std::unique_lock<std::mutex> lock(barrier_mutex);
+        barrier.wait(lock, [num_threads](){return threads_completed >= num_threads;});
+    }
+    
+    barrier.notify_all();
 
     output.close();
 }
@@ -1997,7 +2149,7 @@ void MatrixReconstructionRenderer::renderHW(Scene* scene, std::uint32_t spp, con
     }
     to_cluster.close();
 
-    std::vector<std::vector<VPL>> vpls(slices.size());
+    std::vector<std::vector<VPL>> vpls(slices.size(), vpls_);
 
     std::thread shader(unoccludedHWWorker, std::ref(to_shade), std::ref(to_finish), std::ref(vpls), 
         min_dist_, vsl_, num_clusters_, batch_size);
@@ -2010,6 +2162,9 @@ void MatrixReconstructionRenderer::renderHW(Scene* scene, std::uint32_t spp, con
     std::vector<std::vector<int>> nearest_neighbours;
     std::vector<std::vector<float>> neighbour_distances;
     std::unique_ptr<LightTree> light_tree;
+
+    std::mutex barrier_mutex;
+    std::condition_variable barrier;
 
     if(clustering_strategy_ == ClusteringStrategy::LS){
         std::uint32_t num_clusters = std::min(std::uint32_t(vpls_.size()), std::uint32_t(num_clusters_ * 0.3f));
@@ -2057,7 +2212,8 @@ void MatrixReconstructionRenderer::renderHW(Scene* scene, std::uint32_t spp, con
         for(std::uint32_t i = 0; i < num_workers; ++i){
             clusterers.emplace_back(clusterWorkerLS, std::ref(to_cluster), std::ref(to_shade), std::ref(vpls),
                 std::ref(cbsamp), std::ref(cluster_contributions), std::ref(nearest_neighbours), std::ref(vpls_),
-                num_clusters_, scene, gather_stat_images_, show_svd_, sample_percentage_, min_dist_, i);
+                num_clusters_, scene, gather_stat_images_, show_svd_, sample_percentage_, min_dist_, i,
+                num_workers, std::ref(barrier_mutex), std::ref(barrier));
         }
         
     }
@@ -2066,7 +2222,8 @@ void MatrixReconstructionRenderer::renderHW(Scene* scene, std::uint32_t spp, con
         light_tree = std::unique_ptr<LightTree>(new LightTree(vpls_, min_dist_, num_clusters_, 0.f));
         for(std::uint32_t i = 0; i < num_workers; ++i){
             clusterers.emplace_back(clusterWorkerMDLC, std::ref(to_cluster), std::ref(to_shade), std::ref(vpls),
-                light_tree.get(), scene, gather_stat_images_, show_svd_, sample_percentage_, min_dist_, i);
+                light_tree.get(), scene, gather_stat_images_, show_svd_, sample_percentage_, min_dist_, i,
+                num_workers, std::ref(barrier_mutex), std::ref(barrier));
         }
     }
 
