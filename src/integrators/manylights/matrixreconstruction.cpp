@@ -905,6 +905,26 @@ std::vector<std::uint32_t> sampleCol(Scene* scene, KDTNode<ReconstructionSample>
     return sampled_indices;
 }
 
+std::vector<std::uint32_t> sampleColB(Scene* scene, KDTNode<ReconstructionSample>* slice, 
+    const std::vector<VPL>& vpls, std::uint32_t col, float min_dist, std::uint32_t num_samples, 
+    std::mt19937& rng, std::vector<std::uint8_t>& sample, const std::vector<float>& probabilities, 
+    const std::vector<std::uint32_t>& sample_set, bool resample){
+
+    std::uint32_t max_samples = slice->sample_indices.size();
+    assert(sample.size() == num_samples && num_samples <= max_samples);
+
+    std::vector<std::uint32_t> sampled_indices = resample ? importanceSample(num_samples, rng, probabilities) : sample_set;
+
+    for(size_t i = 0; i < sampled_indices.size(); ++i){
+        const VPL& vpl = vpls[col];
+        ReconstructionSample& scene_sample = slice->sample(sampled_indices[i]);
+
+        sample[i] = sampleVisibility(scene, scene_sample.its, vpl, min_dist) ? 1 : 0;
+    }
+
+    return sampled_indices;
+}
+
 std::tuple<std::uint32_t, float, float, float, float> adaptiveMatrixReconstruction(Eigen::MatrixXf& mat, Scene* scene, KDTNode<ReconstructionSample>* slice, 
     const std::vector<VPL>& vpls, float min_dist, float sample_perc,
     std::mt19937& rng, bool visibility_only, bool recover_transpose, bool importance_sample, bool force_resample,
@@ -1027,7 +1047,7 @@ std::tuple<std::uint32_t, float, float, float, float> adaptiveMatrixReconstructi
             auto recon_end = std::chrono::high_resolution_clock::now();
 
             time_for_reconstruct += std::chrono::duration_cast<std::chrono::duration<float>>(recon_end - recon_start).count();
-
+            
             float d = 0;
             for(std::uint32_t j = 0; j < sampled.size(); ++j){
                 d += std::abs(reconstructed(sampled[j], 0) - sample_omega(j, 0));
@@ -1064,7 +1084,7 @@ std::tuple<std::uint32_t, float, float, float, float> adaptiveMatrixReconstructi
             //only add to basis if vector isn't a zero vector, as it is otherwise meaningless
             //might want to change this to be above some epsilon instead
             if(reconstructed.norm() > 0.f){
-                q_normalized = q = reconstructed;
+                q = reconstructed;
                 full_col_sampled = true;
             }
         }
@@ -1121,7 +1141,7 @@ std::tuple<std::uint32_t, float, float, float, float> adaptiveMatrixReconstructi
 std::uint32_t adaptiveMatrixReconstructionB(
     std::vector<std::uint8_t>& mat, Scene* scene, KDTNode<ReconstructionSample>* slice, 
     const std::vector<VPL>& vpls, float min_dist, float sample_perc, std::mt19937& rng, 
-    std::uint32_t& basis_rank, const std::vector<float>& col_estimations, bool gather_stats){
+    std::uint32_t& basis_rank, const std::vector<float>& col_estimations){
 
     assert(sample_perc > 0.f && slice->sample_indices.size() > 0 && vpls.size() > 0);
 
@@ -1129,14 +1149,14 @@ std::uint32_t adaptiveMatrixReconstructionB(
     std::uint32_t num_cols = vpls.size();
     
     //re-allocate matrix if it is of the incorrect size
-    if(mat.size() != slice->sample_indices.size() > 0 * vpls.size()){
-        mat.resize(slice->sample_indices.size() > 0 * vpls.size());
+    if(mat.size() != slice->sample_indices.size() * vpls.size()){
+        mat.resize(slice->sample_indices.size() * vpls.size(), 0);
     }
 
     std::uint32_t num_samples = num_rows * sample_perc + 0.5f;
     //just in case, this shouldn't ever really happen
     if(num_samples == 0){
-        num_samples = total_rows;
+        num_samples = slice->sample_indices.size();
     }
 
     //we recover from the brightest to least bright because there will be more full samples initially, allow for better coverage of
@@ -1149,75 +1169,79 @@ std::uint32_t adaptiveMatrixReconstructionB(
         });
 
 
-    std::vector<std::vector<std::uint32_t>> basis;
+    std::vector<std::vector<std::uint8_t>> basis;
 
     std::uint32_t total_samples = 0;
     std::uniform_real_distribution<float> gen(0.f, 1.f);
     std::vector<float> probabilities(num_rows, 1.f / num_rows);
 
-    std::vector<std::uint32_t> sample_omega(num_samples);
-    std::vector<std::uint32_t> col_to_add;
+    std::vector<std::uint8_t> sample_omega(num_samples);
+    std::vector<std::uint8_t> col_to_add(num_rows);
     bool full_col_sampled = false;
+
+    std::vector<std::uint32_t> sampled;
 
     //The actual adaptive matrix recovery algorithm
     for(std::uint32_t i = 0; i < order.size(); ++i){
         std::uint32_t samples_for_col = 0;
 
        if(basis.size() > 0){
-            //auto sample_t = std::chrono::high_resolution_clock::now();
-            sampled = sampleColb(scene, slice, vpls, order[i], min_dist, num_samples, rng, sample_omega, 
-                probabilities);
-            //auto sample_end = std::chrono::high_resolution_clock::now();
+            sampled = sampleColB(scene, slice, vpls, order[i], min_dist, num_samples, rng, sample_omega, 
+                probabilities, sampled, true);
+            full_col_sampled = false;
 
             samples_for_col = num_samples;
             
             std::vector<std::pair<std::uint32_t, bool>> matching_cols;
 
-            for(std::uint32_t j = 0; j < basis.size(); ++j){
-                bool matching = true;
-                bool opposite = true;
-
-                for(std::uint32_t k = 0; k < sampled.size(); ++k){
-                    bool sample_visible = sample_omega(k, 0) > 0.f;
-                    bool col_visible = q(sampled[k], j) > 0.f;
-                    if(sample_omega[k] == basis[j][sampled[k]]){
-                        opposite = false;
-                    }
-                    else{
-                        matching = false;
-                    }
-                }
-
-                if(matching || opposite){
-                    matching_cols.push_back(std::make_pair(j, matching));
-                }
-            }
-
-            if(matching_cols.size() > 0){
-                std::uniform_int_distribution<std::uint32_t> select_col(0, matching_cols.size() - 1);
-                std::uint32_t sel = select_col(rng);
-                col_to_add = basis[matching_cols[sel].first];
-                if(!matching_cols[sel].second){
-                    for(std::uint32_t j = 0; j < col_to_add.size(); ++j){
-                        col_to_add[j] = (col_to_add[j] + 1) % 2;
-                    }
-                }
+            if(sample_omega.size() == col_to_add.size()){
+                col_to_add = sample_omega;
             }
             else{
-                col_to_add.resize(num_rows);
-                sampled = sampleColb(scene, slice, vpls, order[i], min_dist, num_rows, rng, sample_omega, 
-                    probabilities);
-                samples_for_col = num_rows;
- 
-                basis.push_back(col_to_add);
-                
-                full_col_sampled = true;
+                for(std::uint32_t curr_basis_idx = 0; curr_basis_idx < basis.size(); ++curr_basis_idx){
+                    bool matching = true;
+                    bool opposite = true;
+
+                    for(std::uint32_t idx = 0; idx < sampled.size(); ++idx){
+                        if(sample_omega[idx] == basis[curr_basis_idx][sampled[idx]]){
+                            opposite = false;
+                        }
+                        else{
+                            matching = false;
+                        }
+                    }
+
+                    if(matching || opposite){
+                        matching_cols.push_back(std::make_pair(curr_basis_idx, matching));
+                    }
+                }
+
+                if(matching_cols.size() > 0){
+                    std::uniform_int_distribution<std::uint32_t> select_col(0, matching_cols.size() - 1);
+                    std::uint32_t sel = select_col(rng);
+                    col_to_add = basis[matching_cols[sel].first];
+
+                    //opposite direction so we flip
+                    if(!matching_cols[sel].second){
+                        for(std::uint32_t j = 0; j < col_to_add.size(); ++j){
+                            col_to_add[j] = (col_to_add[j] + 1) % 2;
+                        }
+                    }
+                }
+                else{
+                    sampled = sampleColB(scene, slice, vpls, order[i], min_dist, num_rows, rng, col_to_add, 
+                        probabilities, sampled, true);
+                    samples_for_col = num_rows;
+    
+                    basis.push_back(col_to_add);
+                    
+                    full_col_sampled = true;
+                }
             }
         }
         else{
-            col_to_add.resize(num_rows);
-            sampled = sampleColb(scene, slice, vpls, order[i], min_dist, num_rows, rng, sample_omega, 
-                probabilities);
+            sampled = sampleColB(scene, slice, vpls, order[i], min_dist, num_rows, rng, col_to_add, 
+                probabilities, sampled, true);
             samples_for_col = num_rows;
 
             basis.push_back(col_to_add);
@@ -1232,7 +1256,7 @@ std::uint32_t adaptiveMatrixReconstructionB(
             for(std::uint32_t j = 0; j < col_to_add.size(); ++j){
                 if(last_sign != col_to_add[j]){
                     buckets.push_back(j);
-                    last_sign = sign;
+                    last_sign = col_to_add[j];
                 }
             }
 
@@ -1251,7 +1275,8 @@ std::uint32_t adaptiveMatrixReconstructionB(
             }
         }
 
-        mat.col(order[i]) = reconstructed.col(0);
+        std::uint32_t offset = order[i] * num_rows;
+        std::copy(col_to_add.begin(), col_to_add.end(), mat.begin() + offset);
         total_samples += samples_for_col;
     }
     
@@ -1310,7 +1335,7 @@ MatrixReconstructionRenderer::MatrixReconstructionRenderer(const std::vector<VPL
     std::uint32_t max_iterations, std::uint32_t slice_size, bool visibility_only, bool adaptive_col, 
     bool adaptive_importance_sampling, bool adaptive_force_resample, bool adaptive_recover_transpose,
     bool truncated, bool show_slices, bool vsl, bool gather_stat_images, bool show_svd,
-    ClusteringStrategy clustering_strategy, float error_scale, bool hw, std::uint32_t num_clusters) : 
+    ClusteringStrategy clustering_strategy, float error_scale, bool hw, bool bin_vis, std::uint32_t num_clusters) : 
         vpls_(vpls), 
         sample_percentage_(sample_percentage), 
         min_dist_(min_dist), 
@@ -1332,6 +1357,7 @@ MatrixReconstructionRenderer::MatrixReconstructionRenderer(const std::vector<VPL
         clustering_strategy_(clustering_strategy),
         error_scale_(error_scale),
         hw_(hw),
+        bin_vis_(bin_vis),
         num_clusters_(num_clusters),
         cancel_(false){
 }
@@ -1357,6 +1383,7 @@ MatrixReconstructionRenderer::MatrixReconstructionRenderer(MatrixReconstructionR
     clustering_strategy_(other.clustering_strategy_),
     error_scale_(other.error_scale_),
     hw_(other.hw_),
+    bin_vis_(other.bin_vis_),
     num_clusters_(other.num_clusters_),
     cancel_(other.cancel_){
 }
@@ -1384,6 +1411,7 @@ MatrixReconstructionRenderer& MatrixReconstructionRenderer::operator = (MatrixRe
         clustering_strategy_ = other.clustering_strategy_;
         error_scale_ = other.error_scale_;
         hw_ = other.hw_;
+        bin_vis_ = other.bin_vis_;
         num_clusters_ = other.num_clusters_;
         cancel_ = other.cancel_;
     }
@@ -1399,6 +1427,7 @@ struct AdaptiveConstructionParams{
     bool rec_trans;
     bool import_sample;
     bool force_resample;
+    bool bin_vis;
 };
 
 struct SVTParams{
@@ -1485,16 +1514,31 @@ std::tuple<float, float, float, float, float, float> recover(KDTNode<Reconstruct
             std::uint32_t basis_rank;
             std::uint32_t samples;
             auto recover_start_t = std::chrono::high_resolution_clock::now();
-            float svd_t, recon_t, adaptive_sample_t, other_t;
-            std::tie(samples, svd_t, recon_t, adaptive_sample_t, other_t) = 
-                adaptiveMatrixReconstruction(mat, scene, slice, quadranted_vpls[i], general_params.min_dist, 
-                general_params.sample_perc, rng, ac_params.vis_only, ac_params.rec_trans, ac_params.import_sample, 
-                ac_params.force_resample, basis_rank, general_params.vsl, cluster_contribs, gather_stat_images, show_svd,
-                slice->singular_values[i]);
-            svd_time += svd_t;
-            reconstruct_time += recon_t;
-            adaptive_sample_time += adaptive_sample_t;
-            other_time += other_t;
+
+            if(!ac_params.bin_vis){
+                float svd_t, recon_t, adaptive_sample_t, other_t;
+                std::tie(samples, svd_t, recon_t, adaptive_sample_t, other_t) = 
+                    adaptiveMatrixReconstruction(mat, scene, slice, quadranted_vpls[i], general_params.min_dist, 
+                    general_params.sample_perc, rng, ac_params.vis_only, ac_params.rec_trans, ac_params.import_sample, 
+                    ac_params.force_resample, basis_rank, general_params.vsl, cluster_contribs, gather_stat_images, show_svd,
+                    slice->singular_values[i]);
+                svd_time += svd_t;
+                reconstruct_time += recon_t;
+                adaptive_sample_time += adaptive_sample_t;
+                other_time += other_t;
+            }
+            else{
+                std::vector<std::uint8_t> bin_vis(slice->sample_indices.size() * quadranted_vpls[i].size(), 0);
+                samples = adaptiveMatrixReconstructionB(bin_vis, scene, slice, 
+                    quadranted_vpls[i], general_params.min_dist, general_params.sample_perc, rng, 
+                    basis_rank, cluster_contribs);
+
+                for(auto col = 0; col < mat.cols(); ++col){
+                    for(auto row = 0; row < mat.rows(); ++row){
+                        mat(row, col) = bin_vis[col * slice->sample_indices.size() + row] == 0 ? -1.f : 1.f;
+                    }
+                }
+            }
 
             auto recover_t = std::chrono::high_resolution_clock::now();
             total_performed_samples += samples;
@@ -1959,6 +2003,7 @@ void MatrixReconstructionRenderer::renderNonHW(Scene* scene, std::uint32_t spp, 
     ac_params.rec_trans = adaptive_recover_transpose_;
     ac_params.import_sample = adaptive_importance_sampling_;
     ac_params.force_resample = adaptive_force_resample_;
+    ac_params.bin_vis = bin_vis_;
     
     SVTParams svt_params;
     svt_params.tolerance = tolerance_;
