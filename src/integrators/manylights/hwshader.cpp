@@ -126,11 +126,17 @@ struct PixelElement{
 };
 
 struct LightElement{
-    cl_float3 col;
-    cl_float3 n;
+    cl_float3 power;
+    cl_float3 diff_col;
+    cl_float3 spec_col;
     cl_float3 p;
-    cl_float rad;
+    cl_float3 n;
+    cl_float roughness;
+    cl_float3 eta;
+    cl_float3 k;
+    cl_float3 wi;
     cl_float coeff;
+    cl_float rad;
     cl_int type;
 };
 
@@ -308,8 +314,9 @@ void HWShader::renderSlices(const std::vector<KDTNode<ReconstructionSample>*>& s
             VPL& vpl = (*vpls[j])[i];
 
             LightElement light_for_slice;
-            vpl.P.toLinearRGB(light_for_slice.col.s[0], light_for_slice.col.s[1],
-                    light_for_slice.col.s[2]);
+
+            vpl.P.toLinearRGB(light_for_slice.power.s[0], light_for_slice.power.s[1],
+                    light_for_slice.power.s[2]);
             light_for_slice.n.s[0] = vpl.its.shFrame.n.x;
             light_for_slice.n.s[1] = vpl.its.shFrame.n.y;
             light_for_slice.n.s[2] = vpl.its.shFrame.n.z;
@@ -326,7 +333,52 @@ void HWShader::renderSlices(const std::vector<KDTNode<ReconstructionSample>*>& s
             else if(vpl.type == EPointEmitterVPL){
                 light_for_slice.type = 1;
             }
-            else light_for_slice.type = 2;
+            else{
+                light_for_slice.type = 2;
+                Vector light_wi = vpl.its.toWorld(vpl.its.wi);
+
+                light_for_slice.wi.s[0] = light_wi.x;
+                light_for_slice.wi.s[1] = light_wi.y;
+                light_for_slice.wi.s[2] = light_wi.z;
+                
+                if(vpl.emitter != nullptr || vpl.its.getBSDF() == nullptr){
+                    light_for_slice.diff_col.s[0] = 1.f;
+                    light_for_slice.diff_col.s[1] = 1.f;
+                    light_for_slice.diff_col.s[2] = 1.f;
+
+                    light_for_slice.spec_col.s[0] = 0.f;
+                    light_for_slice.spec_col.s[1] = 0.f;
+                    light_for_slice.spec_col.s[2] = 0.f;
+
+                    light_for_slice.eta.s[0] = 1.f;
+                    light_for_slice.eta.s[0] = 1.f;
+                    light_for_slice.eta.s[0] = 1.f;
+
+                    light_for_slice.k.s[0] = 0.f;
+                    light_for_slice.k.s[0] = 0.f;
+                    light_for_slice.k.s[0] = 0.f;
+
+                    light_for_slice.roughness = 1.5f;
+                }
+                else{
+                    const BSDF* bsdf = vpl.its.getBSDF();
+                    Spectrum ldiffuse_col = bsdf->getDiffuseReflectance(vpl.its);
+                    Spectrum lspecular_col = bsdf->getSpecularReflectance(vpl.its);
+                    Spectrum eta = bsdf->getEtaSpec(vpl.its.wi);
+                    Spectrum k = bsdf->getK(vpl.its.wi);
+
+                    ldiffuse_col.toLinearRGB(light_for_slice.diff_col.s[0], light_for_slice.diff_col.s[1],
+                        light_for_slice.diff_col.s[2]);
+                    lspecular_col.toLinearRGB(light_for_slice.spec_col.s[0], light_for_slice.spec_col.s[1],
+                        light_for_slice.spec_col.s[2]);
+                    eta.toLinearRGB(light_for_slice.eta.s[0], light_for_slice.eta.s[1],
+                        light_for_slice.eta.s[2]);
+                    k.toLinearRGB(light_for_slice.k.s[0], light_for_slice.k.s[1],
+                        light_for_slice.k.s[2]);
+
+                    light_for_slice.roughness = std::min(1.5f, bsdf->getRoughness(vpl.its, 0));
+                }
+            }
 
             for(std::uint32_t sample_idx = 0; sample_idx < slices[j]->sample_indices.size(); ++sample_idx){
                 std::uint32_t curr_element = elements_processed + sample_idx;

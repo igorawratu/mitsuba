@@ -153,7 +153,8 @@ Spectrum sample(Scene* scene, Sampler* sampler, Intersection& its, const Ray& in
             }
 
             BSDFSamplingRecord bsdf_sample_record(its, sampler);
-            //bsdf_sample_record.typeMask = BSDF::EReflection;
+            bsdf_sample_record.typeMask = its.getBSDF()->isDielectric() ? BSDF::EDeltaTransmission : 
+                BSDF::EDeltaReflection;
             its.getBSDF()->sample(bsdf_sample_record, sampler->next2D());
 
             ray = Ray(its.p, bsdf_sample_record.its.toWorld(bsdf_sample_record.wo), ray.time);
@@ -234,8 +235,9 @@ Spectrum sample(Scene* scene, Sampler* sampler, Intersection& its, const Ray& in
 
         if(vpl.type == ESurfaceVPL){
             if(vpl.emitter != nullptr){
-                DirectionSamplingRecord dir(-wi);
-                c *= vpl.emitter->evalDirection(dir, vpl.psr);
+                /*DirectionSamplingRecord dir(-wi);
+                c *= vpl.emitter->evalDirection(dir, vpl.psr);*/
+                c *= Spectrum(std::max(0.f, dot(vpl.its.shFrame.n, -wi))) / PI;
             }
             else if(vpl.its.getBSDF() != nullptr){
                 BSDFSamplingRecord bsdf_sample_record(vpl.its, vpl.its.toLocal(-wi));

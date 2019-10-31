@@ -6,15 +6,21 @@ struct PixelElement{
     float roughness;
     float3 eta;
     float3 k;
-    float3 wi;
+    float3 wo;
 };
 
 struct LightElement{
-    float3 col;
-    float3 n;
+    float3 power;
+    float3 diff_col;
+    float3 spec_col;
     float3 p;
-    float rad;
+    float3 n;
+    float roughness;
+    float3 eta;
+    float3 k;
+    float3 wi;
     float coeff;
+    float rad;
     int type;
 };
 
@@ -24,57 +30,98 @@ struct OutputElement{
 
 #define PI 3.1415926
 
-float3 lambertian(float3 albedo, float3 p, float3 n, float3 lp, float3 lcol, float3 ln){
+float3 lambertian(float3 albedo, float3 p, float3 n, float3 lp){
     float3 dir = lp - p;
     float3 wi = normalize(dir);
     float wi_dot_n = fmax(0.0f, dot(wi, n));
     
-    float3 col = albedo * (float3)(wi_dot_n) * lcol / (float3)(PI);
+    float3 col = albedo * (float3)(wi_dot_n) / (float3)(PI);
 
     return col;
 }
 
-float ggx_dist(float3 h, float3 n, float alpha){
-    float noh = clamp(dot(h, n), 0.0f, 1.0f);
+float d_ggx(float3 h, float3 n, float alpha){
     float alpha2 = alpha * alpha;
+    float noh = clamp(dot(n, h), 0.0f, 1.0f);
+    float noh2 = noh * noh;
+    float denom = noh2 * alpha2 + (1.0f - noh2);
 
-    float denom = (noh * noh) * (alpha2 - 1.0f) + 1.0f;
-
-    return alpha2 / (denom * denom * PI);
+    return alpha2 / max(0.00001f, (float)(PI * denom * denom));
 }
 
-float schlick_geom(float alpha, float3 n, float3 v, float3 l){
-    float k = alpha + 1.0f;
-    k = (k * k) / 8.0f;
-    
-    float nov = clamp(dot(n, v), 0.0f, 1.0f);
-    float nol = clamp(dot(n, l), 0.0f, 1.0f);
+float g_ggx_smith(float alpha, float3 n, float3 v, float3 l){
+    float alpha2 = alpha * alpha;
+    float nov = clamp(dot(n, v), 0.00001f, 1.0f);
+    float nol = clamp(dot(n, l), 0.00001f, 1.0f);
+    float tanv = (1.0f - nov) / nov;
+    float tanl = (1.0f - nol) / nol;
 
-    float g1 = nov / (nov * (1.0f - k) + k);
-    float g2 = nol / (nol * (1.0f - k) + k);
+    float gv = 2.0f / (1.0f + sqrt(1.0f + alpha2 * tanv * tanv));
+    float gl = 2.0f / (1.0f + sqrt(1.0f + alpha2 * tanl * tanl));
 
-    return g1 * g2;
+    return gv * gl;
 }
 
-float3 schlick_fres(float3 v, float3 h, float3 f0){
-    float voh = 1.0 - clamp(dot(v, h), 0.0f, 1.0f);
-    voh = powr(voh, 5.0f);
-    return f0 + ((float3)(1.0f) - f0) * (float3)(voh);
+float3 fresnel(float3 v, float3 h, float3 eta, float3 k) {
+    float costheta = clamp(dot(v, h), 0.0f, 1.0f);
+    float cos2theta = costheta * costheta;
+    float sin2theta = 1.0f - cos2theta;
+    float sin4theta = sin2theta * sin2theta;
+
+    float3 temp1 =  eta * eta - k * k - (float3)(sin2theta);
+    float3 a2pb2 = sqrt(temp1 * temp1 + k * k * eta * eta * 4.0f);
+    float3 a = sqrt((a2pb2 + temp1) * 0.5f);
+
+    float3 term1 = a2pb2 + (float3)(cos2theta);
+    float3 term2 = a * (2.0f * costheta);
+
+    float3 rs2 = (term1 - term2) / (term1 + term2);
+
+    float3 term3 = a2pb2 * cos2theta + (float3)(sin4theta);
+    float3 term4 = term2 * sin2theta;
+
+    float3 rp2 = rs2 * (term3 - term4) / (term3 + term4);
+
+    return 0.5f * (rp2 + rs2);
 }
 
 float3 cookTorrance(struct PixelElement pixel, struct LightElement light){
     float3 l = normalize(light.p - pixel.p);
-    float3 h = normalize(pixel.wi + l);
+    float3 h = normalize(pixel.wo + l);
     float3 n = normalize(pixel.n);
     
-    float d = ggx_dist(h, n, pixel.roughness);
-    float g = schlick_geom(pixel.roughness, n, pixel.wi, l);
-    float3 f = schlick_fres(pixel.wi, h, pixel.spec_col);
+    float d = d_ggx(h, n, pixel.roughness);
+    float g = g_ggx_smith(pixel.roughness, n, pixel.wo, l);
+    float3 f = fresnel(pixel.wo, h, pixel.eta, pixel.k) * pixel.spec_col;
 
     float nol = clamp(dot(n, l), 0.f, 1.f);
-    float nov = clamp(dot(pixel.wi, n), 0.f, 1.f);
+    float nov = clamp(dot(pixel.wo, n), 0.f, 1.f);
 
     return f * d * g / clamp(4.0f * (nol * nov + 0.05f), 0.f, 1.f);
+}
+
+float3 getLightCol(struct LightElement light, struct PixelElement pixel){
+    if(light.type != 2){
+        return light.power;
+    }
+
+    float3 dir = normalize(pixel.p - light.p);
+    
+    float nodir = clamp(dot(light.n, dir), 0.0f, 1.0f);
+    float3 diffuse_col = light.power * nodir / (float)(PI);
+
+    float3 h = normalize(dir + light.wi);
+    
+    float d = d_ggx(h, light.n, light.roughness);
+    float g = g_ggx_smith(light.roughness, light.n, dir, light.wi);
+    float3 f = fresnel(dir, h, light.eta, light.k) * light.power * light.spec_col;
+
+    float nol = clamp(dot(light.n, light.wi), 0.f, 1.f);
+    float nov = clamp(dot(dir, light.n), 0.f, 1.f);
+
+    float3 specular_col = light.roughness < 1.000001f ? f * d * g / clamp(4.0f * (nol * nov + 0.05f), 0.f, 1.f) : (float3)(0.0f);
+
+    return diffuse_col + specular_col;
 }
 
 __kernel void shade(__global const struct PixelElement* pixels, __global const struct LightElement* lights, 
@@ -86,29 +133,19 @@ __kernel void shade(__global const struct PixelElement* pixels, __global const s
 
     float coeff = (lights[i].coeff + 1.0f) / 2.0f;
 
-    float3 diffuse = lambertian(pixels[i].diff_col, pixels[i].p, pixels[i].n, lights[i].p, lights[i].col, 
-        lights[i].n);
+    float3 diffuse = lambertian(pixels[i].diff_col, pixels[i].p, pixels[i].n, lights[i].p);
 
     float3 specular = pixels[i].roughness < 1.0001f ? cookTorrance(pixels[i], lights[i]) : (float3)(0.0f);
 
-    float3 color = diffuse + specular;
+    float3 bsdf_color = diffuse + specular;
 
-    float3 light_col = lights[i].col;
+    float3 light_col = getLightCol(lights[i], pixels[i]);
 
-    float3 dir = pixels[i].p - lights[i].p;
     if(lights[i].type != 0){
+        float3 dir = pixels[i].p - lights[i].p;
         float dist = fmax(min_dist, length(dir));
         light_col /= (dist * dist);
     }
 
-    if(lights[i].type == 2){
-        float lnodir = fmax(0.0f, dot(normalize(dir), lights[i].n));
-        light_col *= (float3)(lnodir) / (float3)(PI);
-    }
-    
-    color *= light_col;
-
-    //output[i].col = output[i].col + color * (float3)(coeff);
-
-    output[i].col = output[i].col + color * (float3)(coeff);
+    output[i].col = output[i].col + bsdf_color * light_col * (float3)(coeff);
 }

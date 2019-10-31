@@ -518,14 +518,15 @@ std::unique_ptr<KDTNode<ReconstructionSample>> constructKDTree(Scene* scene, std
                         break;
                     }
 
-                    if(!(curr_sample.its.getBSDF()->getType() & BSDF::EDelta) || curr_sample.its.isEmitter()
+                    if((curr_sample.its.getBSDF()->getType() & BSDF::ESmooth) || curr_sample.its.isEmitter()
                         || ++num_bounces > 5){
                         //curr_sample.its.wi = -curr_sample.ray.d;
                         break;
                     }
 
                     BSDFSamplingRecord bsdf_sample_record(curr_sample.its, sampler);
-                    //bsdf_sample_record.typeMask = BSDF::EReflection;
+                    bsdf_sample_record.typeMask = curr_sample.its.getBSDF()->isDielectric() ? 
+                        BSDF::EDeltaTransmission : BSDF::EDeltaReflection;
                     curr_sample.its.getBSDF()->sample(bsdf_sample_record, sampler->next2D());
 
                     curr_sample.ray = Ray(curr_sample.its.p, bsdf_sample_record.its.toWorld(bsdf_sample_record.wo), ray.time);
@@ -801,38 +802,35 @@ void constructStatBuffers(std::vector<Spectrum>& recovered, std::vector<Spectrum
 
 //generates a set of indices based on the probabilities passed through the vector
 std::vector<std::uint32_t> importanceSample(std::uint32_t num_samples, std::mt19937& rng, const std::vector<float>& probabilities){
-    std::vector<std::uint32_t> available(probabilities.size());
-    std::iota(available.begin(), available.end(), 0);
+    num_samples = std::min((size_t)num_samples, probabilities.size());
 
-    num_samples = std::min((size_t)num_samples, available.size());
-    if(num_samples == available.size()){
-        return available;
+    if(num_samples == probabilities.size()){
+        std::vector<std::uint32_t> all_indices(probabilities.size());
+        std::iota(all_indices.begin(), all_indices.end(), 0);
+        return all_indices;
     }
+
+    double total_contrib = 0.;
+    for(std::uint32_t j = 0; j < probabilities.size(); ++j){
+        total_contrib += probabilities[j];
+    }
+
+    std::uniform_real_distribution<double> gen(0., total_contrib);
 
     std::vector<std::uint32_t> sampled(num_samples);
     for(std::uint32_t i = 0; i < num_samples; ++i){
-        double total_contrib = 0.;
-        for(std::uint32_t j = 0; j < available.size(); ++j){
-            total_contrib += probabilities[available[j]];
-        }
-
-        std::uniform_real_distribution<double> gen(0., total_contrib);
         double selection = gen(rng);
 
         std::uint32_t idx = 0;
-        for(; idx < available.size(); ++idx){
-            selection -= probabilities[available[idx]];
+        for(; idx < probabilities.size(); ++idx){
+            selection -= probabilities[idx];
             if(selection <= 0.){
                 break;
             }
         }
 
-        sampled[i] = available[idx];
-        available[idx] = available.back();
-        available.pop_back();
+        sampled[i] = idx;
     }
-
-    std::sort(sampled.begin(), sampled.end());
 
     return sampled;
 }
