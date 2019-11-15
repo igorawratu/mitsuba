@@ -18,7 +18,7 @@ public:
 
     void renderSlices(const std::vector<KDTNode<ReconstructionSample>*>& slices,
         const std::vector<std::vector<VPL>*>& vpls, std::uint32_t cluster_size,
-        float min_dist);
+        float min_dist, bool vsl);
     
     bool initialized(){
         return initialized_;
@@ -33,7 +33,7 @@ private:
     cl_platform_id platform_id_;
     cl_device_id device_id_;
     cl_program program_;
-    cl_kernel kernel_;
+    cl_kernel kernel_, vsl_kernel_;
     bool initialized_;
     
     cl_mem pixel_buffer_, light_buffer_, output_buffer_;

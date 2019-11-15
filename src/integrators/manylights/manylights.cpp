@@ -250,11 +250,11 @@ size_t generateVPLs(const Scene *scene, size_t offset, size_t count, int max_dep
 				weight /= approx_albedo;
 			}
 			
-			weight *= bsdf_sample_weight;
-			
 			VPL vpl(ESurfaceVPL, weight);
 			vpl.its = its;
-			
+
+			weight *= bsdf_sample_weight;
+
 			if (BSDF::getMeasure(bsdf_sample.sampledType) == ESolidAngle) {
 				vpls.push_back(vpl);
 			}

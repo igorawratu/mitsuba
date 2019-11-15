@@ -16,6 +16,7 @@ HWShader::HWShader() :
     device_id_(nullptr),
     program_(nullptr),
     kernel_(nullptr),
+    vsl_kernel_(nullptr),
     initialized_(false),    
     pixel_buffer_(nullptr),
     light_buffer_(nullptr),
@@ -74,6 +75,12 @@ HWShader::HWShader() :
         return;
     }
 
+    vsl_kernel_ = clCreateKernel(program_, "shadeVSL", &ret);
+    if(ret != 0){
+        std::cerr << "Unable to create vsl kernel" << std::endl;
+        return;
+    }
+
     std::cout << "OpenCL initialized" << std::endl;
 
     initialized_ = true;
@@ -89,6 +96,10 @@ HWShader::~HWShader(){
         clReleaseKernel(kernel_);
     }
     
+    if(vsl_kernel_){
+        clReleaseKernel(vsl_kernel_);
+    }
+
     if(program_){
         clReleaseProgram(program_);
     }
@@ -123,6 +134,7 @@ struct PixelElement{
     cl_float3 eta;
     cl_float3 k;
     cl_float3 wi;
+    cl_int type;
 };
 
 struct LightElement{
@@ -138,6 +150,7 @@ struct LightElement{
     cl_float coeff;
     cl_float rad;
     cl_int type;
+    cl_int light_surface_type;
 };
 
 struct OutputElement{
@@ -198,11 +211,29 @@ bool HWShader::initializeBuffers(std::uint32_t size){
         return false;
     }
 
+    ret = clSetKernelArg(vsl_kernel_, 0, sizeof(cl_mem), (void *)&pixel_buffer_);
+    if(ret != 0){
+        std::cerr << "Unable to copy to set kernel argument 0" << std::endl;
+        return false;
+    }
+
+    ret = clSetKernelArg(vsl_kernel_, 1, sizeof(cl_mem), (void *)&light_buffer_);
+    if(ret != 0){
+        std::cerr << "Unable to copy to set kernel argument 1" << std::endl;
+        return false;
+    }
+
+    ret = clSetKernelArg(vsl_kernel_, 2, sizeof(cl_mem), (void *)&output_buffer_);
+    if(ret != 0){
+        std::cerr << "Unable to copy to set kernel argument 2" << std::endl;
+        return false;
+    }
+
     return true;
 }
 
 void HWShader::renderSlices(const std::vector<KDTNode<ReconstructionSample>*>& slices,
-    const std::vector<std::vector<VPL>*>& vpls, std::uint32_t cluster_size, float min_dist){
+    const std::vector<std::vector<VPL>*>& vpls, std::uint32_t cluster_size, float min_dist, bool vsl){
 
     assert(vpls.size() == slices.size());
 
@@ -225,20 +256,50 @@ void HWShader::renderSlices(const std::vector<KDTNode<ReconstructionSample>*>& s
     }
 
     cl_int num_el_cl = num_elements;
-    cl_int ret = clSetKernelArg(kernel_, 3, sizeof(cl_int), (void *)&num_el_cl);
-    if(ret != 0){
-        initialized_ = false;
-        std::cerr << "Unable to copy to set kernel argument 2" << std::endl;
-        return;
-    }
 
-    cl_float cl_min_dist = min_dist;
-    ret = clSetKernelArg(kernel_, 4, sizeof(cl_float), (void *)&cl_min_dist);
-    if(ret != 0){
-        initialized_ = false;
-        std::cerr << "Unable to set kernel argument 4" << std::endl;
-        return;
+    cl_int ret;
+
+    if(vsl){
+        ret = clSetKernelArg(vsl_kernel_, 3, sizeof(cl_int), (void *)&num_el_cl);
+        if(ret != 0){
+            initialized_ = false;
+            std::cerr << "Unable to copy to set vsl kernel argument 3" << std::endl;
+            return;
+        }
+
+        cl_float cl_min_dist = min_dist;
+        ret = clSetKernelArg(vsl_kernel_, 4, sizeof(cl_float), (void *)&cl_min_dist);
+        if(ret != 0){
+            initialized_ = false;
+            std::cerr << "Unable to set vsl kernel argument 4" << std::endl;
+            return;
+        }
+
+        cl_int max_samples = 100;
+        ret = clSetKernelArg(vsl_kernel_, 5, sizeof(cl_int), (void *)&max_samples);
+        if(ret != 0){
+            initialized_ = false;
+            std::cerr << "Unable to set vsl kernel argument 5" << std::endl;
+            return;
+        }
     }
+    else{
+        ret = clSetKernelArg(kernel_, 3, sizeof(cl_int), (void *)&num_el_cl);
+        if(ret != 0){
+            initialized_ = false;
+            std::cerr << "Unable to copy to set kernel argument 3" << std::endl;
+            return;
+        }
+
+        cl_float cl_min_dist = min_dist;
+        ret = clSetKernelArg(kernel_, 4, sizeof(cl_float), (void *)&cl_min_dist);
+        if(ret != 0){
+            initialized_ = false;
+            std::cerr << "Unable to set kernel argument 4" << std::endl;
+            return;
+        }
+    }
+    
 
     std::unique_ptr<PixelElement[]> host_pixel_buffer(new PixelElement[num_elements]);
     std::unique_ptr<LightElement[]> host_light_buffer(new LightElement[num_elements]);
@@ -296,6 +357,8 @@ void HWShader::renderSlices(const std::vector<KDTNode<ReconstructionSample>*>& s
             host_pixel_buffer[curr_element].wi.s[0] = wi.x;
             host_pixel_buffer[curr_element].wi.s[1] = wi.y;
             host_pixel_buffer[curr_element].wi.s[2] = wi.z;
+
+            host_pixel_buffer[curr_element].type = bsdf->isConductor() ? 0 : 1;
         }
         elements_processed += slices[i]->sample_indices.size();
     }
@@ -359,6 +422,8 @@ void HWShader::renderSlices(const std::vector<KDTNode<ReconstructionSample>*>& s
                     light_for_slice.k.s[0] = 0.f;
 
                     light_for_slice.roughness = 1.5f;
+
+                    light_for_slice.light_surface_type = 1;
                 }
                 else{
                     const BSDF* bsdf = vpl.its.getBSDF();
@@ -377,6 +442,8 @@ void HWShader::renderSlices(const std::vector<KDTNode<ReconstructionSample>*>& s
                         light_for_slice.k.s[2]);
 
                     light_for_slice.roughness = std::min(1.5f, bsdf->getRoughness(vpl.its, 0));
+
+                    light_for_slice.light_surface_type = bsdf->isConductor() ? 0 : 1;
                 }
             }
 
@@ -402,8 +469,15 @@ void HWShader::renderSlices(const std::vector<KDTNode<ReconstructionSample>*>& s
         size_t local_item_size = 64;
         size_t global_item_size = (num_elements / local_item_size + 1) * local_item_size;
         
-        ret = clEnqueueNDRangeKernel(command_queue_, kernel_, 1, NULL, 
+        if(vsl){
+            ret = clEnqueueNDRangeKernel(command_queue_, vsl_kernel_, 1, NULL, 
                 &global_item_size, &local_item_size, 0, NULL, NULL);
+        }
+        else{
+            ret = clEnqueueNDRangeKernel(command_queue_, kernel_, 1, NULL, 
+                &global_item_size, &local_item_size, 0, NULL, NULL);
+        }
+        
         if(ret != 0){
             std::cerr << "Unable to run opencl kernel with code " << ret << std::endl;
             initialized_ = false;

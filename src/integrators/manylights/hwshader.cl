@@ -7,6 +7,7 @@ struct PixelElement{
     float3 eta;
     float3 k;
     float3 wo;
+    int type;
 };
 
 struct LightElement{
@@ -22,6 +23,7 @@ struct LightElement{
     float coeff;
     float rad;
     int type;
+    int light_surface_type;
 };
 
 struct OutputElement{
@@ -30,40 +32,64 @@ struct OutputElement{
 
 #define PI 3.1415926
 
-float3 lambertian(float3 albedo, float3 p, float3 n, float3 lp){
-    float3 dir = lp - p;
-    float3 wi = normalize(dir);
-    float wi_dot_n = fmax(0.0f, dot(wi, n));
-    
-    float3 col = albedo * (float3)(wi_dot_n) / (float3)(PI);
+float rand(float3 p3)
+{
+    float3 floor;
+	p3 = fract(p3 * 0.1031f, &floor);
+    p3 += dot(p3, p3.yzx + 33.33f);
+    float out;
+    return fract((p3.x + p3.y) * p3.z, &out);
+}
 
-    return col;
+float3 rotate_to_frame(float3 old_frame, float3 new_frame, float3 v){
+    if(length(old_frame - new_frame) < 0.00001f){
+        return v;
+    }
+
+    float3 axis = cross((float4)(old_frame, 0.0f), (float4)(new_frame, 0.0f)).xyz;
+    float c = dot(old_frame, new_frame);
+    float s = length(axis);
+    axis = normalize(axis);
+
+    float invc = 1.0f - c;
+
+    float3 mat[3] = {(float3)(axis.x * axis.x * invc + c, axis.x * axis.y * invc - s * axis.z, axis.x * axis.z * invc + s * axis.y),
+                    (float3)(axis.x * axis.y * invc + s * axis.z, axis.y * axis.y * invc + c, axis.y * axis.z * invc - s * axis.x),
+                    (float3)(axis.x * axis.z * invc - s * axis.y, axis.y * axis.z * invc + s * axis.x, axis.z * axis.z * invc + c)};
+
+    return (float3)(mat[0].x * v.x + mat[0].y * v.y + mat[0].z * v.z,
+                    mat[1].x * v.x + mat[1].y * v.y + mat[1].z * v.z,
+                    mat[2].x * v.x + mat[2].y * v.y + mat[2].z * v.z);
+}
+
+float lambertian(float3 n, float3 wi){
+    float wi_dot_n = clamp(dot(wi, n), 0.0f, 1.0f);
+
+    return wi_dot_n / PI;
 }
 
 float d_ggx(float3 h, float3 n, float alpha){
+    float noh = clamp(dot(h, n), 0.0f, 1.0f);
     float alpha2 = alpha * alpha;
-    float noh = clamp(dot(n, h), 0.0f, 1.0f);
     float noh2 = noh * noh;
-    float denom = noh2 * alpha2 + (1.0f - noh2);
+    float denom = 1.0f + noh2 * (alpha2 - 1.0f);
 
-    return alpha2 / max(0.00001f, (float)(PI * denom * denom));
+    return alpha2 / (float)(PI * denom * denom);
+}
+
+float g1_ggx_smith(float alpha, float3 n, float3 v){
+    float alpha2 = alpha * alpha;
+    float nov = clamp(dot(n, v), 0.00001f, 1.0f);
+    float tanv = (1.0f - nov) / nov;
+    
+    return 2.0f / (1.0f + sqrt(1.0f + alpha2 * tanv * tanv));
 }
 
 float g_ggx_smith(float alpha, float3 n, float3 v, float3 l){
-    float alpha2 = alpha * alpha;
-    float nov = clamp(dot(n, v), 0.00001f, 1.0f);
-    float nol = clamp(dot(n, l), 0.00001f, 1.0f);
-    float tanv = (1.0f - nov) / nov;
-    float tanl = (1.0f - nol) / nol;
-
-    float gv = 2.0f / (1.0f + sqrt(1.0f + alpha2 * tanv * tanv));
-    float gl = 2.0f / (1.0f + sqrt(1.0f + alpha2 * tanl * tanl));
-
-    return gv * gl;
+    return g1_ggx_smith(alpha, n, v) * g1_ggx_smith(alpha, n, l);
 }
 
-float3 fresnel(float3 v, float3 h, float3 eta, float3 k) {
-    float costheta = clamp(dot(v, h), 0.0f, 1.0f);
+float3 fresnel(float costheta, float3 eta, float3 k) {
     float cos2theta = costheta * costheta;
     float sin2theta = 1.0f - cos2theta;
     float sin4theta = sin2theta * sin2theta;
@@ -85,46 +111,33 @@ float3 fresnel(float3 v, float3 h, float3 eta, float3 k) {
     return 0.5f * (rp2 + rs2);
 }
 
-float3 cookTorrance(float3 pixel_p, float3 light_p, float3 pixel_wo, float3 pixel_n, float3 pixel_rough, float3 pixel_eta, float3 pixel_k,
-    float3 pixel_spec_col){
+float cookTorrance(float3 h, float3 wi, float3 wo, float3 n, float roughness){
+    float d = d_ggx(h, n, roughness);
+    float g = g_ggx_smith(roughness, n, wo, wi);
 
-    float3 l = normalize(light_p - pixel_p);
-    float3 h = normalize(pixel_wo + l);
-    float3 n = normalize(pixel_n);
-    
-    float d = d_ggx(h, n, pixel_rough);
-    float g = g_ggx_smith(pixel_rough, n, pixel_wo, l);
-    float3 f = fresnel(pixel_wo, h, pixel_eta, pixel_k) * pixel_spec_col;
+    float nol = clamp(dot(h, wi), 0.f, 1.f);
+    float nov = clamp(dot(wo, n), 0.f, 1.f);
 
-    float nol = clamp(dot(n, l), 0.f, 1.f);
-    float nov = clamp(dot(pixel_wo, n), 0.f, 1.f);
-
-    return f * d * g / clamp(4.0f * (nol * nov + 0.05f), 0.f, 1.f);
+    return d * g / max(4.0f * nol, 0.0001f);
 }
 
-float3 getLightCol(int light_type, float3 light_power, float3 pixel_p, float3 light_p, float3 light_n, float3 light_wi, float3 light_rough,
-    float3 light_eta, float3 light_k, float3 light_spec_col){
-    if(light_type != 2){
-        return light_power;
+float3 evalBSDF(float3 n, float3 wi, float3 wo, float3 eta, float3 k, float roughness, float3 spec_col,
+    float3 diff_col){
+    float3 h = normalize(wi + wo);
+
+    float3 f = fresnel(clamp(dot(h, wo), 0.0f, 1.0f), eta, k);
+
+    float3 specular = roughness < 1.0001f ? spec_col * f * cookTorrance(h, wi, wo, n, roughness) 
+        : (float3)(0.0f);
+
+    float3 diffuse = diff_col * lambertian(n, wi);
+    if(roughness < 1.0001f){
+        //float3 inveta2 = (float3)(1.0f) / (eta * eta);
+        //only once since mitsuba does the other 1-f multiplication when looking up diffuse reflectance
+        diffuse *= (1.0f - f) * (1.0f - f)/* * inveta2*/;
     }
 
-    float3 dir = normalize(pixel_p - light_p);
-    
-    float nodir = clamp(dot(light_n, dir), 0.0f, 1.0f);
-    float3 diffuse_col = light_power * nodir / (float)(PI);
-
-    float3 h = normalize(dir + light_wi);
-    
-    float d = d_ggx(h, light_n, light_rough);
-    float g = g_ggx_smith(light_rough, light_n, dir, light_wi);
-    float3 f = fresnel(dir, h, light_eta, light_k) * light_power * light_spec_col;
-
-    float nol = clamp(dot(light_n, light_wi), 0.f, 1.f);
-    float nov = clamp(dot(dir, light_n), 0.f, 1.f);
-
-    float3 specular_col = light_rough < 1.000001f ? f * d * g / clamp(4.0f * (nol * nov + 0.05f), 0.f, 1.f) : (float3)(0.0f);
-
-    return diffuse_col + specular_col;
+    return specular + diffuse;
 }
 
 __kernel void shade(__global const struct PixelElement* pixels, __global const struct LightElement* lights, 
@@ -136,102 +149,151 @@ __kernel void shade(__global const struct PixelElement* pixels, __global const s
 
     float coeff = (lights[i].coeff + 1.0f) / 2.0f;
 
-    float3 diffuse = lambertian(pixels[i].diff_col, pixels[i].p, pixels[i].n, lights[i].p);
+    float3 dir = lights[i].p - pixels[i].p;
+    float3 wi = normalize(dir);
+    
+    float3 bsdf_col = evalBSDF(pixels[i].n, wi, pixels[i].wo, pixels[i].eta, pixels[i].k, pixels[i].roughness,
+        pixels[i].spec_col, pixels[i].diff_col);
 
-    float3 specular = pixels[i].roughness < 1.0001f ? 
-        cookTorrance(pixels[i].p, lights[i].p, pixels[i].wo, pixels[i].n, pixels[i].roughness, pixels[i].eta, pixels[i].k, pixels[i].spec_col) : 
-        (float3)(0.0f);
-
-    float3 bsdf_color = diffuse + specular;
-
-    float3 light_col = getLightCol(lights[i].type, lights[i].power, pixels[i].p, light[i].p, lights[i].n, lights[i].wi, light[i].roughness,
-        lights[i].eta, lights[i].k, lights[i].spec_col);
+    float3 light_col = lights[i].type == 2 ? /*evalBSDF(lights[i].n, -wi, lights[i].wi, lights[i].eta, lights[i].k, lights[i].roughness,
+        lights[i].spec_col, lights[i].diff_col)*/ clamp(dot(-wi, lights[i].n), 0.0f, 1.0f) / (float)(PI) * lights[i].power : lights[i].power;
 
     if(lights[i].type != 0){
-        float3 dir = pixels[i].p - lights[i].p;
         float dist = fmax(min_dist, length(dir));
         light_col /= (dist * dist);
     }
 
-    output[i].col = output[i].col + bsdf_color * light_col * (float3)(coeff);
+    output[i].col = output[i].col + bsdf_col * light_col * (float3)(coeff);
 }
 
-float rand(unsigned int seed){
-    unsigned int c = seed>>32;
-    unsigned int x = seed & 0xFFFFFFFF;
-    seed = (unsigned long)(x * (unsigned long)(4294883355) + c);
-    return (float)(x ^ c) / ;
-}
+float3 sampleCone(struct PixelElement pixel, struct LightElement light, float solid_angle, float3 seed){
+    float r = rand(seed) * light.rad;
+    float theta = rand(seed * 2) * 2.0f * PI;
+    float sqrt_r = sqrt(r);
+    float3 dir = light.p - pixel.p;
+    float d = length(dir);
+    dir = normalize(dir);
+    float3 wi = (float3)(cos(theta) * sqrt_r, sin(theta) * sqrt_r, d);
+    wi = normalize(rotate_to_frame((float3)(0.0f, 0.0f, 1.0f), dir, wi));
 
-float3 rotate_to_frame(float3 old_frame, float3 new_frame, float3 v){
-    if(old_frame == -new_frame){
-        old_frame += (0.001f, 0.001f, 0.001f);
+    float prough = max(0.001f, pixel.roughness);
+    float lrough = max(0.001f, light.roughness);
+
+    float3 bsdf_col = evalBSDF(pixel.n, wi, pixel.wo, pixel.eta, pixel.k, prough, pixel.spec_col, pixel.diff_col);
+    float3 light_col = light.power * clamp(dot(-wi, light.n), 0.0f, 1.0f) / (float)(PI);//evalBSDF(light.n, -wi, light.wi, light.eta, light.k, lrough, light.spec_col, light.diff_col);
+
+    float3 h = normalize(wi + pixel.wo);
+    float costheta = clamp(dot(h, wi), 0.0f, 1.0f);
+    
+    float spec_mag = prough < 1.000001f ? length(pixel.spec_col) : 0.0f;
+    float dif_mag = length(pixel.diff_col);
+    float mag_denom = spec_mag + dif_mag;
+
+    if(mag_denom < 0.0000001f){
+        return 0.0f;
     }
 
-    float4 cp = cross((float4)(old_frame, 0.0f), (float4)(new_frame, 0.0f));
-    float sin = cp.length();
-    float cos = dot(old_frame, new_frame);
+    float dif_rat = dif_mag / mag_denom;
 
-    float v2s = 1.0f / (1.0f + c);
-    float3[3] mat = {(float3)(1.0f, -cp.z + cp.z * cp.z * v2s, cp.y + cp.y * cp.y * v2s),
-                    (float3)(cp.z + cp.z * cp.z * v2s, 1.0f, -cp.x + cp.x * cp.x * v2s),
-                    (float3)(-cp.y + cp.y * cp.y * vs2, cp.x + cp.x * cp.x * v2s, 1.0f)};
+    float nol = clamp(dot(h, wi), 0.0f, 1.0f);
+    float spec_prob = pixel.roughness < 1.0001f ? 
+        (1.0f - dif_rat) * g1_ggx_smith(pixel.roughness, pixel.wo, h) * d_ggx(h, pixel.n, prough) / max(4.0f * nol, 0.0001f) : 0.0f;
+    float diff_prob = lambertian(pixel.n, wi) * dif_rat;
 
-    //assuming v on the right
-    return (float3)(mat[0].x * v.x + mat[0].y * v.y + mat[0].z * v.z,
-                    mat[1].x * v.x + mat[1].y * v.y + mat[1].z * v.z,
-                    mat[2].x * v.x + mat[2].y * v.y + mat[2].z * v.z);
+    return bsdf_col * light_col / (spec_prob + diff_prob + 1.0f / solid_angle);
 }
 
-float getGGXPDF(struct PixelElement pixel, struct LightElement light){
+float3 sampleBSDF(struct PixelElement pixel, struct LightElement light, float solid_angle, float ca_ctheta, float3 seed){
+    float2 v = (float2)(rand(seed), rand(seed * 2));
+    float spec_mag = pixel.roughness < 1.000001f ? length(pixel.spec_col) : 0.0f;
+    float dif_mag = length(pixel.diff_col);
+    float mag_denom = spec_mag + dif_mag;
 
-}
+    if(mag_denom < 0.0000001f){
+        return 0.0f;
+    }
 
-float3 sampleCone(struct PixelElement pixel, struct LightElement light, float solid_angle){
-    float r = rand() * light.rad;
-    float theta = rand() * 2.0f * PI;
-    float sqrt_r = sqrt(r);
-    float3 dir = normalize(light.p - pixel.p);
-    float3 sample_ray = normalize(rotate_to_frame(dir, normalize((float3)(cos(theta) * sqrt_r, sin(theta) * sqrt_r, d))));
+    float diff_rat = dif_mag / mag_denom;
 
-    float3 diffuse = lambertian(pixel.diff_col, pixel.p, pixel.n, sample_ray);
-    float3 specular = pixel.roughness < 1.0001f ? 
-        cookTorrance(pixel.p, light.p, pixel.wo, pixel.n, pixel.roughness, pixel.eta, pixel.k, pixel.spec_col) : 
-        (float3)(0.0f);
-    float3 bsdf_col = diffuse + specular;
+    float3 dir = light.p - pixel.p;
+    float d = length(dir);
+    dir = normalize(dir);
 
-    float3 light_col = getLightCol(lights[i].type, lights[i].power, pixels[i].p, light[i].p, lights[i].n, lights[i].wi, light[i].roughness,
-        lights[i].eta, lights[i].k, lights[i].spec_col);
+    float3 wi;
 
-    return bsdf_col * light_col;
-}
-
-float3 sampleBSDF(struct PixelElement pixel, struct LightElement light, float solid_angle, float cos_theta){
-    float2 v = (float2)(rand(), rand());
+    float prough = max(0.001f, pixel.roughness);
+    float lrough = max(0.001f, light.roughness);
     
+    if(v.x < diff_rat){
+        v.x /= diff_rat;
+        float theta = 2.0f * PI * v.y;
+        float r = sqrt(v.x);
+        wi = normalize((float3)(r * cos(theta), r * sin(theta), 1.0f - v.x));
+        wi = rotate_to_frame((float3)(0.0f, 0.0f, 1.0f), pixel.n, wi);
+    }
+    else{
+        v.x = (v.x - diff_rat) / (1.0f - diff_rat);
+        float numer = prough * sqrt(v.x);
+        float denom = sqrt(1.0f - v.x);
+        float phi = atan2(numer, denom);
+        float theta = 2.0f * PI * v.y;
+
+        float sin_theta = sin(theta);
+        float sin_phi = sin(phi);
+        float cos_phi = cos(phi);
+        float cos_theta = cos(theta);
+        float3 wm = normalize((float3)(cos_theta * sin_phi, sin_theta * sin_phi, cos_phi));
+        wm = rotate_to_frame((float3)(0.0f, 0.0f, 1.0f), pixel.n, wm);
+
+        wi = 2.0f * dot(pixel.wo, wm) * wm - pixel.wo;
+    }
+
+    
+    float dp = dot(dir, wi);
+
+    if(dp > ca_ctheta)
+    {
+        float3 bsdf_col = evalBSDF(pixel.n, wi, pixel.wo, pixel.eta, pixel.k, prough, pixel.spec_col, pixel.diff_col);
+        float3 light_col = light.power * clamp(dot(-wi, light.n), 0.0f, 1.0f) / (float)(PI);//evalBSDF(light.n, -wi, light.wi, light.eta, light.k, lrough, light.spec_col, light.diff_col);
+
+        
+        float3 h = normalize(wi + pixel.wo);
+        float nol = clamp(dot(h, wi), 0.0f, 1.0f);
+        float spec_prob = prough < 1.0001f ? 
+            (1.0f - diff_rat) * g1_ggx_smith(pixel.roughness, pixel.wo, h) * d_ggx(h, pixel.n, prough) / max(4.0f * nol, 0.0001f) : 0.0f;
+        float diff_prob = lambertian(pixel.n, wi) * diff_rat;
+
+        return bsdf_col * light_col / (spec_prob + diff_prob + 1.0f / solid_angle);
+    }
+
+    return 0.0f;
 }
 
 __kernel void shadeVSL(__global const struct PixelElement* pixels, __global const struct LightElement* lights, 
-    __global struct OutputElement *output, int num_pixels, int max_samples_per_vsl){
+    __global struct OutputElement *output, int num_pixels, float min_dist, int max_samples_per_vsl){
     int i = get_global_id(0);
     if(i >= num_pixels){
         return;
     }
 
+    float3 seed = pixels[i].p / min_dist * 100.f;
+
     float coeff = (lights[i].coeff + 1.0f) / 2.0f;
 
     float central_disc_area = PI * lights[i].rad * lights[i].rad;
     float d = length(pixels[i].p - lights[i].p);
-    float cos_theta = cos(asin(min(lights[i].rad / d, 1.0f)));
+    float hypot_length = sqrt(d * d + lights[i].rad * lights[i].rad);
+    float cos_theta = d / hypot_length;
+    //float cos_theta = cos(asin(min(lights[i].rad / d, 1.0f)));
     float solid_angle = 2.0f * PI * (1.0f - cos_theta);
     int num_samples = max(1, (int)(sqrt(1.0f - cos_theta) * max_samples_per_vsl));
 
     float3 final_color = 0.0f;
 
-    for(int i = 0; i < num_samples; ++i){
-        final_color += sampleCone(pixels[i], lights[i], solid_angle);
-        final_color += sampleBSDF(pixels[i], lights[i], solid_angle, cos_theta);
+    for(int sample = 0; sample < num_samples; ++sample){
+        final_color += sampleCone(pixels[i], lights[i], solid_angle, seed * sample);
+        final_color += sampleBSDF(pixels[i], lights[i], solid_angle, cos_theta, seed * sample);
     }
 
-    return final_color * coeff / (num_samples * central_disc_area);
+    output[i].col = output[i].col + final_color * coeff / (num_samples * central_disc_area);
 }

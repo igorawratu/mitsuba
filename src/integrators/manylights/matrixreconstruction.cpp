@@ -1773,7 +1773,7 @@ void processBatch(const std::vector<HWWorkUnit>& batch, HWShader& hw_shader,
         slice_vpls.push_back(&vpls[batch[i].second]);
     }
 
-    hw_shader.renderSlices(slices, slice_vpls, cluster_size, min_dist);
+    hw_shader.renderSlices(slices, slice_vpls, cluster_size, min_dist, true);
 }
 
 void unoccludedHWWorker(BlockingQueue<HWWorkUnit>& input, BlockingQueue<HWWorkUnit>& output, 
@@ -1816,7 +1816,7 @@ void recoverHW(KDTNode<ReconstructionSample>* slice, const std::vector<VPL>& vpl
     Vector3f slice_com_norm(0.f);
     for(std::uint32_t i = 0; i < slice->sample_indices.size(); ++i){
         slice_com_pos += slice->sample(i).its.p;
-        slice_com_norm += slice->sample(i).its.geoFrame.n;
+        slice_com_norm += slice->sample(i).its.shFrame.n;
     }
     slice_com_pos /= slice->sample_indices.size();
     slice_com_norm /= slice_com_norm.length();
@@ -1931,7 +1931,7 @@ void clusterWorkerMDLC(BlockingQueue<HWWorkUnit>& input, BlockingQueue<HWWorkUni
             slice_points[i] = work_unit.first->sample(i).its;
         }
 
-        //vpls[work_unit.second] = light_tree->getClusteringForPoints(slice_points);
+        vpls[work_unit.second] = light_tree->getClusteringForPoints(slice_points);
         //not sure if this should change to a radius union approach instead
         updateVPLRadii(vpls[work_unit.second], min_dist);
 
@@ -2192,7 +2192,7 @@ void MatrixReconstructionRenderer::renderHW(Scene* scene, std::uint32_t spp, con
     }
     to_cluster.close();
 
-    std::vector<std::vector<VPL>> vpls(slices.size(), vpls_);
+    std::vector<std::vector<VPL>> vpls(slices.size());
 
     std::thread shader(unoccludedHWWorker, std::ref(to_shade), std::ref(to_finish), std::ref(vpls), 
         min_dist_, vsl_, num_clusters_, batch_size);
