@@ -8,6 +8,7 @@ struct PixelElement{
     float3 k;
     float3 wo;
     int type;
+    int slice_id;
 };
 
 struct LightElement{
@@ -28,6 +29,10 @@ struct LightElement{
 
 struct OutputElement{
     float3 col;
+};
+
+struct CoeffElement{
+    float coeff;
 };
 
 #define PI 3.1415926
@@ -140,25 +145,29 @@ float3 evalBSDF(float3 n, float3 wi, float3 wo, float3 eta, float3 k, float roug
     return specular + diffuse;
 }
 
-__kernel void shade(__global const struct PixelElement* pixels, __global const struct LightElement* lights, 
-    __global struct OutputElement *output, int num_pixels, float min_dist){
+__kernel void shade(__global const struct PixelElement* pixels, 
+    __global const struct CoeffElement* coefficients,
+    __global const struct LightElement* lights, 
+    __global struct OutputElement *output, 
+    int num_pixels, float min_dist, int clusters_per_slice, int curr_pass){
     int i = get_global_id(0);
     if(i >= num_pixels){
         return;
     }
 
-    float coeff = (lights[i].coeff + 1.0f) / 2.0f;
+    float coeff = (coefficients[i].coeff + 1.0f) / 2.0f;
+    int curr_light_idx = pixels[i].slice_id * clusters_per_slice + curr_pass;
 
-    float3 dir = lights[i].p - pixels[i].p;
+    float3 dir = lights[curr_light_idx].p - pixels[i].p;
     float3 wi = normalize(dir);
     
     float3 bsdf_col = evalBSDF(pixels[i].n, wi, pixels[i].wo, pixels[i].eta, pixels[i].k, pixels[i].roughness,
         pixels[i].spec_col, pixels[i].diff_col);
 
-    float3 light_col = lights[i].type == 2 ? /*evalBSDF(lights[i].n, -wi, lights[i].wi, lights[i].eta, lights[i].k, lights[i].roughness,
-        lights[i].spec_col, lights[i].diff_col)*/ clamp(dot(-wi, lights[i].n), 0.0f, 1.0f) / (float)(PI) * lights[i].power : lights[i].power;
+    float3 light_col = lights[curr_light_idx].type == 2 ? /*evalBSDF(lights[curr_light_idx].n, -wi, lights[curr_light_idx].wi, lights[curr_light_idx].eta, lights[curr_light_idx].k, lights[curr_light_idx].roughness,
+        lights[curr_light_idx].spec_col, lights[curr_light_idx].diff_col)*/ clamp(dot(-wi, lights[curr_light_idx].n), 0.0f, 1.0f) / (float)(PI) * lights[curr_light_idx].power : lights[curr_light_idx].power;
 
-    if(lights[i].type != 0){
+    if(lights[curr_light_idx].type != 0){
         float dist = fmax(min_dist, length(dir));
         light_col /= (dist * dist);
     }
@@ -269,30 +278,34 @@ float3 sampleBSDF(struct PixelElement pixel, struct LightElement light, float so
     return 0.0f;
 }
 
-__kernel void shadeVSL(__global const struct PixelElement* pixels, __global const struct LightElement* lights, 
-    __global struct OutputElement *output, int num_pixels, float min_dist, int max_samples_per_vsl){
+__kernel void shadeVSL(__global const struct PixelElement* pixels, 
+    __global const struct CoeffElement* coefficients,
+    __global const struct LightElement* lights, 
+    __global struct OutputElement *output, 
+    int num_pixels, float min_dist, int clusters_per_slice, int curr_pass, int max_samples_per_vsl){
     int i = get_global_id(0);
     if(i >= num_pixels){
         return;
     }
 
-    float3 seed = pixels[i].p / min_dist * 100.f;
+    float3 seed = pixels[i].p / min_dist * 100.f * (float)(curr_pass + 1.0f);
 
-    float coeff = (lights[i].coeff + 1.0f) / 2.0f;
+    float coeff = (coefficients[i].coeff + 1.0f) / 2.0f;
+    int curr_light_idx = pixels[i].slice_id * clusters_per_slice + curr_pass;
 
-    float central_disc_area = PI * lights[i].rad * lights[i].rad;
-    float d = length(pixels[i].p - lights[i].p);
-    float hypot_length = sqrt(d * d + lights[i].rad * lights[i].rad);
+    float central_disc_area = PI * lights[curr_light_idx].rad * lights[curr_light_idx].rad;
+    float d = length(pixels[i].p - lights[curr_light_idx].p);
+    float hypot_length = sqrt(d * d + lights[curr_light_idx].rad * lights[curr_light_idx].rad);
     float cos_theta = d / hypot_length;
-    //float cos_theta = cos(asin(min(lights[i].rad / d, 1.0f)));
+    //float cos_theta = cos(asin(min(lights[curr_light_idx].rad / d, 1.0f)));
     float solid_angle = 2.0f * PI * (1.0f - cos_theta);
     int num_samples = max(1, (int)(sqrt(1.0f - cos_theta) * max_samples_per_vsl));
 
     float3 final_color = 0.0f;
 
     for(int sample = 0; sample < num_samples; ++sample){
-        final_color += sampleCone(pixels[i], lights[i], solid_angle, seed * sample);
-        final_color += sampleBSDF(pixels[i], lights[i], solid_angle, cos_theta, seed * sample);
+        final_color += sampleCone(pixels[i], lights[curr_light_idx], solid_angle, seed * sample);
+        final_color += sampleBSDF(pixels[i], lights[curr_light_idx], solid_angle, cos_theta, seed * sample);
     }
 
     output[i].col = output[i].col + final_color * coeff / (num_samples * central_disc_area);

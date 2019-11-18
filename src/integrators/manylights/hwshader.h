@@ -25,7 +25,8 @@ public:
     }
 
 private:
-    bool initializeBuffers(std::uint32_t size);
+    bool initializePixelBuffers(std::uint32_t pixels);
+    bool initializeLightBuffer(std::uint32_t slices, std::uint32_t clusters_per_slice);
 
 private:
     cl_context context_;
@@ -36,8 +37,8 @@ private:
     cl_kernel kernel_, vsl_kernel_;
     bool initialized_;
     
-    cl_mem pixel_buffer_, light_buffer_, output_buffer_;
-    std::uint32_t curr_buffer_elements_;
+    cl_mem pixel_buffer_, light_buffer_, output_buffer_, coeff_buffer_;
+    std::uint32_t curr_buffer_elements_, curr_light_elements_;
 };
 
 MTS_NAMESPACE_END
