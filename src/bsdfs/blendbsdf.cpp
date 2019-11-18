@@ -97,6 +97,14 @@ public:
         return m_bsdfs[0]->getK(wi);
     }
 
+    bool isConductor() const{
+        return m_bsdfs[0]->isConductor();
+    }
+
+    bool isDielectric() const{
+        return m_bsdfs[0]->isDielectric();
+    }
+
     Spectrum getSpecularReflectance(const Intersection &its) const{
         return m_bsdfs[0]->getSpecularReflectance(its);
     }

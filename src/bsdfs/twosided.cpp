@@ -146,6 +146,10 @@ public:
         //}
     }
 
+    bool isConductor() const{
+        return m_nestedBRDF[0]->isConductor();
+    }
+
     Float pdf(const BSDFSamplingRecord &bRec, EMeasure measure) const {
         BSDFSamplingRecord b(bRec);
 

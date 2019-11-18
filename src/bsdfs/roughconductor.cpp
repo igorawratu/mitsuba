@@ -225,6 +225,10 @@ public:
         return m_specularReflectance->eval(its);
     }
 
+    bool isConductor() const{
+        return true;
+    }
+
     void serialize(Stream *stream, InstanceManager *manager) const {
         BSDF::serialize(stream, manager);
 

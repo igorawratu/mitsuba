@@ -457,6 +457,14 @@ public:
 
     virtual Spectrum getEtaSpec(Vector wi) const = 0;
 
+    virtual bool isDielectric() const{
+        return false;
+    }
+
+    virtual bool isConductor() const{
+        return false;
+    }
+
     /**
      * \brief For rough BSDFs: return the root mean square
      * surface roughness of the given BSDF component

@@ -165,7 +165,7 @@ struct OutputElement{
 };
 
 struct CoeffElement{
-    cl_float coeff;
+    cl_uint coeff;
 };
 
 bool HWShader::initializeLightBuffer(std::uint32_t slices, std::uint32_t clusters_per_slice){

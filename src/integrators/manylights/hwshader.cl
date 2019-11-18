@@ -32,7 +32,7 @@ struct OutputElement{
 };
 
 struct CoeffElement{
-    float coeff;
+    uint coeff;
 };
 
 #define PI 3.1415926
@@ -155,7 +155,7 @@ __kernel void shade(__global const struct PixelElement* pixels,
         return;
     }
 
-    float coeff = (coefficients[i].coeff + 1.0f) / 2.0f;
+    float coeff = coefficients[i].coeff > 0 ? 1.0f : 0.0f;
     int curr_light_idx = pixels[i].slice_id * clusters_per_slice + curr_pass;
 
     float3 dir = lights[curr_light_idx].p - pixels[i].p;
@@ -290,7 +290,7 @@ __kernel void shadeVSL(__global const struct PixelElement* pixels,
 
     float3 seed = pixels[i].p / min_dist * 100.f * (float)(curr_pass + 1.0f);
 
-    float coeff = (coefficients[i].coeff + 1.0f) / 2.0f;
+    float coeff = coefficients[i].coeff > 0 ? 1.0f : 0.0f;
     int curr_light_idx = pixels[i].slice_id * clusters_per_slice + curr_pass;
 
     float central_disc_area = PI * lights[curr_light_idx].rad * lights[curr_light_idx].rad;

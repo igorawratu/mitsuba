@@ -221,7 +221,7 @@ public:
     }
 
     Spectrum getDiffuseReflectance(const Intersection &its) const {
-        return m_diffuseReflectance->eval(its) * (1-m_fdrExt);
+        return m_diffuseReflectance->eval(its);// * (1-m_fdrExt);
     }
 
     Spectrum getSpecularReflectance(const Intersection &its) const {

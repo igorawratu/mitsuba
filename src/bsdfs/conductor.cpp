@@ -304,6 +304,10 @@ public:
         return m_k;
     }
 
+    bool isConductor() const{
+        return true;
+    }
+
     std::string toString() const {
         std::ostringstream oss;
         oss << "SmoothConductor[" << endl

@@ -519,7 +519,7 @@ std::unique_ptr<KDTNode<ReconstructionSample>> constructKDTree(Scene* scene, std
                     }
 
                     if((curr_sample.its.getBSDF()->getType() & BSDF::ESmooth) || curr_sample.its.isEmitter()
-                        || ++num_bounces > 5){
+                        || ++num_bounces > 10){
                         //curr_sample.its.wi = -curr_sample.ray.d;
                         break;
                     }
@@ -1889,25 +1889,21 @@ void recoverHW(KDTNode<ReconstructionSample>* slice, const std::vector<VPL>& vpl
             cluster_contribs[j] = estimated_diffuse_power;
         }
         
-        std::uint32_t mat_rows = slice->sample_indices.size();
-        Eigen::MatrixXf mat = Eigen::MatrixXf::Zero(mat_rows, quadranted_vpls[i].size());
-        std::uint32_t max_rank = std::min(mat.rows(), mat.cols());
-        std::uint32_t basis_rank;
         std::uint32_t samples;
-        
-        float svd_t, recon_t, adaptive_sample_t, other_t;
-        std::tie(samples, svd_t, recon_t, adaptive_sample_t, other_t) = 
-            adaptiveMatrixReconstruction(mat, scene, slice, quadranted_vpls[i], min_dist, sample_perc, rng, 
-            true, false, true, false, basis_rank, false, cluster_contribs, gather_stat_images, show_svd,
-            slice->singular_values[i]);
+        std::uint32_t basis_rank;
+
+        std::vector<std::uint8_t> bin_vis(slice->sample_indices.size() * quadranted_vpls[i].size(), 0);
+        samples = adaptiveMatrixReconstructionB(bin_vis, scene, slice, 
+            quadranted_vpls[i], min_dist, sample_perc, rng, basis_rank, cluster_contribs);
 
         total_performed_samples += samples;
-        slice->rank_ratio[i] = float(basis_rank) / max_rank;
-        
+        slice->rank_ratio[i] = float(basis_rank) / std::min(slice->sample_indices.size(), quadranted_vpls[i].size());
+
         for(std::uint32_t j = 0; j < actual_vpl_index[i].size(); ++j){
             for(std::uint32_t k = 0; k < slice->sample_indices.size(); ++k){
                 std::uint32_t idx = actual_vpl_index[i][j] * slice->sample_indices.size() + k;
-                slice->visibility_coefficients[idx] = mat(k, j);
+                std::uint32_t bin_vis_idx = j * slice->sample_indices.size() + k;
+                slice->visibility_coefficients[idx] = bin_vis[bin_vis_idx];
             }
         }
     }
@@ -2181,7 +2177,7 @@ void MatrixReconstructionRenderer::renderHW(Scene* scene, std::uint32_t spp, con
     std::uint32_t samples_per_slice){
     
     std::uint32_t num_workers = 15;//std::max(size_t(1), std::min(slices.size(), size_t(std::thread::hardware_concurrency() / 2)));
-    std::uint32_t batch_size = 1000;//std::max(num_workers * 2, 64u);
+    std::uint32_t batch_size = 500;//std::max(num_workers * 2, 64u);
 
     BlockingQueue<HWWorkUnit> to_cluster;
     BlockingQueue<HWWorkUnit> to_shade(batch_size * 2);

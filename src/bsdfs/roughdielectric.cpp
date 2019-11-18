@@ -359,6 +359,10 @@ public:
         return Spectrum(0.f);
     }
 
+    bool isDielectric() const{
+        return true;
+    }
+
     Float pdf(const BSDFSamplingRecord &bRec, EMeasure measure) const {
         if (measure != ESolidAngle)
             return 0.0f;

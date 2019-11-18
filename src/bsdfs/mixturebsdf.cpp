@@ -118,6 +118,14 @@ public:
         return m_bsdfs[0]->getDiffuseReflectance(its);
     }
 
+    bool isConductor() const{
+        return m_bsdfs[0]->isConductor();
+    }
+
+    bool isDielectric() const{
+        return m_bsdfs[0]->isDielectric();
+    }
+
     void serialize(Stream *stream, InstanceManager *manager) const {
         BSDF::serialize(stream, manager);
 

@@ -181,6 +181,10 @@ public:
         return Spectrum(0.f);
     }
 
+    bool isDielectric() const{
+        return true;
+    }
+
     Spectrum getEtaSpec(Vector wi) const{
         return Spectrum(m_eta);
     }

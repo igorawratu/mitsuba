@@ -109,6 +109,10 @@ public:
         return Spectrum(m_eta);
     }
 
+    bool isDielectric() const{
+        return true;
+    }
+
     void serialize(Stream *stream, InstanceManager *manager) const {
         BSDF::serialize(stream, manager);
 
