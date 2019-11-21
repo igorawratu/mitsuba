@@ -241,14 +241,14 @@ size_t generateVPLs(const Scene *scene, size_t offset, size_t count, int max_dep
 			if (bsdf_sample_weight.isZero())
 				break;
 
-			float approx_albedo = std::fmin(0.95f, bsdf_sample_weight.max());
+			/*float approx_albedo = std::fmin(0.95f, bsdf_sample_weight.max());
 
             if (sampler->next1D() > approx_albedo){
 				break;
 			}
             else{
 				weight /= approx_albedo;
-			}
+			}*/
 			
 			VPL vpl(ESurfaceVPL, weight);
 			vpl.its = its;

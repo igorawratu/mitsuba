@@ -89,6 +89,9 @@ Spectrum sampleCone(const Vector3f& wi, const VPL& vpl, const Intersection& its,
         BSDFSamplingRecord light_sample_record(vpl.its, vpl.its.toLocal(-sample_wi));
         curr_col *= vpl.its.getBSDF()->eval(light_sample_record);
     }
+    else{
+        curr_col *= Spectrum(std::max(0.f, dot(vpl.its.shFrame.n, -sample_wi))) / PI;
+    }
 
     float cone_prob, brdf_prob, light_prob;
     std::tie(cone_prob, brdf_prob, light_prob) = calculateMisWeight(sample_wi, vpl, its, solid_angle);
@@ -100,18 +103,23 @@ Spectrum sampleCone(const Vector3f& wi, const VPL& vpl, const Intersection& its,
 Spectrum sampleBsdf(const VPL& vpl, const Intersection& its, Sampler* sampler, float solid_angle, float cos_theta){
     BSDFSamplingRecord bsdf_sample_record(its, sampler, ERadiance);
     bsdf_sample_record.typeMask = BSDF::EReflection;
-    Spectrum curr_col = its.getBSDF()->sample(bsdf_sample_record, sampler->next2D()) * vpl.P;
+    Float pdf;
+    Spectrum curr_col = its.getBSDF()->sample(bsdf_sample_record, pdf, sampler->next2D());
+    curr_col *= pdf;
     Vector3f wo = its.toWorld(bsdf_sample_record.wo);
     
     float wi_dot_vp = std::max(0.f, dot(wo, normalize(vpl.its.p - its.p)));
     if(wi_dot_vp > cos_theta){
         if(vpl.emitter != nullptr){
             DirectionSamplingRecord dir(-wo);
-            curr_col *= vpl.emitter->evalDirection(dir, vpl.psr);
+            curr_col *= vpl.P * vpl.emitter->evalDirection(dir, vpl.psr);
         }
         else if(vpl.its.getBSDF() != nullptr){
             BSDFSamplingRecord light_sample_record(vpl.its, vpl.its.toLocal(-wo));
-            curr_col *= vpl.its.getBSDF()->eval(light_sample_record);
+            curr_col *= vpl.P * vpl.its.getBSDF()->eval(light_sample_record);
+        }
+        else{
+            curr_col *= vpl.P * Spectrum(std::max(0.f, dot(vpl.its.shFrame.n, -wo))) / PI;
         }
 
         float cone_prob, brdf_prob, light_prob;
@@ -220,11 +228,11 @@ Spectrum sample(Scene* scene, Sampler* sampler, Intersection& its, const Ray& in
         //only care about non-specular surfaces for now, just return specular reflectance
         if(!(bsdf->getType() & BSDF::ESmooth)){
             BSDFSamplingRecord bsdf_sample_record(its, sampler);
-            c = vpl.P * bsdf->sample(bsdf_sample_record, sampler->next2D()) * dot(its.shFrame.n, wi) / PI;
+            c = bsdf->sample(bsdf_sample_record, sampler->next2D()) * dot(its.shFrame.n, wi) / PI;
         }
         else{
             BSDFSamplingRecord bsdf_sample_record(its, its.toLocal(wi));
-            c = vpl.P * bsdf->eval(bsdf_sample_record);
+            c = bsdf->eval(bsdf_sample_record);
         }
 
         if(vpl.type != EDirectionalEmitterVPL){
@@ -236,16 +244,15 @@ Spectrum sample(Scene* scene, Sampler* sampler, Intersection& its, const Ray& in
         if(vpl.type == ESurfaceVPL){
             if(vpl.emitter != nullptr){
                 DirectionSamplingRecord dir(-wi);
-                c *= vpl.emitter->evalDirection(dir, vpl.psr);
+                c *= vpl.P * vpl.emitter->evalDirection(dir, vpl.psr);
             }
             else if(vpl.its.getBSDF() != nullptr){
-                //BSDFSamplingRecord bsdf_sample_record(vpl.its, vpl.its.toLocal(-wi));
-                //c *= vpl.its.getBSDF()->eval(bsdf_sample_record);
-                c *= Spectrum(std::max(0.f, dot(vpl.its.shFrame.n, -wi))) / PI;
+                BSDFSamplingRecord bsdf_sample_record(vpl.its, vpl.its.toLocal(-wi));
+                c *= vpl.P * vpl.its.getBSDF()->eval(bsdf_sample_record);
             }
             //fallback to diffuse if no bsdf or emitter found
             else{
-                c *= Spectrum(std::max(0.f, dot(vpl.its.shFrame.n, -wi))) / PI;
+                c *= vpl.P * Spectrum(std::max(0.f, dot(vpl.its.shFrame.n, -wi))) / PI;
             }
         }
     }

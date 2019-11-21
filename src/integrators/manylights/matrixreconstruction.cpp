@@ -1764,7 +1764,7 @@ void sliceWorkerMDLC(std::vector<std::int32_t>& work, std::uint32_t thread_id, s
 typedef std::pair<KDTNode<ReconstructionSample>*, std::uint32_t> HWWorkUnit;
 
 void processBatch(const std::vector<HWWorkUnit>& batch, HWShader& hw_shader, 
-    std::vector<std::vector<VPL>>& vpls, std::uint32_t cluster_size, float min_dist){
+    std::vector<std::vector<VPL>>& vpls, std::uint32_t cluster_size, float min_dist, bool vsl){
     
     std::vector<KDTNode<ReconstructionSample>*> slices;
     std::vector<std::vector<VPL>*> slice_vpls;
@@ -1773,7 +1773,7 @@ void processBatch(const std::vector<HWWorkUnit>& batch, HWShader& hw_shader,
         slice_vpls.push_back(&vpls[batch[i].second]);
     }
 
-    hw_shader.renderSlices(slices, slice_vpls, cluster_size, min_dist, true);
+    hw_shader.renderSlices(slices, slice_vpls, cluster_size, min_dist, vsl);
 }
 
 void unoccludedHWWorker(BlockingQueue<HWWorkUnit>& input, BlockingQueue<HWWorkUnit>& output, 
@@ -1789,7 +1789,7 @@ void unoccludedHWWorker(BlockingQueue<HWWorkUnit>& input, BlockingQueue<HWWorkUn
         batch.push_back(work_unit);
 
         if(batch.size() >= batch_size){
-            processBatch(batch, hw_shader, vpls, cluster_size, min_dist);
+            processBatch(batch, hw_shader, vpls, cluster_size, min_dist, vsl);
             for(std::uint32_t i = 0; i < batch.size(); ++i){
                 output.push(batch[i]);
             }
@@ -1799,7 +1799,7 @@ void unoccludedHWWorker(BlockingQueue<HWWorkUnit>& input, BlockingQueue<HWWorkUn
     }
 
     if(batch.size() > 0){
-        processBatch(batch, hw_shader, vpls, cluster_size, min_dist);
+        processBatch(batch, hw_shader, vpls, cluster_size, min_dist, vsl);
         for(std::uint32_t i = 0; i < batch.size(); ++i){
             output.push(batch[i]);
         }

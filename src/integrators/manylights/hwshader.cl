@@ -123,7 +123,7 @@ float cookTorrance(float3 h, float3 wi, float3 wo, float3 n, float roughness){
     float nol = clamp(dot(h, wi), 0.f, 1.f);
     float nov = clamp(dot(wo, n), 0.f, 1.f);
 
-    return d * g / max(4.0f * nol, 0.0001f);
+    return d * g / max(4.0f * nov, 0.0001f);
 }
 
 float3 evalBSDF(float3 n, float3 wi, float3 wo, float3 eta, float3 k, float roughness, float3 spec_col,
@@ -156,18 +156,34 @@ __kernel void shade(__global const struct PixelElement* pixels,
     }
 
     float coeff = coefficients[i].coeff > 0 ? 1.0f : 0.0f;
-    int curr_light_idx = pixels[i].slice_id * clusters_per_slice + curr_pass;
+    int lidx = pixels[i].slice_id * clusters_per_slice + curr_pass;
 
-    float3 dir = lights[curr_light_idx].p - pixels[i].p;
+    float3 dir = lights[lidx].p - pixels[i].p;
     float3 wi = normalize(dir);
     
+    //float rough = pixels[i].roughness < 0.0001f ? 2.f : pixels[i].roughness;
+
     float3 bsdf_col = evalBSDF(pixels[i].n, wi, pixels[i].wo, pixels[i].eta, pixels[i].k, pixels[i].roughness,
         pixels[i].spec_col, pixels[i].diff_col);
 
-    float3 light_col = lights[curr_light_idx].type == 2 ? /*evalBSDF(lights[curr_light_idx].n, -wi, lights[curr_light_idx].wi, lights[curr_light_idx].eta, lights[curr_light_idx].k, lights[curr_light_idx].roughness,
-        lights[curr_light_idx].spec_col, lights[curr_light_idx].diff_col)*/ clamp(dot(-wi, lights[curr_light_idx].n), 0.0f, 1.0f) / (float)(PI) * lights[curr_light_idx].power : lights[curr_light_idx].power;
+    float3 light_col;
+    if(lights[lidx].type == 2){
+        if(lights[lidx].light_surface_type == 0){
+            light_col = clamp(dot(-wi, lights[lidx].n), 0.0f, 1.0f) / (float)(PI);
+        }
+        else{
+            light_col = evalBSDF(lights[lidx].n, -wi, lights[lidx].wi, 
+                lights[lidx].eta, lights[lidx].k, lights[lidx].roughness,
+                lights[lidx].spec_col, lights[lidx].diff_col);
+        }
 
-    if(lights[curr_light_idx].type != 0){
+        light_col *= lights[lidx].power;
+    }
+    else{
+        light_col = lights[lidx].power;
+    }
+
+    if(lights[lidx].type != 0){
         float dist = fmax(min_dist, length(dir));
         light_col /= (dist * dist);
     }
@@ -189,7 +205,7 @@ float3 sampleCone(struct PixelElement pixel, struct LightElement light, float so
     float lrough = max(0.001f, light.roughness);
 
     float3 bsdf_col = evalBSDF(pixel.n, wi, pixel.wo, pixel.eta, pixel.k, prough, pixel.spec_col, pixel.diff_col);
-    float3 light_col = light.power * clamp(dot(-wi, light.n), 0.0f, 1.0f) / (float)(PI);//evalBSDF(light.n, -wi, light.wi, light.eta, light.k, lrough, light.spec_col, light.diff_col);
+    float3 light_col = light.power * evalBSDF(light.n, -wi, light.wi, light.eta, light.k, lrough, light.spec_col, light.diff_col);
 
     float3 h = normalize(wi + pixel.wo);
     float costheta = clamp(dot(h, wi), 0.0f, 1.0f);
@@ -263,7 +279,7 @@ float3 sampleBSDF(struct PixelElement pixel, struct LightElement light, float so
     if(dp > ca_ctheta)
     {
         float3 bsdf_col = evalBSDF(pixel.n, wi, pixel.wo, pixel.eta, pixel.k, prough, pixel.spec_col, pixel.diff_col);
-        float3 light_col = light.power * clamp(dot(-wi, light.n), 0.0f, 1.0f) / (float)(PI);//evalBSDF(light.n, -wi, light.wi, light.eta, light.k, lrough, light.spec_col, light.diff_col);
+        float3 light_col = light.power * evalBSDF(light.n, -wi, light.wi, light.eta, light.k, lrough, light.spec_col, light.diff_col);
 
         
         float3 h = normalize(wi + pixel.wo);

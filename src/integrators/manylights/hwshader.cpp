@@ -378,9 +378,10 @@ void HWShader::renderSlices(const std::vector<KDTNode<ReconstructionSample>*>& s
 
             vpl.P.toLinearRGB(light_for_slice.power.s[0], light_for_slice.power.s[1],
                     light_for_slice.power.s[2]);
-            light_for_slice.n.s[0] = vpl.its.shFrame.n.x;
-            light_for_slice.n.s[1] = vpl.its.shFrame.n.y;
-            light_for_slice.n.s[2] = vpl.its.shFrame.n.z;
+            Normal n = vpl.its.wi.z > 0.f ? vpl.its.shFrame.n : -vpl.its.shFrame.n;
+            light_for_slice.n.s[0] = n.x;
+            light_for_slice.n.s[1] = n.y;
+            light_for_slice.n.s[2] = n.z;
 
             light_for_slice.p.s[0] = vpl.its.p.x;
             light_for_slice.p.s[1] = vpl.its.p.y;
@@ -421,7 +422,7 @@ void HWShader::renderSlices(const std::vector<KDTNode<ReconstructionSample>*>& s
 
                     light_for_slice.roughness = 1.5f;
 
-                    light_for_slice.light_surface_type = 1;
+                    light_for_slice.light_surface_type = 0;
                 }
                 else{
                     const BSDF* bsdf = vpl.its.getBSDF();
@@ -441,7 +442,7 @@ void HWShader::renderSlices(const std::vector<KDTNode<ReconstructionSample>*>& s
 
                     light_for_slice.roughness = std::min(1.5f, bsdf->getRoughness(vpl.its, 0));
 
-                    light_for_slice.light_surface_type = bsdf->isConductor() ? 0 : 1;
+                    light_for_slice.light_surface_type = 1;
                 }
             }
         }
