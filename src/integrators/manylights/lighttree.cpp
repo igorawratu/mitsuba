@@ -63,7 +63,7 @@ void divideByGreatestDim(const std::vector<VPL>& vpls, std::vector<VPL>& left, s
 	left.clear();
 	right.clear();
 
-	/*float maxf = std::numeric_limits<float>::max();
+	float maxf = std::numeric_limits<float>::max();
 	Vector3f min_pos(maxf, maxf, maxf), max_pos(-maxf, -maxf, -maxf);
 	Vector3f min_normal(maxf, maxf, maxf), max_normal(-maxf, -maxf, -maxf);
 
@@ -118,7 +118,7 @@ void divideByGreatestDim(const std::vector<VPL>& vpls, std::vector<VPL>& left, s
 		});
 
 	for(std::uint32_t i = 0; i < vpls.size(); ++i){
-		if(divider_comp[ranges[0].first](averages[ranges[0].first], vpls[i].its)){
+		if(divider_comp[ranges[0].first](midpoints[ranges[0].first], vpls[i].its)){
 			right.push_back(vpls[i]);
 		}
 		else{
@@ -134,9 +134,9 @@ void divideByGreatestDim(const std::vector<VPL>& vpls, std::vector<VPL>& left, s
 		std::uint32_t midpoint = vpl_sorted.size() / 2;
 		left.insert(left.end(), vpl_sorted.begin(), vpl_sorted.begin() + midpoint);
 		right.insert(right.end(), vpl_sorted.begin() + midpoint, vpl_sorted.end());
-	}*/
+	}
 
-	bool has_directional = vpl_type != EPointEmitterVPL;
+	/*bool has_directional = vpl_type != EPointEmitterVPL;
 	bool has_positional = vpl_type != EDirectionalEmitterVPL;
 
 	Eigen::MatrixXf mean = Eigen::MatrixXf::Zero(6, 1);
@@ -200,7 +200,7 @@ void divideByGreatestDim(const std::vector<VPL>& vpls, std::vector<VPL>& left, s
 		else{
 			right.push_back(vpls[projections[i].second]);
 		}
-	}
+	}*/
 }
 
 std::unique_ptr<LightTreeNode> createLightTree(const std::vector<VPL>& vpls, EVPLType vpl_type, float min_dist, std::mt19937& rng) {
@@ -643,9 +643,18 @@ float calculateClusterContribution(Point shading_point_position, Normal shading_
 
 	//only dealing with lambertian diffuse right now
 	float largest = std::numeric_limits<float>::min();
-	for(std::uint8_t i = 0; i < 8; ++i){
-		float dp = dot(normalize(bounding_points[i] - shading_point_position), shading_point_normal);
-		largest = std::max(dp, largest);
+
+	if(vpl_type != EDirectionalEmitterVPL){
+		for(std::uint8_t i = 0; i < 8; ++i){
+			float dp = dot(normalize(bounding_points[i] - shading_point_position), shading_point_normal);
+			largest = std::max(dp, largest);
+		}
+	}
+	else{
+		float angle = acos(dot(-light_tree_node->cone_ray, shading_point_normal));
+		float dif = std::max(0.f, angle - light_tree_node->cone_halfangle);
+		float pd2 = M_PI / 2.f;
+		largest = std::max(0.f, pd2 - dif) / pd2;
 	}
 
 	float material = std::max(0.f, largest);
@@ -698,9 +707,11 @@ LightTree::LightTree(const std::vector<VPL>& vpls, float min_dist, std::uint32_t
 
 	std::mt19937 rng(std::chrono::high_resolution_clock::now().time_since_epoch().count());
 
-	point_tree_root_ = tdCreateLightTree(point_vpls_, EPointEmitterVPL, min_dist_, 10000, rng);
-	oriented_tree_root_ = tdCreateLightTree(oriented_vpls_, ESurfaceVPL, min_dist_, 10000, rng);
-	directional_tree_root_ = tdCreateLightTree(directional_vpls_, EDirectionalEmitterVPL, min_dist_, 10000, rng);
+	std::cout << point_vpls_.size() << " " << oriented_vpls_.size() << " " << directional_vpls_.size() << std::endl;
+
+	point_tree_root_ = tdCreateLightTree(point_vpls_, EPointEmitterVPL, min_dist_, 1000, rng);
+	oriented_tree_root_ = tdCreateLightTree(oriented_vpls_, ESurfaceVPL, min_dist_, 1000, rng);
+	directional_tree_root_ = tdCreateLightTree(directional_vpls_, EDirectionalEmitterVPL, min_dist_, 1000, rng);
 }
 
 LightTree::LightTree(const LightTree& other) : point_vpls_(other.point_vpls_), directional_vpls_(other.directional_vpls_),

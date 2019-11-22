@@ -226,7 +226,7 @@ size_t generateVPLs(const Scene *scene, size_t offset, size_t count, int max_dep
 			weight = direct_sample_weight * M_PI * bounding_sphere.radius * bounding_sphere.radius;
 		}
 
-		int depth = 2;
+		int depth = 2; 
 		Ray ray(point_sample.p, direction_sample.d, time);
 		Intersection its;
 		//generates vpls from additional bounces
@@ -240,14 +240,11 @@ size_t generateVPLs(const Scene *scene, size_t offset, size_t count, int max_dep
 			if (bsdf_sample_weight.isZero())
 				break;
 
-			/*float approx_albedo = std::fmin(0.95f, bsdf_sample_weight.max());
+			float approx_albedo = std::fmin(0.95f, bsdf_sample_weight.max());
 
             if (sampler->next1D() > approx_albedo){
-				break;
+				//break;
 			}
-            else{
-				weight /= approx_albedo;
-			}*/
 			
 			VPL vpl(ESurfaceVPL, weight);
 			vpl.its = its;
