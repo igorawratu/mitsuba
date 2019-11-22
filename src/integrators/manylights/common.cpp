@@ -235,6 +235,8 @@ Spectrum sample(Scene* scene, Sampler* sampler, Intersection& its, const Ray& in
             c = bsdf->eval(bsdf_sample_record);
         }
 
+        c *= vpl.P;
+
         if(vpl.type != EDirectionalEmitterVPL){
             float d = std::max((its.p - vpl.its.p).length(), min_dist);
             float attenuation = 1.f / (d * d);
@@ -244,15 +246,15 @@ Spectrum sample(Scene* scene, Sampler* sampler, Intersection& its, const Ray& in
         if(vpl.type == ESurfaceVPL){
             if(vpl.emitter != nullptr){
                 DirectionSamplingRecord dir(-wi);
-                c *= vpl.P * vpl.emitter->evalDirection(dir, vpl.psr);
+                c *= vpl.emitter->evalDirection(dir, vpl.psr);
             }
             else if(vpl.its.getBSDF() != nullptr){
                 BSDFSamplingRecord bsdf_sample_record(vpl.its, vpl.its.toLocal(-wi));
-                c *= vpl.P * vpl.its.getBSDF()->eval(bsdf_sample_record);
+                c *= vpl.its.getBSDF()->eval(bsdf_sample_record);
             }
             //fallback to diffuse if no bsdf or emitter found
             else{
-                c *= vpl.P * Spectrum(std::max(0.f, dot(vpl.its.shFrame.n, -wi))) / PI;
+                c *= Spectrum(std::max(0.f, dot(vpl.its.shFrame.n, -wi))) / PI;
             }
         }
     }

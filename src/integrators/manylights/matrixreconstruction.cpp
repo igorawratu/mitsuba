@@ -203,7 +203,14 @@ std::vector<std::vector<std::uint32_t>> clusterVPLsBySampling(const Eigen::Matri
         clusters.push_back(zero_norm_cols);
     }
 
-    return clusters;
+    std::vector<std::vector<std::uint32_t>> non_empty_clusters;
+    for(std::uint32_t i = 0; i < clusters.size(); ++i){
+        if(clusters[i].size() > 0){
+            non_empty_clusters.push_back(clusters[i]);
+        }
+    }
+
+    return non_empty_clusters;
 }
 
 double computeCost(const Eigen::MatrixXf& contrib_mat, const std::vector<int>& nn, const std::vector<std::uint32_t>& cluster, 
@@ -303,6 +310,7 @@ std::vector<std::vector<std::uint32_t>> clusterVPLsBySplitting(const std::vector
     std::uint32_t total_clusters = splitting_clusters.size() + num_clusters;
     while(splitting_clusters.size() < total_clusters){
         auto largest = split_queue.top();
+        
         split_queue.pop();
 
         std::uint32_t cluster_idx = largest.first;
@@ -1679,6 +1687,7 @@ void sliceWorkerLS(std::vector<std::int32_t>& work, std::uint32_t thread_id, std
 
         std::vector<std::vector<std::uint32_t>> cbsplit = clusterVPLsBySplitting(cbsamp, contribs, nn[slice_id], split_num_clusters, rng);
         auto vpls = sampleRepresentatives(contribs, total_vpls, cbsplit, rng, general_params.min_dist);
+        
 
         auto cluster_t = std::chrono::high_resolution_clock::now();
 
@@ -1955,7 +1964,7 @@ void clusterWorkerLS(BlockingQueue<HWWorkUnit>& input, BlockingQueue<HWWorkUnit>
     const std::vector<VPL>& total_vpls, std::uint32_t num_clusters, Scene* scene, bool gather_stats, bool show_svd, 
     float sample_perc, float min_dist, std::uint32_t thread_id, std::uint32_t num_threads, std::mutex& barrier_mutex,
     std::condition_variable& barrier){
-    
+
     std::mt19937 rng(std::chrono::high_resolution_clock::now().time_since_epoch().count() * thread_id);
     std::uint32_t split_num_clusters = std::min(total_vpls.size(), num_clusters - cbsamp.size());
 
@@ -1964,8 +1973,7 @@ void clusterWorkerLS(BlockingQueue<HWWorkUnit>& input, BlockingQueue<HWWorkUnit>
         std::vector<std::vector<std::uint32_t>> cbsplit = 
             clusterVPLsBySplitting(cbsamp, contribs, nn[work_unit.second], split_num_clusters, rng);
         vpls[work_unit.second] = sampleRepresentatives(contribs, total_vpls, cbsplit, rng, min_dist);
-
-        updateVPLRadii(vpls[work_unit.second], min_dist);
+        //updateVPLRadii(vpls[work_unit.second], min_dist);
 
         recoverHW(work_unit.first, vpls[work_unit.second], scene, gather_stats, show_svd, sample_perc,
             min_dist, rng);

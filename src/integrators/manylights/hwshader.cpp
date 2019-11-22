@@ -391,9 +391,11 @@ void HWShader::renderSlices(const std::vector<KDTNode<ReconstructionSample>*>& s
 
             if(vpl.type == EDirectionalEmitterVPL){
                 light_for_slice.type = 0;
+                light_for_slice.light_surface_type = 0;
             }
             else if(vpl.type == EPointEmitterVPL){
                 light_for_slice.type = 1;
+                light_for_slice.light_surface_type = 0;
             }
             else{
                 light_for_slice.type = 2;

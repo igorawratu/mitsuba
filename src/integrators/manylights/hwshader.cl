@@ -158,10 +158,8 @@ __kernel void shade(__global const struct PixelElement* pixels,
     float coeff = coefficients[i].coeff > 0 ? 1.0f : 0.0f;
     int lidx = pixels[i].slice_id * clusters_per_slice + curr_pass;
 
-    float3 dir = lights[lidx].p - pixels[i].p;
+    float3 dir = lights[lidx].type == 0 ? -lights[lidx].n : lights[lidx].p - pixels[i].p;
     float3 wi = normalize(dir);
-    
-    //float rough = pixels[i].roughness < 0.0001f ? 2.f : pixels[i].roughness;
 
     float3 bsdf_col = evalBSDF(pixels[i].n, wi, pixels[i].wo, pixels[i].eta, pixels[i].k, pixels[i].roughness,
         pixels[i].spec_col, pixels[i].diff_col);
