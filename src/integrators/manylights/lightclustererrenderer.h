@@ -13,7 +13,7 @@ MTS_NAMESPACE_BEGIN
 
 class LightClustererRenderer : public ManyLightsRenderer{
 public:
-    LightClustererRenderer(std::unique_ptr<ManyLightsClusterer> clusterer, float min_dist, bool vsl);
+    LightClustererRenderer(std::unique_ptr<ManyLightsClusterer> clusterer, float min_dist, bool vsl, bool hw);
 
     LightClustererRenderer(const LightClustererRenderer& other) = delete;
 
@@ -30,9 +30,14 @@ public:
     void setCancel(bool cancel);
 
 private:
+    void renderHW(Scene* scene, std::uint32_t spp, const RenderJob* job);
+    void renderNHW(Scene* scene, std::uint32_t spp, const RenderJob *job);
+
+private:
     float min_dist_;
     std::unique_ptr<ManyLightsClusterer> clusterer_;
     bool vsl_;
+    bool hw_;
     bool cancel_;
     std::mutex cancel_lock_;
 };

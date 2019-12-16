@@ -19,6 +19,9 @@ public:
     void renderSlices(const std::vector<KDTNode<ReconstructionSample>*>& slices,
         const std::vector<std::vector<VPL>*>& vpls, std::uint32_t cluster_size,
         float min_dist, bool vsl);
+
+    void renderHWBF(std::vector<HWBFPix>& receivers, const std::vector<VPL>& vpls, std::uint32_t start,
+        std::uint32_t end, float min_dist, bool vsl);
     
     bool initialized(){
         return initialized_;

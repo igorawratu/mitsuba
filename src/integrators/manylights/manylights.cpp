@@ -242,8 +242,9 @@ size_t generateVPLs(const Scene *scene, size_t offset, size_t count, int max_dep
 
 			float approx_albedo = std::fmin(0.95f, bsdf_sample_weight.max());
 
+			//roulette
             if (sampler->next1D() > approx_albedo){
-				//break;
+				break;
 			}
 			
 			VPL vpl(ESurfaceVPL, weight);
@@ -348,15 +349,16 @@ private:
 		switch(strategy){
 			case NONE:
 			{
+				bool hw = props.getInteger("bfhw", 0) > 0;
 				std::unique_ptr<ManyLightsClusterer> clusterer(new PassthroughClusterer(vpls_));
-				return std::unique_ptr<ManyLightsRenderer>(new LightClustererRenderer(std::move(clusterer), min_dist_, vsl));
+				return std::unique_ptr<ManyLightsRenderer>(new LightClustererRenderer(std::move(clusterer), min_dist_, vsl, hw));
 			}
 			case LIGHTCUTS:
 			{
 				int max_lights = props.getInteger("lightcuts-num_clusters", 64);
 				float error_threshold = props.getFloat("lightcuts-error_threshold", 0.02);
 				std::unique_ptr<ManyLightsClusterer> clusterer(new LightTree(vpls_, min_dist_, max_lights, error_threshold));
-				return std::unique_ptr<ManyLightsRenderer>(new LightClustererRenderer(std::move(clusterer), min_dist_, vsl));
+				return std::unique_ptr<ManyLightsRenderer>(new LightClustererRenderer(std::move(clusterer), min_dist_, vsl, false));
 			}
 			case ROWCOLSAMPLING:
 			{
@@ -366,7 +368,7 @@ private:
 				std::unique_ptr<ManyLightsClusterer> clusterer(new RowColumnSampling(vpls_, rows, cols, std::make_tuple(scene->getFilm()->getSize().x, scene->getFilm()->getSize().y),
 					scene, min_dist_, vsl));
 
-				return std::unique_ptr<ManyLightsRenderer>(new LightClustererRenderer(std::move(clusterer), min_dist_, vsl));
+				return std::unique_ptr<ManyLightsRenderer>(new LightClustererRenderer(std::move(clusterer), min_dist_, vsl, false));
 			}
 			case MATRIXRECONSTRUCTION:
 			{

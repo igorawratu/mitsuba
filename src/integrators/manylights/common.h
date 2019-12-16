@@ -15,6 +15,15 @@
 
 MTS_NAMESPACE_BEGIN
 
+struct HWBFPix{
+    Intersection its;
+    Spectrum col;
+    int x;
+    int y;
+    std::vector<std::uint8_t> visibility;
+    Ray ray;
+};
+
 std::tuple<float, float, float> floatToRGB(float v);
 
 template<typename MatrixType>

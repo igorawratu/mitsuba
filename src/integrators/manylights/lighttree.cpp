@@ -707,8 +707,6 @@ LightTree::LightTree(const std::vector<VPL>& vpls, float min_dist, std::uint32_t
 
 	std::mt19937 rng(std::chrono::high_resolution_clock::now().time_since_epoch().count());
 
-	std::cout << point_vpls_.size() << " " << oriented_vpls_.size() << " " << directional_vpls_.size() << std::endl;
-
 	point_tree_root_ = tdCreateLightTree(point_vpls_, EPointEmitterVPL, min_dist_, 1000, rng);
 	oriented_tree_root_ = tdCreateLightTree(oriented_vpls_, ESurfaceVPL, min_dist_, 1000, rng);
 	directional_tree_root_ = tdCreateLightTree(directional_vpls_, EDirectionalEmitterVPL, min_dist_, 1000, rng);
@@ -843,7 +841,7 @@ std::vector<VPL> LightTree::getClusteringForPoint(const Intersection& its) {
 }
 
 std::vector<VPL> LightTree::getClusteringForPoints(const std::vector<Intersection>& points){
-	std::vector<VPL> lights;
+	std::vector<VPL> lightcut;
 
 	typedef std::tuple<LightTreeNode*, float> ClusterAndScore;
 	//largest first, but front of the queue is last out
@@ -852,76 +850,215 @@ std::vector<VPL> LightTree::getClusteringForPoints(const std::vector<Intersectio
 	};
 
 	std::priority_queue<ClusterAndScore, std::vector<ClusterAndScore>, decltype(comparator)> pqueue(comparator);
+	std::unordered_map<LightTreeNode*, float> contribution_cache;
+	std::uint32_t total_lights = point_vpls_.size() + directional_vpls_.size() + oriented_vpls_.size();
 
 	if(point_tree_root_ != nullptr){
+		std::vector<VPL> lights;
 		pqueue.push(std::make_tuple(point_tree_root_.get(), std::numeric_limits<float>::max()));
+		float ratio = float(point_vpls_.size()) / float(total_lights);
+		std::uint32_t lights_to_extract = ratio * max_lights_ + 0.5f;
+
+		while((pqueue.size() + lights.size()) < lights_to_extract && pqueue.size() > 0){
+			//std::cout << lights.size() << " " << pqueue.size() << std::endl;
+			ClusterAndScore entry = pqueue.top();
+			pqueue.pop();
+
+			LightTreeNode* node = std::get<0>(entry);
+			
+			if(node->left == nullptr && node->right == nullptr){
+				lights.push_back(std::get<0>(entry)->vpl);
+				lights.back().P *= std::get<0>(entry)->emission_scale;
+				continue;
+			}
+
+			if(node->left == nullptr || node->right == nullptr){
+				std::cerr << "A node in the lighttree should always have 2 children" << std::endl;
+				exit(0);
+			}
+
+			if(node->left.get() != nullptr){
+				float rad = 0.f;
+				//float actual_rad = 0.f;
+				for(std::uint32_t i = 0; i < points.size(); ++i){
+					rad += calculateClusterContribution(points[i].p, points[i].geoFrame.n, node->left.get(), node->left->vpl.type, min_dist_, contribution_cache) / points.size();
+					//actual_rad += calculateExactClusterContribution(points[i].p, points[i].geoFrame.n, node->left.get(), node->left->vpl.type, min_dist_, contribution_cache);
+				}
+
+				//if(actual_rad > 0.f){
+					//float error = fabs(rad - actual_rad) / actual_rad;
+					pqueue.push(std::make_tuple(node->left.get(), rad));
+				//}
+			}
+
+			if(node->right.get() != nullptr){
+				float rad = 0.f;
+				//float actual_rad = 0.f;
+				for(std::uint32_t i = 0; i < points.size(); ++i){
+					rad += calculateClusterContribution(points[i].p, points[i].geoFrame.n, node->right.get(), node->right->vpl.type, min_dist_, contribution_cache) / points.size();
+					//actual_rad += calculateExactClusterContribution(points[i].p, points[i].geoFrame.n, node->right.get(), node->right->vpl.type, min_dist_, contribution_cache);
+				}
+
+				//if(actual_rad > 0.f){
+				//	float error = fabs(rad - actual_rad) / actual_rad;
+					pqueue.push(std::make_tuple(node->right.get(), rad));
+				//}
+			}
+		}
+
+		while(pqueue.size() > 0 && lights.size() < lights_to_extract){
+			auto entry = pqueue.top();
+			lights.push_back(std::get<0>(entry)->vpl);
+			lights.back().P *= std::get<0>(entry)->emission_scale;
+			pqueue.pop();
+		}
+
+		while(pqueue.size() > 0){
+			pqueue.pop();
+		}
+
+		lightcut.insert(lightcut.end(), lights.begin(), lights.end());
 	}
 
 	if(oriented_tree_root_ != nullptr){
+		std::vector<VPL> lights;
 		pqueue.push(std::make_tuple(oriented_tree_root_.get(), std::numeric_limits<float>::max()));
+		float ratio = float(oriented_vpls_.size()) / float(total_lights);
+		std::uint32_t lights_to_extract = ratio * max_lights_ + 0.5f;
+
+		while((pqueue.size() + lights.size()) < lights_to_extract && pqueue.size() > 0){
+			//std::cout << lights.size() << " " << pqueue.size() << std::endl;
+			ClusterAndScore entry = pqueue.top();
+			pqueue.pop();
+
+			LightTreeNode* node = std::get<0>(entry);
+			
+			if(node->left == nullptr && node->right == nullptr){
+				lights.push_back(std::get<0>(entry)->vpl);
+				lights.back().P *= std::get<0>(entry)->emission_scale;
+				continue;
+			}
+
+			if(node->left == nullptr || node->right == nullptr){
+				std::cerr << "A node in the lighttree should always have 2 children" << std::endl;
+				exit(0);
+			}
+
+			if(node->left.get() != nullptr){
+				float rad = 0.f;
+				//float actual_rad = 0.f;
+				for(std::uint32_t i = 0; i < points.size(); ++i){
+					rad += calculateClusterContribution(points[i].p, points[i].geoFrame.n, node->left.get(), node->left->vpl.type, min_dist_, contribution_cache) / points.size();
+					//actual_rad += calculateExactClusterContribution(points[i].p, points[i].geoFrame.n, node->left.get(), node->left->vpl.type, min_dist_, contribution_cache);
+				}
+
+				//if(actual_rad > 0.f){
+					//float error = fabs(rad - actual_rad) / actual_rad;
+					pqueue.push(std::make_tuple(node->left.get(), rad));
+				//}
+			}
+
+			if(node->right.get() != nullptr){
+				float rad = 0.f;
+				//float actual_rad = 0.f;
+				for(std::uint32_t i = 0; i < points.size(); ++i){
+					rad += calculateClusterContribution(points[i].p, points[i].geoFrame.n, node->right.get(), node->right->vpl.type, min_dist_, contribution_cache) / points.size();
+					//actual_rad += calculateExactClusterContribution(points[i].p, points[i].geoFrame.n, node->right.get(), node->right->vpl.type, min_dist_, contribution_cache);
+				}
+
+				//if(actual_rad > 0.f){
+				//	float error = fabs(rad - actual_rad) / actual_rad;
+					pqueue.push(std::make_tuple(node->right.get(), rad));
+				//}
+			}
+		}
+
+		while(pqueue.size() > 0 && lights.size() < lights_to_extract){
+			auto entry = pqueue.top();
+			lights.push_back(std::get<0>(entry)->vpl);
+			lights.back().P *= std::get<0>(entry)->emission_scale;
+			pqueue.pop();
+		}
+
+		while(pqueue.size() > 0){
+			pqueue.pop();
+		}
+
+		lightcut.insert(lightcut.end(), lights.begin(), lights.end());
 	}
 
 	if(directional_tree_root_ != nullptr){
+		std::vector<VPL> lights;
 		pqueue.push(std::make_tuple(directional_tree_root_.get(), std::numeric_limits<float>::max()));
-	}
 
-	std::unordered_map<LightTreeNode*, float> contribution_cache;
-	
-	while((pqueue.size() + lights.size()) < max_lights_ && pqueue.size() > 0){
-		//std::cout << lights.size() << " " << pqueue.size() << std::endl;
-		ClusterAndScore entry = pqueue.top();
-		pqueue.pop();
+		float ratio = float(directional_vpls_.size()) / float(total_lights);
+		std::uint32_t lights_to_extract = ratio * max_lights_ + 0.5f;
 
-		LightTreeNode* node = std::get<0>(entry);
-		
-		if(node->left == nullptr && node->right == nullptr){
+		while((pqueue.size() + lights.size()) < lights_to_extract && pqueue.size() > 0){
+			//std::cout << lights.size() << " " << pqueue.size() << std::endl;
+			ClusterAndScore entry = pqueue.top();
+			pqueue.pop();
+
+			LightTreeNode* node = std::get<0>(entry);
+			
+			if(node->left == nullptr && node->right == nullptr){
+				lights.push_back(std::get<0>(entry)->vpl);
+				lights.back().P *= std::get<0>(entry)->emission_scale;
+				continue;
+			}
+
+			if(node->left == nullptr || node->right == nullptr){
+				std::cerr << "A node in the lighttree should always have 2 children" << std::endl;
+				exit(0);
+			}
+
+			if(node->left.get() != nullptr){
+				float rad = 0.f;
+				//float actual_rad = 0.f;
+				for(std::uint32_t i = 0; i < points.size(); ++i){
+					rad += calculateClusterContribution(points[i].p, points[i].geoFrame.n, node->left.get(), node->left->vpl.type, min_dist_, contribution_cache) / points.size();
+					//actual_rad += calculateExactClusterContribution(points[i].p, points[i].geoFrame.n, node->left.get(), node->left->vpl.type, min_dist_, contribution_cache);
+				}
+
+				//if(actual_rad > 0.f){
+					//float error = fabs(rad - actual_rad) / actual_rad;
+					pqueue.push(std::make_tuple(node->left.get(), rad));
+				//}
+			}
+
+			if(node->right.get() != nullptr){
+				float rad = 0.f;
+				//float actual_rad = 0.f;
+				for(std::uint32_t i = 0; i < points.size(); ++i){
+					rad += calculateClusterContribution(points[i].p, points[i].geoFrame.n, node->right.get(), node->right->vpl.type, min_dist_, contribution_cache) / points.size();
+					//actual_rad += calculateExactClusterContribution(points[i].p, points[i].geoFrame.n, node->right.get(), node->right->vpl.type, min_dist_, contribution_cache);
+				}
+
+				//if(actual_rad > 0.f){
+				//	float error = fabs(rad - actual_rad) / actual_rad;
+					pqueue.push(std::make_tuple(node->right.get(), rad));
+				//}
+			}
+		}
+
+		while(pqueue.size() > 0 && lights.size() < lights_to_extract){
+			auto entry = pqueue.top();
 			lights.push_back(std::get<0>(entry)->vpl);
 			lights.back().P *= std::get<0>(entry)->emission_scale;
-			continue;
+			pqueue.pop();
 		}
 
-		if(node->left == nullptr || node->right == nullptr){
-			std::cerr << "A node in the lighttree should always have 2 children" << std::endl;
-			exit(0);
+		while(pqueue.size() > 0){
+			pqueue.pop();
 		}
 
-		if(node->left.get() != nullptr){
-			float rad = 0.f;
-			//float actual_rad = 0.f;
-			for(std::uint32_t i = 0; i < points.size(); ++i){
-				rad += calculateClusterContribution(points[i].p, points[i].geoFrame.n, node->left.get(), node->left->vpl.type, min_dist_, contribution_cache) / points.size();
-				//actual_rad += calculateExactClusterContribution(points[i].p, points[i].geoFrame.n, node->left.get(), node->left->vpl.type, min_dist_, contribution_cache);
-			}
-
-			//if(actual_rad > 0.f){
-				//float error = fabs(rad - actual_rad) / actual_rad;
-				pqueue.push(std::make_tuple(node->left.get(), rad));
-			//}
-		}
-
-		if(node->right.get() != nullptr){
-			float rad = 0.f;
-			//float actual_rad = 0.f;
-			for(std::uint32_t i = 0; i < points.size(); ++i){
-				rad += calculateClusterContribution(points[i].p, points[i].geoFrame.n, node->right.get(), node->right->vpl.type, min_dist_, contribution_cache) / points.size();
-				//actual_rad += calculateExactClusterContribution(points[i].p, points[i].geoFrame.n, node->right.get(), node->right->vpl.type, min_dist_, contribution_cache);
-			}
-
-			//if(actual_rad > 0.f){
-			//	float error = fabs(rad - actual_rad) / actual_rad;
-				pqueue.push(std::make_tuple(node->right.get(), rad));
-			//}
-		}
+		lightcut.insert(lightcut.end(), lights.begin(), lights.end());
 	}
 
-	while(pqueue.size() > 0 && lights.size() < max_lights_){
-		auto entry = pqueue.top();
-		lights.push_back(std::get<0>(entry)->vpl);
-		lights.back().P *= std::get<0>(entry)->emission_scale;
-		pqueue.pop();
-	}
+	while(lightcut.size() > max_lights_)
+		lightcut.pop_back();
 
-	return lights;
+	return lightcut;
 }
 
 MTS_NAMESPACE_END
