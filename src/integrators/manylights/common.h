@@ -22,6 +22,7 @@ struct HWBFPix{
     int y;
     std::vector<std::uint8_t> visibility;
     Ray ray;
+    bool intersected;
 };
 
 std::tuple<float, float, float> floatToRGB(float v);

@@ -7,6 +7,8 @@
 #include "hwshader.h"
 #include "blockingqueue.hpp"
 #include <unordered_map>
+#include "filewriter.h"
+#include <chrono>
 
 MTS_NAMESPACE_BEGIN
 
@@ -35,14 +37,13 @@ LightClustererRenderer::~LightClustererRenderer(){
 }
 
 std::vector<HWBFPix> generateReceivers(Scene* scene, std::uint32_t spp, Sampler* sampler, Vector2i size){
-    std::vector<HWBFPix> receivers;
-
-    std::mutex receiver_mutex;
-
     ref<Sensor> sensor = scene->getSensor();
 
+    std::vector<HWBFPix> receivers;
+    receivers.resize(size.y * size.x * spp);
+
+    #pragma omp parallel for
     for (std::int32_t y = 0; y < size.y; ++y) {
-        #pragma omp parallel for
         for (std::int32_t x = 0; x < size.x; ++x) {
             std::uint32_t cell_dim = sqrt(spp) + 0.5f;
             float cell_side_len = 1.f / cell_dim;
@@ -88,11 +89,9 @@ std::vector<HWBFPix> generateReceivers(Scene* scene, std::uint32_t spp, Sampler*
 
                     curr.ray = Ray(curr.its.p, bsdf_sample_record.its.toWorld(bsdf_sample_record.wo), curr.ray.time);
                 }
+                curr.intersected = intersected_scene;
 
-                if(intersected_scene){
-                    std::lock_guard<std::mutex> lock(receiver_mutex);
-                    receivers.push_back(curr);
-                }
+                receivers[y * size.x * spp + x * spp + j] = curr;
             }
         }
     }
@@ -106,11 +105,14 @@ void computeShadows(BlockingQueue<std::pair<std::uint32_t, std::uint32_t>>& inpu
     
     std::pair<std::uint32_t, std::uint32_t> work_unit;
     while(input.pop(work_unit)){
-        #pragma omp parallel for num_threads(15)
+        #pragma omp parallel for
         for(std::uint32_t i = work_unit.first; i < work_unit.second; ++i){
-            receivers[i].visibility.resize(vpls.size());
-            for(std::uint32_t j = 0; j < vpls.size(); ++j){
-                receivers[i].visibility[j] = sampleVisibility(scene, receivers[i].its, vpls[j], min_dist) ? 1 : 0;
+            
+            receivers[i].visibility.resize(vpls.size(), 0);
+            if(receivers[i].intersected){
+                for(std::uint32_t j = 0; j < vpls.size(); ++j){
+                    receivers[i].visibility[j] = sampleVisibility(scene, receivers[i].its, vpls[j], min_dist) ? 1 : 0;
+                }
             }
         }
 
@@ -150,11 +152,15 @@ void LightClustererRenderer::renderHW(Scene* scene, std::uint32_t spp, const Ren
     sampler->configure();
     sampler->generate(Point2i(0));
 
-    std::uint32_t batch_size = 250000;
+   
 
     Intersection its;
     std::vector<VPL> vpls = clusterer_->getClusteringForPoint(its);
+    std::uint32_t div_factor = std::max(std::uint32_t(1), std::uint32_t(vpls.size()) / 10000u);
+    std::uint32_t batch_size = 250000 / div_factor;
+    std::cout << "generating receivers..." << std::endl;
     std::vector<HWBFPix> receivers = generateReceivers(scene, spp, sampler, size);
+    std::cout << "rendering..." << std::endl;
 
     BlockingQueue<std::pair<std::uint32_t, std::uint32_t>> toshadowtest;
     BlockingQueue<std::pair<std::uint32_t, std::uint32_t>> toshade(2);
@@ -320,12 +326,18 @@ void LightClustererRenderer::renderNHW(Scene* scene, std::uint32_t spp, const Re
 }
 
 bool LightClustererRenderer::render(Scene* scene, std::uint32_t spp, const RenderJob *job){
+    auto start = std::chrono::high_resolution_clock::now();
     if(hw_){
         renderHW(scene, spp, job);
     }
     else{
         renderNHW(scene, spp, job);
     }
+    auto end = std::chrono::high_resolution_clock::now();
+    
+    std::vector<float> timing;
+    timing.push_back(std::chrono::duration_cast<std::chrono::duration<float>>(end - start).count());
+    writeOutputData(scene, "bftimings-", false, timing, ',');
 
     return true;
 }

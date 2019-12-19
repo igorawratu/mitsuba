@@ -517,6 +517,7 @@ std::unique_ptr<KDTNode<ReconstructionSample>> constructKDTree(Scene* scene, std
                 curr_sample.ray = ray;
                 curr_sample.color = Spectrum(0.f);
                 curr_sample.fully_sampled_color = Spectrum(0.f);
+                curr_sample.visibility_errors = 0;
 
                 std::uint32_t num_bounces = 0;
 
@@ -768,8 +769,9 @@ void constructSvdBuffers(std::vector<Spectrum>& col_ranks, const std::vector<KDT
 }
 
 void constructStatBuffers(std::vector<Spectrum>& recovered, std::vector<Spectrum>& full, std::vector<std::vector<Spectrum>>& ranks,
-    std::vector<Spectrum>& samples, std::vector<Spectrum>& slice_cols, 
-    const std::vector<KDTNode<ReconstructionSample>*>& slices, std::uint32_t spp, std::uint32_t image_width){
+    std::vector<Spectrum>& samples, std::vector<Spectrum>& slice_cols, std::vector<Spectrum>& visibility_errors, std::uint64_t& total_error,
+    const std::vector<KDTNode<ReconstructionSample>*>& slices, std::uint32_t spp, std::uint32_t image_width,
+    std::uint32_t columns){
 
     for(std::uint32_t i = 0; i < slices.size(); ++i){
         auto slice = slices[i];
@@ -804,6 +806,13 @@ void constructStatBuffers(std::vector<Spectrum>& recovered, std::vector<Spectrum
             samples[index] += sample_ratio_col / spp;
 
             slice_cols[index] += slice_col / spp;
+
+            float ratio = float(slice->sample(j).visibility_errors) / float(columns);
+            total_error += slice->sample(j).visibility_errors;
+            std::tie(r, g, b) = floatToRGB(ratio);
+            Spectrum visibility_err;
+            visibility_err.fromLinearRGB(r, g, b);
+            visibility_errors[index] += visibility_err / spp;
         }
     }
 }
@@ -1341,7 +1350,8 @@ MatrixReconstructionRenderer::MatrixReconstructionRenderer(const std::vector<VPL
     std::uint32_t max_iterations, std::uint32_t slice_size, bool visibility_only, bool adaptive_col, 
     bool adaptive_importance_sampling, bool adaptive_force_resample, bool adaptive_recover_transpose,
     bool truncated, bool show_slices, bool vsl, bool gather_stat_images, bool show_svd,
-    ClusteringStrategy clustering_strategy, float error_scale, bool hw, bool bin_vis, std::uint32_t num_clusters) : 
+    ClusteringStrategy clustering_strategy, float error_scale, bool hw, bool bin_vis, std::uint32_t num_clusters,
+    std::uint32_t samples_per_slice) : 
         vpls_(vpls), 
         sample_percentage_(sample_percentage), 
         min_dist_(min_dist), 
@@ -1365,6 +1375,7 @@ MatrixReconstructionRenderer::MatrixReconstructionRenderer(const std::vector<VPL
         hw_(hw),
         bin_vis_(bin_vis),
         num_clusters_(num_clusters),
+        samples_per_slice_(samples_per_slice),
         cancel_(false){
 }
 
@@ -1391,6 +1402,7 @@ MatrixReconstructionRenderer::MatrixReconstructionRenderer(MatrixReconstructionR
     hw_(other.hw_),
     bin_vis_(other.bin_vis_),
     num_clusters_(other.num_clusters_),
+    samples_per_slice_(other.samples_per_slice_),
     cancel_(other.cancel_){
 }
 
@@ -1419,6 +1431,7 @@ MatrixReconstructionRenderer& MatrixReconstructionRenderer::operator = (MatrixRe
         hw_ = other.hw_;
         bin_vis_ = other.bin_vis_;
         num_clusters_ = other.num_clusters_;
+        samples_per_slice_ = other.samples_per_slice_;
         cancel_ = other.cancel_;
     }
     return *this;
@@ -1819,7 +1832,7 @@ void unoccludedHWWorker(BlockingQueue<HWWorkUnit>& input, BlockingQueue<HWWorkUn
     output.close();
 }
 
-void recoverHW(KDTNode<ReconstructionSample>* slice, const std::vector<VPL>& vpls, Scene* scene,
+std::tuple<std::uint64_t, std::uint64_t> recoverHW(KDTNode<ReconstructionSample>* slice, const std::vector<VPL>& vpls, Scene* scene,
     bool gather_stat_images, bool show_svd, float sample_perc, float min_dist, std::mt19937& rng){
     Point3f slice_com_pos(0.f, 0.f, 0.f);
     Vector3f slice_com_norm(0.f);
@@ -1913,17 +1926,30 @@ void recoverHW(KDTNode<ReconstructionSample>* slice, const std::vector<VPL>& vpl
                 std::uint32_t idx = actual_vpl_index[i][j] * slice->sample_indices.size() + k;
                 std::uint32_t bin_vis_idx = j * slice->sample_indices.size() + k;
                 slice->visibility_coefficients[idx] = bin_vis[bin_vis_idx];
+
+                if(gather_stat_images){
+                    std::uint8_t actual_visible = 
+                        sampleVisibility(scene, slice->sample(k).its, vpls[actual_vpl_index[i][j]], min_dist) ?
+                        1 : 0;
+                    if(actual_visible != bin_vis[bin_vis_idx]){
+                        slice->sample(k).visibility_errors++;
+                    }
+                    
+                }
             }
         }
     }
 
     slice->sample_ratio = float(total_performed_samples) / (slice->sample_indices.size() * vpls.size());
+
+    return std::make_tuple(slice->sample_indices.size() * vpls.size(), total_performed_samples);
 }
 
 void clusterWorkerMDLC(BlockingQueue<HWWorkUnit>& input, BlockingQueue<HWWorkUnit>& output,
     std::vector<std::vector<VPL>>& vpls, LightTree* light_tree, Scene* scene, bool gather_stats, 
     bool show_svd, float sample_perc, float min_dist, std::uint32_t thread_id, std::uint32_t num_threads, 
-    std::mutex& barrier_mutex, std::condition_variable& barrier){
+    std::mutex& barrier_mutex, std::condition_variable& barrier, std::mutex& sample_update_mutex,
+    std::uint64_t& total_samples, std::uint64_t& num_samples){
     
     HWWorkUnit work_unit;
 
@@ -1940,8 +1966,14 @@ void clusterWorkerMDLC(BlockingQueue<HWWorkUnit>& input, BlockingQueue<HWWorkUni
         //not sure if this should change to a radius union approach instead
         updateVPLRadii(vpls[work_unit.second], min_dist);
 
-        recoverHW(work_unit.first, vpls[work_unit.second], scene, gather_stats, show_svd, sample_perc,
+        std::uint64_t slice_samples, num_slice_sampled;
+        std::tie(slice_samples, num_slice_sampled) = recoverHW(work_unit.first, vpls[work_unit.second], scene, gather_stats, show_svd, sample_perc,
             min_dist, rng);
+        {
+            std::lock_guard<std::mutex> lock(sample_update_mutex);
+            total_samples += slice_samples;
+            num_samples += num_slice_sampled;
+        }
 
         output.push(work_unit);
     }
@@ -1963,7 +1995,7 @@ void clusterWorkerLS(BlockingQueue<HWWorkUnit>& input, BlockingQueue<HWWorkUnit>
     const Eigen::MatrixXf& contribs, const std::vector<std::vector<int>>& nn, 
     const std::vector<VPL>& total_vpls, std::uint32_t num_clusters, Scene* scene, bool gather_stats, bool show_svd, 
     float sample_perc, float min_dist, std::uint32_t thread_id, std::uint32_t num_threads, std::mutex& barrier_mutex,
-    std::condition_variable& barrier){
+    std::condition_variable& barrier, std::mutex& sample_update_mutex, std::uint64_t& total_samples, std::uint64_t& num_samples){
 
     std::mt19937 rng(std::chrono::high_resolution_clock::now().time_since_epoch().count() * thread_id);
     std::uint32_t split_num_clusters = std::min(total_vpls.size(), num_clusters - cbsamp.size());
@@ -1975,8 +2007,14 @@ void clusterWorkerLS(BlockingQueue<HWWorkUnit>& input, BlockingQueue<HWWorkUnit>
         vpls[work_unit.second] = sampleRepresentatives(contribs, total_vpls, cbsplit, rng, min_dist);
         //updateVPLRadii(vpls[work_unit.second], min_dist);
 
-        recoverHW(work_unit.first, vpls[work_unit.second], scene, gather_stats, show_svd, sample_perc,
+        std::uint64_t slice_samples, num_slice_sampled;
+        std::tie(slice_samples, num_slice_sampled) = recoverHW(work_unit.first, vpls[work_unit.second], scene, gather_stats, show_svd, sample_perc,
             min_dist, rng);
+        {
+            std::lock_guard<std::mutex> lock(sample_update_mutex);
+            total_samples += slice_samples;
+            num_samples += num_slice_sampled;
+        }
 
         output.push(work_unit);
     }
@@ -1993,7 +2031,7 @@ void clusterWorkerLS(BlockingQueue<HWWorkUnit>& input, BlockingQueue<HWWorkUnit>
     output.close();
 }
 
-void MatrixReconstructionRenderer::renderNonHW(Scene* scene, std::uint32_t spp, const RenderJob *job,
+std::tuple<std::uint64_t, std::uint64_t> MatrixReconstructionRenderer::renderNonHW(Scene* scene, std::uint32_t spp, const RenderJob *job,
     std::vector<float>& timings, const std::vector<KDTNode<ReconstructionSample>*>& slices, 
     std::uint32_t samples_per_slice){
     
@@ -2178,12 +2216,14 @@ void MatrixReconstructionRenderer::renderNonHW(Scene* scene, std::uint32_t spp, 
         timings.push_back(sample_perc);
         std::cout << "Sample percentage: " << sample_perc << std::endl;
     }
+
+    return std::make_tuple(total_samples, amount_sampled);
 }
 
-void MatrixReconstructionRenderer::renderHW(Scene* scene, std::uint32_t spp, const RenderJob *job, 
+std::tuple<std::uint64_t, std::uint64_t> MatrixReconstructionRenderer::renderHW(Scene* scene, std::uint32_t spp, const RenderJob *job, 
     std::vector<float>& timings, const std::vector<KDTNode<ReconstructionSample>*>& slices, 
     std::uint32_t samples_per_slice){
-    
+    auto start = std::chrono::high_resolution_clock::now();
     std::uint32_t num_workers = 15;//std::max(size_t(1), std::min(slices.size(), size_t(std::thread::hardware_concurrency() / 2)));
     std::uint32_t batch_size = 500;//std::max(num_workers * 2, 64u);
 
@@ -2212,6 +2252,9 @@ void MatrixReconstructionRenderer::renderHW(Scene* scene, std::uint32_t spp, con
 
     std::mutex barrier_mutex;
     std::condition_variable barrier;
+    std::mutex sample_update_mutex;
+    std::uint64_t total_samples = 0;
+    std::uint64_t num_samples = 0;
 
     if(clustering_strategy_ == ClusteringStrategy::LS){
         std::uint32_t num_clusters = std::min(std::uint32_t(vpls_.size()), std::uint32_t(num_clusters_ * 0.3f));
@@ -2260,7 +2303,7 @@ void MatrixReconstructionRenderer::renderHW(Scene* scene, std::uint32_t spp, con
             clusterers.emplace_back(clusterWorkerLS, std::ref(to_cluster), std::ref(to_shade), std::ref(vpls),
                 std::ref(cbsamp), std::ref(cluster_contributions), std::ref(nearest_neighbours), std::ref(vpls_),
                 num_clusters_, scene, gather_stat_images_, show_svd_, sample_percentage_, min_dist_, i,
-                num_workers, std::ref(barrier_mutex), std::ref(barrier));
+                num_workers, std::ref(barrier_mutex), std::ref(barrier), std::ref(sample_update_mutex), std::ref(total_samples), std::ref(num_samples));
         }
         
     }
@@ -2270,7 +2313,7 @@ void MatrixReconstructionRenderer::renderHW(Scene* scene, std::uint32_t spp, con
         for(std::uint32_t i = 0; i < num_workers; ++i){
             clusterers.emplace_back(clusterWorkerMDLC, std::ref(to_cluster), std::ref(to_shade), std::ref(vpls),
                 light_tree.get(), scene, gather_stat_images_, show_svd_, sample_percentage_, min_dist_, i,
-                num_workers, std::ref(barrier_mutex), std::ref(barrier));
+                num_workers, std::ref(barrier_mutex), std::ref(barrier), std::ref(sample_update_mutex), std::ref(total_samples), std::ref(num_samples));
         }
     }
 
@@ -2287,6 +2330,11 @@ void MatrixReconstructionRenderer::renderHW(Scene* scene, std::uint32_t spp, con
     }
 
     shader.join();
+
+    auto end = std::chrono::high_resolution_clock::now();
+    timings.push_back(std::chrono::duration_cast<std::chrono::duration<float>>(end - start).count());
+
+    return std::make_tuple(total_samples, num_samples);
 }
 
 bool MatrixReconstructionRenderer::render(Scene* scene, std::uint32_t spp, const RenderJob *job){
@@ -2308,7 +2356,7 @@ bool MatrixReconstructionRenderer::render(Scene* scene, std::uint32_t spp, const
         return true;
     }
 
-    std::uint32_t samples_per_slice = 1;
+    std::uint32_t samples_per_slice = samples_per_slice_;
 
     ref<Bitmap> output_bitmap = new Bitmap(Bitmap::ERGB, Bitmap::EUInt8, size);
     std::uint8_t* output_image = output_bitmap->getUInt8Data();
@@ -2324,11 +2372,13 @@ bool MatrixReconstructionRenderer::render(Scene* scene, std::uint32_t spp, const
 
     std::vector<float> timings;
 
+    std::uint64_t total_samples, num_samples;
+
     if(hw_){
-        renderHW(scene, spp, job, timings, slices, samples_per_slice);
+        std::tie(total_samples, num_samples) = renderHW(scene, spp, job, timings, slices, samples_per_slice);
     }
     else{
-        renderNonHW(scene, spp, job, timings, slices, samples_per_slice);
+        std::tie(total_samples, num_samples) = renderNonHW(scene, spp, job, timings, slices, samples_per_slice);
     }
 
     copySamplesToBuffer(output_image, samples_, size, spp);
@@ -2344,8 +2394,11 @@ bool MatrixReconstructionRenderer::render(Scene* scene, std::uint32_t spp, const
         }
         std::vector<Spectrum> samples(image_size, Spectrum(0.f));
         std::vector<Spectrum> slice_cols(image_size, Spectrum(0.f));
+        std::vector<Spectrum> visibility_errors(image_size, Spectrum(0.f));
+        std::uint64_t total_verr = 0;
 
-        constructStatBuffers(recovered, full_sample, rank, samples, slice_cols, slices, spp, size.x);
+        constructStatBuffers(recovered, full_sample, rank, samples, slice_cols, visibility_errors, total_verr, 
+            slices, spp, size.x, num_clusters_);
         for(std::uint32_t i = 0; i < rank.size(); ++i){
             writeOutputImage(scene, "rank_" + std::to_string(i), size.x, size.y, true, rank[i]);
         }
@@ -2353,10 +2406,14 @@ bool MatrixReconstructionRenderer::render(Scene* scene, std::uint32_t spp, const
         writeOutputImage(scene, "sample_ratio", size.x, size.y, true, samples);
         writeOutputImage(scene, "slices", size.x, size.y, true, slice_cols);
         writeOutputImage(scene, "full_sample", size.x, size.y, true, full_sample);
+        writeOutputImage(scene, "visibility_errors", size.x, size.y, true, visibility_errors);
         
-        float err = writeOutputErrorImage(scene, "error", size.x, size.y, true, recovered, full_sample, error_scale_);
+        /*float err = writeOutputErrorImage(scene, "error", size.x, size.y, true, recovered, full_sample, error_scale_);
         std::cout << "Total error: " << err << std::endl;
-        timings.push_back(err);
+        timings.push_back(err);*/
+
+        float vis_err_ratio = float(total_verr) / total_samples;
+        timings.push_back(vis_err_ratio);
     }
 
     writeOutputData(scene, "timings", false, timings, ',');

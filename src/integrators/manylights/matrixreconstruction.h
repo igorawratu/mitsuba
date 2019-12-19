@@ -47,6 +47,7 @@ struct ReconstructionSample{
     Ray ray;
     Spectrum color;
     Spectrum fully_sampled_color;
+    std::uint32_t visibility_errors;
     std::vector<Spectrum> unoccluded_samples;
 };
 
@@ -60,7 +61,7 @@ public:
         std::uint32_t slice_size, bool visibility_only, bool adaptive_col, bool adaptive_importance_sampling, 
         bool adaptive_force_resample, bool adaptive_recover_transpose, bool truncated, bool show_slices, bool vsl,
         bool gather_stat_images, bool show_svd, ClusteringStrategy clustering_strategy, float error_scale, bool hw,
-        bool bin_vis, std::uint32_t num_clusters);
+        bool bin_vis, std::uint32_t num_clusters, std::uint32_t samples_per_slice);
     MatrixReconstructionRenderer(const MatrixReconstructionRenderer& other) = delete;
     MatrixReconstructionRenderer(MatrixReconstructionRenderer&& other);
     MatrixReconstructionRenderer& operator = (const MatrixReconstructionRenderer& other) = delete;
@@ -76,10 +77,10 @@ public:
     }
 
 private:
-    void renderNonHW(Scene* scene, std::uint32_t spp, const RenderJob *job,
+    std::tuple<std::uint64_t, std::uint64_t> renderNonHW(Scene* scene, std::uint32_t spp, const RenderJob *job,
         std::vector<float>& timings, const std::vector<KDTNode<ReconstructionSample>*>& slices, 
         std::uint32_t samples_per_slice);
-    void renderHW(Scene* scene, std::uint32_t spp, const RenderJob *job,
+    std::tuple<std::uint64_t, std::uint64_t> renderHW(Scene* scene, std::uint32_t spp, const RenderJob *job,
         std::vector<float>& timings, const std::vector<KDTNode<ReconstructionSample>*>& slices, 
         std::uint32_t samples_per_slice);
 
@@ -103,6 +104,7 @@ private:
     bool hw_;
     bool bin_vis_;
     std::uint32_t num_clusters_;
+    std::uint32_t samples_per_slice_;
     std::mutex cancel_lock_;
     bool cancel_;
 

@@ -393,12 +393,13 @@ private:
 				bool hw = props.getInteger("completion-hw", 0) > 0;
 				bool bin_vis = props.getInteger("completion-bvis", 0) > 0;
 				int num_clusters = props.getInteger("completion-clusters_per_slice", 1000);
+				std::uint32_t ls_samples_per_slice = props.getInteger("completion-ls_sps", 1);
 
 				//std::unique_ptr<ManyLightsClusterer> clusterer(new PassthroughClusterer(vpls_));
 				return std::unique_ptr<ManyLightsRenderer>(new MatrixReconstructionRenderer(vpls_, sample_percentage, min_dist_, 
 					step_size_factor, tolerance, tau, max_iterations, slice_size, visibility_only, adaptive_col_sampling, 
 					adaptive_importance_sampling, adaptive_force_resample, adaptive_recover_transpose, truncated, show_slices, vsl,
-					show_stats, show_svd, cs, error_scale, hw, bin_vis, num_clusters));
+					show_stats, show_svd, cs, error_scale, hw, bin_vis, num_clusters, ls_samples_per_slice));
 			}
 			case MATRIXSEPARATION:
 			{
