@@ -84,7 +84,7 @@ std::vector<HWBFPix> generateReceivers(Scene* scene, std::uint32_t spp, Sampler*
 
                     BSDFSamplingRecord bsdf_sample_record(curr.its, sampler);
                     bsdf_sample_record.typeMask = curr.its.getBSDF()->isDielectric() ? 
-                        BSDF::EDeltaTransmission : BSDF::EDeltaReflection;
+                        BSDF::EDeltaTransmission | BSDF::ENull : BSDF::EDeltaReflection;
                     curr.its.getBSDF()->sample(bsdf_sample_record, sampler->next2D());
 
                     curr.ray = Ray(curr.its.p, bsdf_sample_record.its.toWorld(bsdf_sample_record.wo), curr.ray.time);
@@ -124,14 +124,14 @@ void computeShadows(BlockingQueue<std::pair<std::uint32_t, std::uint32_t>>& inpu
 
 void shade(BlockingQueue<std::pair<std::uint32_t, std::uint32_t>>& input, 
     BlockingQueue<std::pair<std::uint32_t, std::uint32_t>>& output,
-    std::vector<HWBFPix>& receivers, const std::vector<VPL>& vpls, float min_dist, bool vsl){
+    std::vector<HWBFPix>& receivers, const std::vector<VPL>& vpls, float min_dist, bool vsl, Scene* scene){
 
     HWShader hw_shader;
 
     std::pair<std::uint32_t, std::uint32_t> work_unit;
 
     while(input.pop(work_unit)){
-        hw_shader.renderHWBF(receivers, vpls, work_unit.first, work_unit.second, min_dist, vsl);
+        hw_shader.renderHWBF(receivers, vpls, work_unit.first, work_unit.second, min_dist, vsl, scene);
         output.push(work_unit);
     }
 
@@ -180,7 +180,7 @@ void LightClustererRenderer::renderHW(Scene* scene, std::uint32_t spp, const Ren
         std::ref(vpls), scene, min_dist_);
 
     std::thread shader(shade, std::ref(toshade), std::ref(tofinish), std::ref(receivers), std::ref(vpls), 
-        min_dist_, vsl_);
+        min_dist_, vsl_, scene);
 
     std::unordered_map<std::uint32_t, Spectrum> accumulator;
 

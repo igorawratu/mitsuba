@@ -161,7 +161,7 @@ Spectrum sample(Scene* scene, Sampler* sampler, Intersection& its, const Ray& in
             }
 
             BSDFSamplingRecord bsdf_sample_record(its, sampler);
-            bsdf_sample_record.typeMask = its.getBSDF()->isDielectric() ? BSDF::EDeltaTransmission : 
+            bsdf_sample_record.typeMask = its.getBSDF()->isDielectric() ? BSDF::EDeltaTransmission | BSDF::ENull : 
                 BSDF::EDeltaReflection;
             its.getBSDF()->sample(bsdf_sample_record, sampler->next2D());
 

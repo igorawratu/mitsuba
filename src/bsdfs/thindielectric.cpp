@@ -19,6 +19,7 @@
 #include <mitsuba/render/bsdf.h>
 #include <mitsuba/hw/basicshader.h>
 #include "ior.h"
+#include <iostream>
 
 MTS_NAMESPACE_BEGIN
 

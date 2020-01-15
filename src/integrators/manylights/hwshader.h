@@ -21,7 +21,7 @@ public:
         float min_dist, bool vsl);
 
     void renderHWBF(std::vector<HWBFPix>& receivers, const std::vector<VPL>& vpls, std::uint32_t start,
-        std::uint32_t end, float min_dist, bool vsl);
+        std::uint32_t end, float min_dist, bool vsl, Scene* scene);
     
     bool initialized(){
         return initialized_;

@@ -9,6 +9,7 @@ struct PixelElement{
     float3 wo;
     int type;
     int slice_id;
+    int intersected;
 };
 
 struct LightElement{
@@ -21,7 +22,6 @@ struct LightElement{
     float3 eta;
     float3 k;
     float3 wi;
-    float coeff;
     float rad;
     int type;
     int light_surface_type;
@@ -32,7 +32,7 @@ struct OutputElement{
 };
 
 struct CoeffElement{
-    uint coeff;
+    float coeff;
 };
 
 #define PI 3.1415926
@@ -155,7 +155,11 @@ __kernel void shade(__global const struct PixelElement* pixels,
         return;
     }
 
-    float coeff = coefficients[i].coeff > 0 ? 1.0f : 0.0f;
+    if(pixels[i].intersected == 0){
+        return;
+    }
+
+    float coeff = coefficients[i].coeff;// > 0 ? 1.0f : 0.0f;
     int lidx = pixels[i].slice_id * clusters_per_slice + curr_pass;
 
     float3 dir = lights[lidx].type == 0 ? -lights[lidx].n : lights[lidx].p - pixels[i].p;
@@ -167,7 +171,7 @@ __kernel void shade(__global const struct PixelElement* pixels,
     float3 light_col;
     if(lights[lidx].type == 2){
         if(lights[lidx].light_surface_type == 0){
-            light_col = clamp(dot(-wi, lights[lidx].n), 0.0f, 1.0f) / (float)(PI);
+            light_col = clamp(dot(-wi, lights[lidx].n), 0.0f, 1.0f) / (float)(PI) * lights[lidx].diff_col;
         }
         else{
             light_col = evalBSDF(lights[lidx].n, -wi, lights[lidx].wi, 
@@ -203,7 +207,22 @@ float3 sampleCone(struct PixelElement pixel, struct LightElement light, float so
     float lrough = max(0.001f, light.roughness);
 
     float3 bsdf_col = evalBSDF(pixel.n, wi, pixel.wo, pixel.eta, pixel.k, prough, pixel.spec_col, pixel.diff_col);
-    float3 light_col = light.power * evalBSDF(light.n, -wi, light.wi, light.eta, light.k, lrough, light.spec_col, light.diff_col);
+    float3 light_col;
+    if(light.type == 2){
+        if(light.light_surface_type == 0){
+            light_col = clamp(dot(-wi, light.n), 0.0f, 1.0f) / (float)(PI) * light.diff_col;
+        }
+        else{
+            light_col = evalBSDF(light.n, -wi, light.wi, 
+                light.eta, light.k, light.roughness,
+                light.spec_col, light.diff_col);
+        }
+
+        light_col *= light.power;
+    }
+    else{
+        light_col = light.power;
+    }
 
     float3 h = normalize(wi + pixel.wo);
     float costheta = clamp(dot(h, wi), 0.0f, 1.0f);
@@ -277,9 +296,23 @@ float3 sampleBSDF(struct PixelElement pixel, struct LightElement light, float so
     if(dp > ca_ctheta)
     {
         float3 bsdf_col = evalBSDF(pixel.n, wi, pixel.wo, pixel.eta, pixel.k, prough, pixel.spec_col, pixel.diff_col);
-        float3 light_col = light.power * evalBSDF(light.n, -wi, light.wi, light.eta, light.k, lrough, light.spec_col, light.diff_col);
+        float3 light_col;
+        if(light.type == 2){
+            if(light.light_surface_type == 0){
+                light_col = clamp(dot(-wi, light.n), 0.0f, 1.0f) / (float)(PI) * light.diff_col;
+            }
+            else{
+                light_col = evalBSDF(light.n, -wi, light.wi, 
+                    light.eta, light.k, light.roughness,
+                    light.spec_col, light.diff_col);
+            }
 
-        
+            light_col *= light.power;
+        }
+        else{
+            light_col = light.power;
+        }
+
         float3 h = normalize(wi + pixel.wo);
         float nol = clamp(dot(h, wi), 0.0f, 1.0f);
         float spec_prob = prough < 1.0001f ? 
@@ -302,9 +335,13 @@ __kernel void shadeVSL(__global const struct PixelElement* pixels,
         return;
     }
 
+    if(pixels[i].intersected == 0){
+        return;
+    }
+
     float3 seed = pixels[i].p / min_dist * 100.f * (float)(curr_pass + 1.0f);
 
-    float coeff = coefficients[i].coeff > 0 ? 1.0f : 0.0f;
+    float coeff = coefficients[i].coeff;// > 0 ? 1.0f : 0.0f;
     int curr_light_idx = pixels[i].slice_id * clusters_per_slice + curr_pass;
 
     float central_disc_area = PI * lights[curr_light_idx].rad * lights[curr_light_idx].rad;

@@ -82,9 +82,7 @@ Eigen::MatrixXf calculateClusterContributions(const std::vector<VPL>& vpls,
     bool vsl){
 
     assert(slices.size() > 0 && vpls.size() > 0);
-
     Eigen::MatrixXf contributions = Eigen::MatrixXf::Zero(slices.size() * 3 * samples_per_slice, vpls.size());
-
     Properties props("independent");
     ref<Sampler> sampler = static_cast<Sampler*>(PluginManager::getInstance()->createObject(MTS_CLASS(Sampler), props));
     sampler->configure();
@@ -190,7 +188,7 @@ std::vector<std::vector<std::uint32_t>> clusterVPLsBySampling(const Eigen::Matri
         float min = std::numeric_limits<float>::max();
         std::uint32_t min_idx = 0;
         for(std::uint32_t j = 0; j < dist_mat.rows(); ++j){
-            if(min > dist_mat(j, i)){
+            if(min > dist_mat(j, i) && vpls[nonzero_norm_cols[i]].type == vpls[j].type){
                 min = dist_mat(j, i);
                 min_idx = j;
             }
@@ -535,7 +533,8 @@ std::unique_ptr<KDTNode<ReconstructionSample>> constructKDTree(Scene* scene, std
 
                     BSDFSamplingRecord bsdf_sample_record(curr_sample.its, sampler);
                     bsdf_sample_record.typeMask = curr_sample.its.getBSDF()->isDielectric() ? 
-                        BSDF::EDeltaTransmission : BSDF::EDeltaReflection;
+                        BSDF::EDeltaTransmission | BSDF::ENull : BSDF::EDeltaReflection;
+                    
                     curr_sample.its.getBSDF()->sample(bsdf_sample_record, sampler->next2D());
 
                     curr_sample.ray = Ray(curr_sample.its.p, bsdf_sample_record.its.toWorld(bsdf_sample_record.wo), ray.time);
@@ -827,26 +826,11 @@ std::vector<std::uint32_t> importanceSample(std::uint32_t num_samples, std::mt19
         return all_indices;
     }
 
-    double total_contrib = 0.;
-    for(std::uint32_t j = 0; j < probabilities.size(); ++j){
-        total_contrib += probabilities[j];
-    }
-
-    std::uniform_real_distribution<double> gen(0., total_contrib);
+    std::discrete_distribution<std::uint32_t> gen(probabilities.begin(), probabilities.end());
 
     std::vector<std::uint32_t> sampled(num_samples);
     for(std::uint32_t i = 0; i < num_samples; ++i){
-        double selection = gen(rng);
-
-        std::uint32_t idx = 0;
-        for(; idx < probabilities.size(); ++idx){
-            selection -= probabilities[idx];
-            if(selection <= 0.){
-                break;
-            }
-        }
-
-        sampled[i] = idx;
+        sampled[i] = gen(rng);
     }
 
     return sampled;
@@ -1833,7 +1817,8 @@ void unoccludedHWWorker(BlockingQueue<HWWorkUnit>& input, BlockingQueue<HWWorkUn
 }
 
 std::tuple<std::uint64_t, std::uint64_t> recoverHW(KDTNode<ReconstructionSample>* slice, const std::vector<VPL>& vpls, Scene* scene,
-    bool gather_stat_images, bool show_svd, float sample_perc, float min_dist, std::mt19937& rng){
+    bool gather_stat_images, bool show_svd, float sample_perc, float min_dist, std::mt19937& rng, bool importance_sample,
+    bool bin_vis){
     Point3f slice_com_pos(0.f, 0.f, 0.f);
     Vector3f slice_com_norm(0.f);
     for(std::uint32_t i = 0; i < slice->sample_indices.size(); ++i){
@@ -1914,30 +1899,51 @@ std::tuple<std::uint64_t, std::uint64_t> recoverHW(KDTNode<ReconstructionSample>
         std::uint32_t samples;
         std::uint32_t basis_rank;
 
-        std::vector<std::uint8_t> bin_vis(slice->sample_indices.size() * quadranted_vpls[i].size(), 0);
-        samples = adaptiveMatrixReconstructionB(bin_vis, scene, slice, 
-            quadranted_vpls[i], min_dist, sample_perc, rng, basis_rank, cluster_contribs);
+        if(bin_vis){
+            std::vector<std::uint8_t> bv(slice->sample_indices.size() * quadranted_vpls[i].size(), 0);
+            samples = adaptiveMatrixReconstructionB(bv, scene, slice, 
+                quadranted_vpls[i], min_dist, sample_perc, rng, basis_rank, cluster_contribs);
 
-        total_performed_samples += samples;
-        slice->rank_ratio[i] = float(basis_rank) / std::min(slice->sample_indices.size(), quadranted_vpls[i].size());
+            total_performed_samples += samples;
+            slice->rank_ratio[i] = float(basis_rank) / std::min(slice->sample_indices.size(), quadranted_vpls[i].size());
 
-        for(std::uint32_t j = 0; j < actual_vpl_index[i].size(); ++j){
-            for(std::uint32_t k = 0; k < slice->sample_indices.size(); ++k){
-                std::uint32_t idx = actual_vpl_index[i][j] * slice->sample_indices.size() + k;
-                std::uint32_t bin_vis_idx = j * slice->sample_indices.size() + k;
-                slice->visibility_coefficients[idx] = bin_vis[bin_vis_idx];
+            for(std::uint32_t j = 0; j < actual_vpl_index[i].size(); ++j){
+                for(std::uint32_t k = 0; k < slice->sample_indices.size(); ++k){
+                    std::uint32_t idx = actual_vpl_index[i][j] * slice->sample_indices.size() + k;
+                    std::uint32_t bin_vis_idx = j * slice->sample_indices.size() + k;
+                    slice->visibility_coefficients[idx] = bv[bin_vis_idx] == 0 ? 0.f : 1.f;
 
-                if(gather_stat_images){
-                    std::uint8_t actual_visible = 
-                        sampleVisibility(scene, slice->sample(k).its, vpls[actual_vpl_index[i][j]], min_dist) ?
-                        1 : 0;
-                    if(actual_visible != bin_vis[bin_vis_idx]){
-                        slice->sample(k).visibility_errors++;
+                    if(gather_stat_images){
+                        std::uint8_t actual_visible = 
+                            sampleVisibility(scene, slice->sample(k).its, vpls[actual_vpl_index[i][j]], min_dist) ?
+                            1 : 0;
+                        if(actual_visible != bv[bin_vis_idx]){
+                            slice->sample(k).visibility_errors++;
+                        }
+                        
                     }
-                    
                 }
             }
         }
+        else{
+            Eigen::MatrixXf mat = Eigen::MatrixXf::Zero(slice->sample_indices.size(), quadranted_vpls[i].size());
+
+            float svd_t, recon_t, adaptive_sample_t, other_t;
+            std::tie(samples, svd_t, recon_t, adaptive_sample_t, other_t) = 
+                adaptiveMatrixReconstruction(mat, scene, slice, quadranted_vpls[i], min_dist, 
+                sample_perc, rng, true, false, importance_sample, false, basis_rank, false, cluster_contribs, 
+                false, false, slice->singular_values[i]);
+            total_performed_samples += samples;
+            slice->rank_ratio[i] = float(basis_rank) / std::min(slice->sample_indices.size(), quadranted_vpls[i].size());
+
+            for(std::uint32_t j = 0; j < actual_vpl_index[i].size(); ++j){
+                for(std::uint32_t k = 0; k < slice->sample_indices.size(); ++k){
+                    std::uint32_t idx = actual_vpl_index[i][j] * slice->sample_indices.size() + k;
+                    slice->visibility_coefficients[idx] = (mat(k, j) + 1.f) / 2.f;
+                }
+            }
+        }
+        
     }
 
     slice->sample_ratio = float(total_performed_samples) / (slice->sample_indices.size() * vpls.size());
@@ -1949,7 +1955,7 @@ void clusterWorkerMDLC(BlockingQueue<HWWorkUnit>& input, BlockingQueue<HWWorkUni
     std::vector<std::vector<VPL>>& vpls, LightTree* light_tree, Scene* scene, bool gather_stats, 
     bool show_svd, float sample_perc, float min_dist, std::uint32_t thread_id, std::uint32_t num_threads, 
     std::mutex& barrier_mutex, std::condition_variable& barrier, std::mutex& sample_update_mutex,
-    std::uint64_t& total_samples, std::uint64_t& num_samples){
+    std::uint64_t& total_samples, std::uint64_t& num_samples, bool bin_vis, bool importance_sample){
     
     HWWorkUnit work_unit;
 
@@ -1968,7 +1974,7 @@ void clusterWorkerMDLC(BlockingQueue<HWWorkUnit>& input, BlockingQueue<HWWorkUni
 
         std::uint64_t slice_samples, num_slice_sampled;
         std::tie(slice_samples, num_slice_sampled) = recoverHW(work_unit.first, vpls[work_unit.second], scene, gather_stats, show_svd, sample_perc,
-            min_dist, rng);
+            min_dist, rng, importance_sample, bin_vis);
         {
             std::lock_guard<std::mutex> lock(sample_update_mutex);
             total_samples += slice_samples;
@@ -1995,7 +2001,8 @@ void clusterWorkerLS(BlockingQueue<HWWorkUnit>& input, BlockingQueue<HWWorkUnit>
     const Eigen::MatrixXf& contribs, const std::vector<std::vector<int>>& nn, 
     const std::vector<VPL>& total_vpls, std::uint32_t num_clusters, Scene* scene, bool gather_stats, bool show_svd, 
     float sample_perc, float min_dist, std::uint32_t thread_id, std::uint32_t num_threads, std::mutex& barrier_mutex,
-    std::condition_variable& barrier, std::mutex& sample_update_mutex, std::uint64_t& total_samples, std::uint64_t& num_samples){
+    std::condition_variable& barrier, std::mutex& sample_update_mutex, std::uint64_t& total_samples, std::uint64_t& num_samples,
+    bool bin_vis, bool importance_sample){
 
     std::mt19937 rng(std::chrono::high_resolution_clock::now().time_since_epoch().count() * thread_id);
     std::uint32_t split_num_clusters = std::min(total_vpls.size(), num_clusters - cbsamp.size());
@@ -2009,7 +2016,7 @@ void clusterWorkerLS(BlockingQueue<HWWorkUnit>& input, BlockingQueue<HWWorkUnit>
 
         std::uint64_t slice_samples, num_slice_sampled;
         std::tie(slice_samples, num_slice_sampled) = recoverHW(work_unit.first, vpls[work_unit.second], scene, gather_stats, show_svd, sample_perc,
-            min_dist, rng);
+            min_dist, rng, importance_sample, bin_vis);
         {
             std::lock_guard<std::mutex> lock(sample_update_mutex);
             total_samples += slice_samples;
@@ -2259,10 +2266,15 @@ std::tuple<std::uint64_t, std::uint64_t> MatrixReconstructionRenderer::renderHW(
     if(clustering_strategy_ == ClusteringStrategy::LS){
         std::uint32_t num_clusters = std::min(std::uint32_t(vpls_.size()), std::uint32_t(num_clusters_ * 0.3f));
         sampled_slice_rows.resize(slices.size() * samples_per_slice);
+        std::cout << "Clusters initialized" << std::endl;
         cluster_contributions = calculateClusterContributions(vpls_, slices, scene, min_dist_,
             sampled_slice_rows, samples_per_slice, vsl_);
 
+        std::cout << "Contributions calculated" << std::endl;
+
         cbsamp = clusterVPLsBySampling(cluster_contributions, num_clusters, vpls_, min_dist_);
+
+        std::cout << "VPLs clustered by sampling" << std::endl;
 
         //approx nearest neighbours here
         flann::Matrix<float> data_points(new float[sampled_slice_rows.size() * 3], 
@@ -2299,11 +2311,14 @@ std::tuple<std::uint64_t, std::uint64_t> MatrixReconstructionRenderer::renderHW(
 
         index.knnSearch(slice_centroids, nearest_neighbours, neighbour_distances, 10 * samples_per_slice, flann::SearchParams(128));
 
+        std::cout << "Nearest neighbours found" << std::endl;
+
         for(std::uint32_t i = 0; i < num_workers; ++i){
             clusterers.emplace_back(clusterWorkerLS, std::ref(to_cluster), std::ref(to_shade), std::ref(vpls),
                 std::ref(cbsamp), std::ref(cluster_contributions), std::ref(nearest_neighbours), std::ref(vpls_),
                 num_clusters_, scene, gather_stat_images_, show_svd_, sample_percentage_, min_dist_, i,
-                num_workers, std::ref(barrier_mutex), std::ref(barrier), std::ref(sample_update_mutex), std::ref(total_samples), std::ref(num_samples));
+                num_workers, std::ref(barrier_mutex), std::ref(barrier), std::ref(sample_update_mutex), std::ref(total_samples), std::ref(num_samples),
+                bin_vis_, adaptive_importance_sampling_);
         }
         
     }
@@ -2313,7 +2328,8 @@ std::tuple<std::uint64_t, std::uint64_t> MatrixReconstructionRenderer::renderHW(
         for(std::uint32_t i = 0; i < num_workers; ++i){
             clusterers.emplace_back(clusterWorkerMDLC, std::ref(to_cluster), std::ref(to_shade), std::ref(vpls),
                 light_tree.get(), scene, gather_stat_images_, show_svd_, sample_percentage_, min_dist_, i,
-                num_workers, std::ref(barrier_mutex), std::ref(barrier), std::ref(sample_update_mutex), std::ref(total_samples), std::ref(num_samples));
+                num_workers, std::ref(barrier_mutex), std::ref(barrier), std::ref(sample_update_mutex), 
+                std::ref(total_samples), std::ref(num_samples), bin_vis_, adaptive_importance_sampling_);
         }
     }
 

@@ -142,6 +142,7 @@ struct PixelElement{
     cl_float3 wi;
     cl_int type;
     cl_int slice_id;
+    cl_int intersected;
 };
 
 struct LightElement{
@@ -154,7 +155,6 @@ struct LightElement{
     cl_float3 eta;
     cl_float3 k;
     cl_float3 wi;
-    cl_float coeff;
     cl_float rad;
     cl_int type;
     cl_int light_surface_type;
@@ -165,7 +165,7 @@ struct OutputElement{
 };
 
 struct CoeffElement{
-    cl_uint coeff;
+    cl_float coeff;
 };
 
 bool HWShader::initializeLightBuffer(std::uint32_t slices, std::uint32_t clusters_per_slice){
@@ -518,6 +518,9 @@ void HWShader::renderSlices(const std::vector<KDTNode<ReconstructionSample>*>& s
 
             host_pixel_buffer[curr_element].type = bsdf->isConductor() ? 0 : 1;
             host_pixel_buffer[curr_element].slice_id = i;
+
+            //always intersected in matrix completion
+            host_pixel_buffer[curr_element].intersected = 1;
         }
         elements_processed += slices[i]->sample_indices.size();
     }
@@ -608,7 +611,7 @@ void HWShader::renderSlices(const std::vector<KDTNode<ReconstructionSample>*>& s
 }
 
 void HWShader::renderHWBF(std::vector<HWBFPix>& receivers, const std::vector<VPL>& vpls, std::uint32_t start,
-        std::uint32_t end, float min_dist, bool vsl){
+        std::uint32_t end, float min_dist, bool vsl, Scene* scene){
     if(!initialized_){
         return;
     }
@@ -700,10 +703,6 @@ void HWShader::renderHWBF(std::vector<HWBFPix>& receivers, const std::vector<VPL
         vpl.P.toLinearRGB(light_for_slice.power.s[0], light_for_slice.power.s[1],
                 light_for_slice.power.s[2]);
         Normal n = vpl.its.shFrame.n;
-        n = vpl.its.wi.z > 0.f ? n : -n;
-        light_for_slice.n.s[0] = n.x;
-        light_for_slice.n.s[1] = n.y;
-        light_for_slice.n.s[2] = n.z;
 
         light_for_slice.p.s[0] = vpl.its.p.x;
         light_for_slice.p.s[1] = vpl.its.p.y;
@@ -720,6 +719,8 @@ void HWShader::renderHWBF(std::vector<HWBFPix>& receivers, const std::vector<VPL
             light_for_slice.light_surface_type = 0;
         }
         else{
+            n = vpl.its.wi.z > 0.f ? n : -n;
+
             light_for_slice.type = 2;
             Vector light_wi = vpl.its.toWorld(vpl.its.wi);
 
@@ -766,9 +767,13 @@ void HWShader::renderHWBF(std::vector<HWBFPix>& receivers, const std::vector<VPL
 
                 light_for_slice.roughness = std::min(1.5f, bsdf->getRoughness(vpl.its, 0));
 
-                light_for_slice.light_surface_type = 1;
+                light_for_slice.light_surface_type = 0;
             }
         }
+
+        light_for_slice.n.s[0] = n.x;
+        light_for_slice.n.s[1] = n.y;
+        light_for_slice.n.s[2] = n.z;
     }
 
     ret = clEnqueueWriteBuffer(command_queue_, light_buffer_, CL_TRUE, 0,
@@ -799,6 +804,12 @@ void HWShader::renderHWBF(std::vector<HWBFPix>& receivers, const std::vector<VPL
 
     for(std::uint32_t i = start; i < end; ++i){
         HWBFPix& sample = receivers[i];
+
+        host_pixel_buffer[i - start].intersected = sample.intersected ? 1 : 0;
+        if(!sample.intersected){
+            continue;
+        }
+
         const BSDF* bsdf = sample.its.getBSDF();
 
         Spectrum diffuse_col = bsdf->getDiffuseReflectance(sample.its);
@@ -905,9 +916,18 @@ void HWShader::renderHWBF(std::vector<HWBFPix>& receivers, const std::vector<VPL
         receivers[i].visibility.shrink_to_fit();
 
         auto& sample = receivers[i];
-
-        sample.col = sample.its.isEmitter() ? sample.its.Le(-sample.ray.d) : 
-            Spectrum(host_output_buffer[i - start].col.s);
+        if(!sample.intersected){
+            if(scene->hasEnvironmentEmitter()){
+                sample.col = scene->evalEnvironment(RayDifferential(sample.ray));
+            }
+        }
+        else{
+            sample.col = Spectrum(host_output_buffer[i - start].col.s);
+            if(sample.its.isEmitter()){
+                sample.its.Le(-sample.ray.d);
+            }   
+        }
+        
     }
 }
 

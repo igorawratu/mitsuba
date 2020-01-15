@@ -117,6 +117,10 @@ void setVPLRadii(std::vector<VPL>& vpls, float min_dist){
 		}
 	} 
 
+	if(num_sl < num_neighbours){
+		return;
+	}
+
     flann::Matrix<float> dataset(new float[num_sl * 3], num_sl, 3);
 	std::uint32_t curr_light = 0;
 	std::vector<std::uint32_t> pointlight_indices;
@@ -160,8 +164,7 @@ size_t generateVPLs(const Scene *scene, size_t offset, size_t count, int max_dep
 	if (max_depth <= 1)
 		return 0;
 
-	Properties props("halton");
-	props.setInteger("scramble", 0);
+	Properties props("stratified");
 	ref<Sampler> sampler = static_cast<Sampler*>(PluginManager::getInstance()->createObject(MTS_CLASS(Sampler), props));
 	sampler->configure();
 	sampler->generate(Point2i(0));
@@ -173,7 +176,8 @@ size_t generateVPLs(const Scene *scene, size_t offset, size_t count, int max_dep
 	int retries = 0;
 
 	while (vpls.size() < count) {
-		sampler->setSampleIndex(++offset);
+		//sampler->setSampleIndex(++offset);
+		offset++;
 
 		if (vpls.empty() && ++retries > 10000) {
 			return 0;
@@ -309,17 +313,22 @@ public:
 		spp_ = upper_sqrt * upper_sqrt;//upperPo2(scene->getSampler()->getSampleCount());
 		size_t sample_count = properties_.getInteger("vpls", 1024);
 		vpls_.reserve(sample_count);
+		Log(EInfo, "Started generating VPLs");
 		float normalization = 1.f / generateVPLs(scene, 0, sample_count, max_depth_, true, vpls_);
-		
+		Log(EInfo, "Normalizing VPLs", vpls_.size());
+
 		for (size_t i = 0; i < vpls_.size(); ++i) {
 			vpls_[i].P *= normalization;
 			vpls_[i].emitterScale *= normalization;
 		}
 
+		Log(EInfo, "Calculating min dist", vpls_.size());
 		min_dist_ = calculateMinDistance(scene, vpls_, clamping_);
 
+		Log(EInfo, "Setting radii", vpls_.size());
 		setVPLRadii(vpls_, min_dist_);
 
+		Log(EInfo, "Initializing renderer", vpls_.size());
 		renderer_ = initializeRendererByStrategy(scene, properties_, clustering_strategy_);
 
 		Log(EInfo, "Generated %i virtual point lights", vpls_.size());
