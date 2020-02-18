@@ -237,7 +237,7 @@ float3 sampleCone(struct PixelElement pixel, struct LightElement light, float so
 
     float dif_rat = dif_mag / mag_denom;
 
-    float nol = clamp(dot(h, wi), 0.0f, 1.0f);
+    float nol = clamp(dot(h, pixel.wo), 0.0f, 1.0f);
     float spec_prob = pixel.roughness < 1.0001f ? 
         (1.0f - dif_rat) * g1_ggx_smith(pixel.roughness, pixel.wo, h) * d_ggx(h, pixel.n, prough) / max(4.0f * nol, 0.0001f) : 0.0f;
     float diff_prob = lambertian(pixel.n, wi) * dif_rat;
@@ -339,10 +339,15 @@ __kernel void shadeVSL(__global const struct PixelElement* pixels,
         return;
     }
 
-    float3 seed = pixels[i].p / min_dist * 100.f * (float)(curr_pass + 1.0f);
+    float3 seed = /*pixels[i].p / min_dist * 100.f * */(float)(curr_pass + 1.0f);
 
     float coeff = coefficients[i].coeff;// > 0 ? 1.0f : 0.0f;
     int curr_light_idx = pixels[i].slice_id * clusters_per_slice + curr_pass;
+
+    float dp = dot(normalize(lights[curr_light_idx].p - pixels[i].p), pixels[i].n);
+    if(dp < 0.0001f){
+        return;
+    }
 
     float central_disc_area = PI * lights[curr_light_idx].rad * lights[curr_light_idx].rad;
     float d = length(pixels[i].p - lights[curr_light_idx].p);

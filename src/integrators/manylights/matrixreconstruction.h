@@ -82,7 +82,7 @@ private:
         std::uint32_t samples_per_slice);
     std::tuple<std::uint64_t, std::uint64_t> renderHW(Scene* scene, std::uint32_t spp, const RenderJob *job,
         std::vector<float>& timings, const std::vector<KDTNode<ReconstructionSample>*>& slices, 
-        std::uint32_t samples_per_slice);
+        std::uint32_t samples_per_slice, std::uint32_t slice_size);
 
 private:
     std::vector<VPL> vpls_;

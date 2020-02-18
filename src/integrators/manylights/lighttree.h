@@ -79,7 +79,7 @@ public:
     ~LightTree();
 
     std::vector<VPL> getClusteringForPoint(const Intersection& its);
-    std::vector<VPL> getClusteringForPoints(const std::vector<Intersection>& points);
+    std::vector<VPL> getClusteringForPoints(Scene* scene, const std::vector<Intersection>& points);
 
 private:
     std::vector<VPL> point_vpls_, directional_vpls_, oriented_vpls_;

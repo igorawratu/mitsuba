@@ -116,7 +116,7 @@ void setVPLRadii(std::vector<VPL>& vpls, float min_dist){
 			num_sl++;
 		}
 	} 
-
+ 
 	if(num_sl < num_neighbours){
 		return;
 	}
@@ -164,7 +164,7 @@ size_t generateVPLs(const Scene *scene, size_t offset, size_t count, int max_dep
 	if (max_depth <= 1)
 		return 0;
 
-	Properties props("stratified");
+	Properties props("independent");
 	ref<Sampler> sampler = static_cast<Sampler*>(PluginManager::getInstance()->createObject(MTS_CLASS(Sampler), props));
 	sampler->configure();
 	sampler->generate(Point2i(0));

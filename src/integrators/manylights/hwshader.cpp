@@ -378,10 +378,7 @@ void HWShader::renderSlices(const std::vector<KDTNode<ReconstructionSample>*>& s
 
             vpl.P.toLinearRGB(light_for_slice.power.s[0], light_for_slice.power.s[1],
                     light_for_slice.power.s[2]);
-            Normal n = vpl.its.wi.z > 0.f ? vpl.its.shFrame.n : -vpl.its.shFrame.n;
-            light_for_slice.n.s[0] = n.x;
-            light_for_slice.n.s[1] = n.y;
-            light_for_slice.n.s[2] = n.z;
+            Normal n = vpl.its.shFrame.n;
 
             light_for_slice.p.s[0] = vpl.its.p.x;
             light_for_slice.p.s[1] = vpl.its.p.y;
@@ -398,6 +395,7 @@ void HWShader::renderSlices(const std::vector<KDTNode<ReconstructionSample>*>& s
                 light_for_slice.light_surface_type = 0;
             }
             else{
+                n = vpl.its.wi.z > 0.f ? n : -n;
                 light_for_slice.type = 2;
                 Vector light_wi = vpl.its.toWorld(vpl.its.wi);
 
@@ -444,9 +442,13 @@ void HWShader::renderSlices(const std::vector<KDTNode<ReconstructionSample>*>& s
 
                     light_for_slice.roughness = std::min(1.5f, bsdf->getRoughness(vpl.its, 0));
 
-                    light_for_slice.light_surface_type = 1;
+                    light_for_slice.light_surface_type = 0;
                 }
             }
+
+            light_for_slice.n.s[0] = n.x;
+            light_for_slice.n.s[1] = n.y;
+            light_for_slice.n.s[2] = n.z;
         }
     }
 
@@ -924,7 +926,7 @@ void HWShader::renderHWBF(std::vector<HWBFPix>& receivers, const std::vector<VPL
         else{
             sample.col = Spectrum(host_output_buffer[i - start].col.s);
             if(sample.its.isEmitter()){
-                sample.its.Le(-sample.ray.d);
+                sample.col += sample.its.Le(-sample.ray.d);
             }   
         }
         

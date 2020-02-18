@@ -439,35 +439,18 @@ std::vector<VPL> sampleRepresentatives(const Eigen::MatrixXf& contributions, con
             continue;
         }
         
-        float tot_cluster_power = 0.f;
         float total_vpl_power = 0.f;
+        std::vector<float> sample_dist(clusters[i].size());
         for(std::uint32_t j = 0; j < clusters[i].size(); ++j){
-            tot_cluster_power += contributions.col(clusters[i][j]).norm();
-            float r, g, b;
-            vpls[clusters[i][j]].P.toLinearRGB(r, g, b);
-            total_vpl_power += sqrt(r * r + g * g + b * b);
+            total_vpl_power += vpls[clusters[i][j]].P.getLuminance();
+            sample_dist[j] = contributions.col(clusters[i][j]).norm();
         }
 
-        std::uniform_real_distribution<float> gen(0, tot_cluster_power);
-        std::uint32_t rep_idx = 0;
-        float selected_norm = 0.f;
-
-        for(std::uint32_t j = 0; j < clusters[i].size(); ++j){
-            float curr_norm = contributions.col(clusters[i][j]).norm();
-            if(curr_norm > selected_norm){
-                selected_norm = curr_norm;
-                rep_idx = j;
-            }
-        }
-
-        representatives.push_back(vpls[clusters[i][rep_idx]]);
-        float r, g, b;
-        representatives.back().P.toLinearRGB(r, g, b);
-        float rep_power = sqrt(r * r + g * g + b * b);
-        representatives.back().P = representatives.back().P * total_vpl_power / rep_power;
+        std::discrete_distribution<> gen(sample_dist.begin(), sample_dist.end());
+        
+        representatives.push_back(vpls[gen(rng)]);
+        representatives.back().P /= representatives.back().P.getLuminance() * total_vpl_power;
     }
-
-    //updateVPLRadii(representatives, min_dist);
 
     return representatives;
 }
@@ -650,9 +633,10 @@ std::uint32_t computeUnoccludedSamples(KDTNode<ReconstructionSample>* slice, boo
         curr_sample.unoccluded_samples.resize(vpls.size());
 
         for(std::uint32_t j = 0; j < vpls.size(); ++j){
+            const VPL& vpl = vpls[j];
             std::uint32_t samples_for_cell;
             curr_sample.unoccluded_samples[j] = sample(scene, sampler, curr_sample.its, curr_sample.ray,
-                vpls[j], min_dist, false, 5, false, curr_sample.intersected_scene, false, vsl, samples_for_cell);
+                vpl, min_dist, false, 5, false, curr_sample.intersected_scene, false, vsl, samples_for_cell);
                 total_samples += samples_for_cell;
         }
     }
@@ -1465,8 +1449,8 @@ std::uint32_t getQuadrant(Vector3f v){
     return quadrant;
 }
 
-std::tuple<float, float, float, float, float, float> recover(KDTNode<ReconstructionSample>* slice, std::mutex& stats_mutex, const std::vector<VPL>& vpls, Scene* scene,
-    const GeneralParams& general_params, const SVTParams& svt_params, const AdaptiveConstructionParams& ac_params,
+std::tuple<float, float, float, float, float, float> recover(KDTNode<ReconstructionSample>* slice, std::mutex& stats_mutex, const std::vector<VPL>& vpls, 
+    Scene* scene, const GeneralParams& general_params, const SVTParams& svt_params, const AdaptiveConstructionParams& ac_params,
     std::uint64_t& total_samples, std::uint64_t& performed_samples, bool gather_stat_images, bool show_svd, std::mt19937& rng){
     float sample_time, recovery_time = 0.f, svd_time = 0.f, reconstruct_time = 0.f, adaptive_sample_time = 0.f, other_time = 0.f;
     if(general_params.adaptive_col){
@@ -1482,14 +1466,16 @@ std::tuple<float, float, float, float, float, float> recover(KDTNode<Reconstruct
         slice_center_of_mass /= slice->sample_indices.size();
 
         std::vector<std::vector<VPL>> quadranted_vpls(8);
-        std::vector<std::vector<std::uint32_t>> actual_vpl_index(8);
+        std::vector<std::vector<std::uint32_t>> quadranted_vpl_indices(8);
 
+        //further slice for importance sampling purposes
         for(std::uint32_t i = 0; i < vpls.size(); ++i){
-            Vector3f dir = vpls[i].type == EDirectionalEmitterVPL ? Vector3f(vpls[i].its.shFrame.n) : 
-                slice_center_of_mass - vpls[i].its.p;
+            Vector3f pos_dir = normalize(slice_center_of_mass - vpls[i].its.p);
+            Vector3f dir = vpls[i].type == EDirectionalEmitterVPL ? Vector3f(vpls[i].its.shFrame.n) : pos_dir;
+
             std::uint32_t quadrant = getQuadrant(dir);
             quadranted_vpls[quadrant].push_back(vpls[i]);
-            actual_vpl_index[quadrant].push_back(i);
+            quadranted_vpl_indices[quadrant].push_back(i);
         }
 
         std::uint32_t total_performed_samples = 0;
@@ -1507,7 +1493,7 @@ std::tuple<float, float, float, float, float, float> recover(KDTNode<Reconstruct
             //change this to an estimation to the 6d centroid
             for(std::uint32_t j = 0; j < slice->sample_indices.size(); ++j){
                 for(std::uint32_t k = 0; k < quadranted_vpls[i].size(); ++k){
-                    cluster_contribs[k] += slice->sample(j).unoccluded_samples[actual_vpl_index[i][k]].getLuminance();
+                    cluster_contribs[k] += slice->sample(j).unoccluded_samples[quadranted_vpl_indices[i][k]].getLuminance();
                 }
             }
 
@@ -1532,7 +1518,7 @@ std::tuple<float, float, float, float, float, float> recover(KDTNode<Reconstruct
             }
             else{
                 std::vector<std::uint8_t> bin_vis(slice->sample_indices.size() * quadranted_vpls[i].size(), 0);
-                samples = adaptiveMatrixReconstructionB(bin_vis, scene, slice, 
+                samples = adaptiveMatrixReconstructionB(bin_vis, scene, slice,
                     quadranted_vpls[i], general_params.min_dist, general_params.sample_perc, rng, 
                     basis_rank, cluster_contribs);
 
@@ -1545,10 +1531,9 @@ std::tuple<float, float, float, float, float, float> recover(KDTNode<Reconstruct
 
             auto recover_t = std::chrono::high_resolution_clock::now();
             total_performed_samples += samples;
-            slice->rank_ratio[i] = float(basis_rank) / max_rank;
-
+            slice->rank_ratio[i] = float(basis_rank) / max_rank; 
             updateSliceWithMatData(mat, slice, ac_params.vis_only, ac_params.rec_trans, general_params.vsl, 
-                scene, vpls, actual_vpl_index[i], general_params.min_dist, gather_stat_images);
+                scene, vpls, quadranted_vpl_indices[i], general_params.min_dist, gather_stat_images);
 
             recovery_time += std::chrono::duration_cast<std::chrono::duration<float>>(recover_t - recover_start_t).count();
         }
@@ -1556,8 +1541,8 @@ std::tuple<float, float, float, float, float, float> recover(KDTNode<Reconstruct
         float col_rank = 0.f;
         if(show_svd){
             Eigen::MatrixXf m(slice->sample_indices.size() * 3, vpls.size());
-            for(std::uint32_t i = 0; i < slice->sample_indices.size(); ++i){
-                for(std::uint32_t j = 0; j < vpls.size(); ++j){
+            for(std::uint32_t j = 0; j < vpls.size(); ++j){
+                for(std::uint32_t i = 0; i < slice->sample_indices.size(); ++i){
                     bool los = sampleVisibility(scene, slice->sample(i).its, vpls[j], general_params.min_dist);
                     float coeff = los ? 1.f : 0.f;
                     Spectrum c = slice->sample(i).unoccluded_samples[j] * coeff;
@@ -1689,8 +1674,9 @@ void sliceWorkerLS(std::vector<std::int32_t>& work, std::uint32_t thread_id, std
         auto cluster_t = std::chrono::high_resolution_clock::now();
 
         float sample_t, recover_t, svd_t, reconstruct_t, asample_t, other_t;
-        std::tie(sample_t, recover_t, svd_t, reconstruct_t, asample_t, other_t) = recover(slices[slice_id], stats_mutex, vpls, scene, general_params, svt_params, ac_params,
-            total_samples, performed_samples, gather_stat_images, show_svd, rng);
+        std::tie(sample_t, recover_t, svd_t, reconstruct_t, asample_t, other_t) = 
+            recover(slices[slice_id], stats_mutex, vpls, scene, general_params, svt_params, 
+            ac_params, total_samples, performed_samples, gather_stat_images, show_svd, rng);
 
         {
             std::lock_guard<std::mutex> lock(work_mutex);
@@ -1741,7 +1727,7 @@ void sliceWorkerMDLC(std::vector<std::int32_t>& work, std::uint32_t thread_id, s
             slice_points[i] = slices[slice_id]->sample(i).its;
         }
 
-        auto vpls = light_tree->getClusteringForPoints(slice_points);
+        auto vpls = light_tree->getClusteringForPoints(scene, slice_points);
         updateVPLRadii(vpls, general_params.min_dist);
 
         auto cluster_t = std::chrono::high_resolution_clock::now();
@@ -1968,7 +1954,7 @@ void clusterWorkerMDLC(BlockingQueue<HWWorkUnit>& input, BlockingQueue<HWWorkUni
             slice_points[i] = work_unit.first->sample(i).its;
         }
 
-        vpls[work_unit.second] = light_tree->getClusteringForPoints(slice_points);
+        vpls[work_unit.second] = light_tree->getClusteringForPoints(scene, slice_points);
         //not sure if this should change to a radius union approach instead
         updateVPLRadii(vpls[work_unit.second], min_dist);
 
@@ -2229,10 +2215,10 @@ std::tuple<std::uint64_t, std::uint64_t> MatrixReconstructionRenderer::renderNon
 
 std::tuple<std::uint64_t, std::uint64_t> MatrixReconstructionRenderer::renderHW(Scene* scene, std::uint32_t spp, const RenderJob *job, 
     std::vector<float>& timings, const std::vector<KDTNode<ReconstructionSample>*>& slices, 
-    std::uint32_t samples_per_slice){
+    std::uint32_t samples_per_slice, std::uint32_t slice_size){
     auto start = std::chrono::high_resolution_clock::now();
     std::uint32_t num_workers = 15;//std::max(size_t(1), std::min(slices.size(), size_t(std::thread::hardware_concurrency() / 2)));
-    std::uint32_t batch_size = 500;//std::max(num_workers * 2, 64u);
+    std::uint32_t batch_size = 500 / std::max(slice_size / 1000u, 1u);//std::max(num_workers * 2, 64u);
 
     BlockingQueue<HWWorkUnit> to_cluster;
     BlockingQueue<HWWorkUnit> to_shade(batch_size * 2);
@@ -2371,7 +2357,6 @@ bool MatrixReconstructionRenderer::render(Scene* scene, std::uint32_t spp, const
     if(size.x == 0 || size.y == 0){
         return true;
     }
-
     std::uint32_t samples_per_slice = samples_per_slice_;
 
     ref<Bitmap> output_bitmap = new Bitmap(Bitmap::ERGB, Bitmap::EUInt8, size);
@@ -2386,12 +2371,11 @@ bool MatrixReconstructionRenderer::render(Scene* scene, std::uint32_t spp, const
     std::vector<KDTNode<ReconstructionSample>*> slices;
     getSlices(kdt_root.get(), slices);
 
+    std::uint64_t total_samples, num_samples;
     std::vector<float> timings;
 
-    std::uint64_t total_samples, num_samples;
-
     if(hw_){
-        std::tie(total_samples, num_samples) = renderHW(scene, spp, job, timings, slices, samples_per_slice);
+        std::tie(total_samples, num_samples) = renderHW(scene, spp, job, timings, slices, samples_per_slice, slice_size_);
     }
     else{
         std::tie(total_samples, num_samples) = renderNonHW(scene, spp, job, timings, slices, samples_per_slice);
@@ -2426,13 +2410,18 @@ bool MatrixReconstructionRenderer::render(Scene* scene, std::uint32_t spp, const
         
         /*float err = writeOutputErrorImage(scene, "error", size.x, size.y, true, recovered, full_sample, error_scale_);
         std::cout << "Total error: " << err << std::endl;
-        timings.push_back(err);*/
+        timings.push_back(err);
 
         float vis_err_ratio = float(total_verr) / total_samples;
-        timings.push_back(vis_err_ratio);
+        timings.push_back(vis_err_ratio);*/
     }
 
+    std::vector<float> sample_rate;
+    float sr = (float)num_samples / total_samples;
+    sample_rate.push_back(sr);
+
     writeOutputData(scene, "timings", false, timings, ',');
+    writeOutputData(scene, "samplerates", false, sample_rate, ',');
 
     if(show_svd_){
         std::vector<Spectrum> col_rank(image_size, Spectrum(0.f));

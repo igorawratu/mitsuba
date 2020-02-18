@@ -341,7 +341,7 @@ void splitKDTree(KDTNode<Sample>* node, std::uint32_t size_threshold, std::uint3
     }
 
     if(node->left == nullptr && node->right == nullptr){
-        node->Split(min_dist / 10.f, min_slice_size, size_threshold);
+        node->Split(min_dist, min_slice_size, size_threshold);
 
         if(node->left != nullptr && node->right != nullptr){
             splitKDTree(node->left.get(), size_threshold, min_slice_size, min_dist);
