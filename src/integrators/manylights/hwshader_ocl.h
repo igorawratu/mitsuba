@@ -154,7 +154,7 @@ const char *hwshader_ocl =
 "    __global struct OutputElement *output, \n"
 "    int num_pixels, float min_dist, int clusters_per_slice, int curr_pass){\n"
 "    int i = get_global_id(0);\n"
-"    if(i >= num_pixels){\n"
+"    if(i >= num_pixels){    \n"
 "        return;\n"
 "    }\n"
 "\n"

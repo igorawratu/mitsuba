@@ -151,7 +151,7 @@ __kernel void shade(__global const struct PixelElement* pixels,
     __global struct OutputElement *output, 
     int num_pixels, float min_dist, int clusters_per_slice, int curr_pass){
     int i = get_global_id(0);
-    if(i >= num_pixels){
+    if(i >= num_pixels){    
         return;
     }
 

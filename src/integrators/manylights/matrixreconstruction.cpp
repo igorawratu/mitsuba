@@ -2419,6 +2419,7 @@ bool MatrixReconstructionRenderer::render(Scene* scene, std::uint32_t spp, const
     std::vector<float> sample_rate;
     float sr = (float)num_samples / total_samples;
     sample_rate.push_back(sr);
+    std::cout << "Sample rate: " << sr << std::endl;
 
     writeOutputData(scene, "timings", false, timings, ',');
     writeOutputData(scene, "samplerates", false, sample_rate, ',');

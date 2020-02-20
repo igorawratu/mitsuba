@@ -174,8 +174,8 @@ std::unique_ptr<LightTreeNode> createLightTree(const std::vector<VPL>& vpls, EVP
 		}
 		
 		if(vpl_type != EPointEmitterVPL){
-			nodes[current_level][i]->cone_ray = vpls[i].its.shFrame.n;
-			nodes[current_level][i]->cone_halfangle = 0.f;
+			Vector3f cone_axis(vpls[i].its.shFrame.n);
+			nodes[current_level][i]->bcone = DirConef(cone_axis);
 		}
 		
 		nodes[current_level][i]->vpl = vpls[i];
@@ -183,7 +183,7 @@ std::unique_ptr<LightTreeNode> createLightTree(const std::vector<VPL>& vpls, EVP
 		nodes[current_level][i]->vpl.P /= nodes[current_level][i]->emission_scale;
 	}
 
-	typedef std::tuple<float, std::uint32_t, std::uint32_t, Vector3f, float> SimEntry;
+	typedef std::tuple<float, std::uint32_t, std::uint32_t, DirConef> SimEntry;
 
 	auto comparator = [](SimEntry l, SimEntry r){
 		return std::get<0>(l) < std::get<0>(r);
@@ -204,8 +204,7 @@ std::unique_ptr<LightTreeNode> createLightTree(const std::vector<VPL>& vpls, EVP
 			#pragma omp parallel for
 			for(size_t j = i + 1; j < nodes[current_level].size(); ++j){
 				float d = 0.f;
-				float union_angle_span = 0.f;
-				Vector3f bcone(0.f);
+				DirConef union_cone;
 
 				if(vpl_type != EDirectionalEmitterVPL){
 					Point min(std::min(nodes[current_level][i]->min_bounds[0], nodes[current_level][j]->min_bounds[0]), 
@@ -219,42 +218,17 @@ std::unique_ptr<LightTreeNode> createLightTree(const std::vector<VPL>& vpls, EVP
 				}
 
 				if(vpl_type != EPointEmitterVPL){
-					Vector3 ray1 = nodes[current_level][i]->cone_ray;
-					Vector3 ray2 = nodes[current_level][j]->cone_ray;
-					float ha1 = nodes[current_level][i]->cone_halfangle;
-					float ha2 = nodes[current_level][j]->cone_halfangle;
+					DirConef cone1 = nodes[current_level][i]->bcone;
+					DirConef cone2 = nodes[current_level][j]->bcone;
+					union_cone = DirConef::Union(cone1, cone2);
+					float angle = union_cone.GetAngleCos();
 
-					Vector3 axis = cross(ray1, ray2);
-					float angle = atan2(axis.length(), dot(ray1, ray2));
-
-					float max_child_half = std::max(ha1, ha2);
-					float min_child_half = std::min(ha1, ha2);
-
-					//fully overlapping cones
-					if(max_child_half - angle > min_child_half || (ray1 - ray2).length() < std::numeric_limits<float>::epsilon()
-						|| M_PI - max_child_half < 0.0001f){
-						union_angle_span = max_child_half;
-						bcone = ha1 > ha2 ? ray1 : ray2;
-					}
-					else{
-						union_angle_span = angle + ha1 + ha2;
-						union_angle_span = union_angle_span > M_PI ? 2 * M_PI : union_angle_span;
-						union_angle_span = std::min(union_angle_span / 2.f, M_PI);
-
-						if(axis.length() < std::numeric_limits<float>::epsilon()){
-							axis = cross(ray1, Vector3f(gen(rng), gen(rng), gen(rng)));
-						}
-
-						Point new_coneray = Transform::rotate(axis, -ha1).transformAffine(Point(ray1));
-						bcone = Vector(Transform::rotate(axis, union_angle_span).transformAffine(new_coneray));
-					}
-
-					d += union_angle_span * union_angle_span * min_dist * 2.f;
+					d += angle * angle * min_dist * 2.f;
 				}
 
 				{
 					std::lock_guard<std::mutex> lock(mat_insert_mut);
-					similarity_matrix.push_back(std::make_tuple(d, i, j, bcone, union_angle_span));
+					similarity_matrix.push_back(std::make_tuple(d, i, j, union_cone));
 				}
 				
 			}
@@ -318,19 +292,9 @@ std::unique_ptr<LightTreeNode> createLightTree(const std::vector<VPL>& vpls, EVP
 					else {
 						nodes[next_level].back()->vpl = c2->vpl;
 					}
-					
-					//nodes[next_level].back()->vpl.P = c1->vpl.P * lc_rat + c2->vpl.P * (1.f - lc_rat);
-					//nodes[next_level].back()->vpl.P /= nodes[next_level].back()->vpl.P.getLuminance();
 
-					nodes[next_level].back()->cone_ray = std::get<3>(entry);
-					nodes[next_level].back()->cone_halfangle = std::get<4>(entry);
-					/*nodes[next_level].back()->vpl.its.p = Point(ratio * Vector3f(c1->vpl.its.p) + (1.f - ratio) * Vector3f(c2->vpl.its.p));
-					Vector3f new_n = ratio * Vector3f(c1->vpl.its.shFrame.n) + (1.f - ratio) * Vector3f(c2->vpl.its.shFrame.n);
-					if(new_n.length() < 1e-10f){
-						new_n = cross(Vector3f(c1->vpl.its.shFrame.n), Vector3f(gen(rng), gen(rng), gen(rng)));
-					}
-					nodes[next_level].back()->vpl.its.shFrame = Frame(normalize(new_n));
-					nodes[next_level].back()->vpl.P = ratio * c1->vpl.P + (1.f - ratio) * c2->vpl.P;*/
+
+					nodes[next_level].back()->bcone = std::get<3>(entry);
 				}
 
 				nodes[next_level].back()->emission_scale = c1_intensity + c2_intensity;
@@ -366,8 +330,7 @@ std::unique_ptr<LightTreeNode> tdCreateLightTree(const std::vector<VPL>& vpls, E
 	std::uniform_real_distribution<float> gen(0, 1);
 
 	std::unique_ptr<LightTreeNode> curr_node(new LightTreeNode());
-	float union_angle_span = 0.f;
-	Vector3f bcone(0.f);
+	DirConef union_cone;
 
 	if(vpl_type != EDirectionalEmitterVPL){
 		curr_node->min_bounds = Point(std::min(lc->min_bounds[0], rc->min_bounds[0]), 
@@ -379,37 +342,12 @@ std::unique_ptr<LightTreeNode> tdCreateLightTree(const std::vector<VPL>& vpls, E
 	}
 
 	if(vpl_type != EPointEmitterVPL){
-		Vector3 ray1 = lc->cone_ray;
-		Vector3 ray2 = rc->cone_ray;
-		float ha1 = lc->cone_halfangle;
-		float ha2 = rc->cone_halfangle;
-
-		float angle = atan2(cross(ray1, ray2).length(), dot(ray1, ray2));
-		float max_child_half = std::max(ha1, ha2);
-		float min_child_half = std::min(ha1, ha2);
-
-		if(max_child_half - angle > min_child_half || (ray1 - ray2).length() < std::numeric_limits<float>::epsilon()
-			|| M_PI - max_child_half < 0.0001f){
-			union_angle_span = max_child_half;
-			bcone = ha1 > ha2 ? ray1 : ray2;
-		}
-		else{
-			union_angle_span = angle + ha1 + ha2;
-			union_angle_span = union_angle_span > M_PI ? 2 * M_PI : union_angle_span;
-			union_angle_span = std::min(union_angle_span / 2.f, M_PI);
-
-			Vector3f axis = cross(ray1, ray2);
-			if(axis.length() < std::numeric_limits<float>::epsilon()){
-				axis = cross(ray1, Vector3f(gen(rng), gen(rng), gen(rng)));
-			}
-
-			Point new_coneray = Transform::rotate(axis, -ha1).transformAffine(Point(ray1));
-			bcone = Vector(Transform::rotate(axis, union_angle_span).transformAffine(new_coneray));
-		}
+		DirConef lc_bcone = lc->bcone;
+		DirConef rc_bcone = rc->bcone;
+		union_cone = DirConef::Union(lc_bcone, rc_bcone);
 	}
 
-	curr_node->cone_ray = bcone;
-	curr_node->cone_halfangle = union_angle_span;
+	curr_node->bcone = union_cone;
 	
 	float lc_intensity = lc->emission_scale;
 	float rc_intensity = rc->emission_scale;
@@ -455,6 +393,90 @@ float distToBox(Point p, Point box_min, Point box_max){
 
 	return sqrt(dist);
 };
+
+float cosBoundB2P(const Point& max, const Point& min, const DirConef& cone, const Point& p){
+	float cosHalfAngle = cone.GetAngleCos();
+
+	if(cosHalfAngle <= 0.f){
+		return 1.f;
+	}
+
+	Vector axis = cone.GetAxis();
+	float cos = dot(Vector(0.0f, 0.0f, 1.0f), axis);
+
+	Transform mt;
+	if (std::abs(cos - 1.0f) < 1e-6) {
+		mt = Transform::rotate(Vector(1.0f, 0.0f, 0.0f), 0.0f);
+	}
+	else if (std::abs(cos + 1.0f) < 1e-6) {
+		mt = Transform::rotate(Vector(1.0f, 0.0f, 0.0f), -180.0f);
+	}
+	else {
+		Vector vv = normalize(cross(Vector(0.0f, 0.0f, 1.0f), axis));
+		mt = Transform::rotate(vv, radToDeg(-acosf(cos)));
+	}
+
+	Point bounding_points[8];
+	bounding_points[0] = min;
+	bounding_points[1] = Point(min[0], max[1], min[2]);
+	bounding_points[2] = Point(max[0], max[1], min[2]);
+	bounding_points[3] = Point(max[0], min[1], min[2]);
+	bounding_points[4] = Point(min[0], min[1], max[2]);
+	bounding_points[5] = Point(min[0], max[1], max[2]);
+	bounding_points[6] = max;
+	bounding_points[7] = Point(max[0], min[1], max[2]);
+
+	AABB xbox;
+	for (int i = 0; i < 8; i++) {
+		xbox.expandBy(mt.transformAffine(Point(p - bounding_points[i])));
+	}
+
+	Point &xm = xbox.min;
+	Point &xM = xbox.max;
+
+	float cosTheta;
+	if (xM.z > 0)
+	{
+		float minx2, miny2;
+		if (xm.x * xM.x <= 0)
+		{
+			minx2 = 0.0f;
+		}
+		else
+		{
+			minx2 = std::min(xm.x * xm.x, xM.x * xM.x);
+		}
+			
+
+		if (xm.y * xM.y <= 0)
+		{
+			miny2 = 0.0f;
+		}
+		else
+		{
+			miny2 = std::min(xm.y * xm.y, xM.y * xM.y);
+		}
+			
+		Float maxz2 = xM.z * xM.z;
+		cosTheta = xM.z / sqrt(minx2 + miny2 + maxz2);
+	}
+	else
+	{
+		cosTheta = 0.f;
+	}
+		
+
+	if (cosTheta > cosHalfAngle)
+	{
+		return 1.0f;
+	}
+	else
+	{
+		float sinHalfAngle = sqrt(1 - cosHalfAngle * cosHalfAngle);
+		float sinTheta = sqrt(1 - cosTheta * cosTheta);
+		return math::clamp(cosTheta * cosHalfAngle + sinTheta * sinHalfAngle, 0.0f, 1.0f);
+	}
+}
 
 float calculateClusterEstimate(Scene* scene, Point shading_point_position, Normal shading_point_normal, LightTreeNode* node,
 	float min_dist){
@@ -519,67 +541,14 @@ float calculateClusterBounds(Point shading_point_position, Normal shading_point_
 			d = std::max(min_dist, distToBox(shading_point_position, 
 				light_tree_node->min_bounds, light_tree_node->max_bounds));
 			geometric = 1.f / (d * d);
+
 			break;
 		case ESurfaceVPL:
-			{
-				d = std::max(min_dist, distToBox(shading_point_position,
-					light_tree_node->min_bounds, light_tree_node->max_bounds));
-				
-				if(fabs(light_tree_node->cone_halfangle - M_PI) < std::numeric_limits<float>::epsilon()){
-					geometric = 1.f / d * d;
-				}
-				else if((light_tree_node->max_bounds - light_tree_node->min_bounds).length() < 
-					std::numeric_limits<float>::epsilon()){
-					float degree = dot(normalize(shading_point_position - light_tree_node->min_bounds), light_tree_node->cone_ray);
-					geometric = std::max(0.f, degree) / (d * d);
-				}
-				else{
-					Vector3f unit_z(0.f, 0.f, 1.f);
-					Vector3f normalized_cone_ray = normalize(light_tree_node->cone_ray);
-					float angle = atan2(cross(normalized_cone_ray, unit_z).length(), dot(normalized_cone_ray, unit_z));
-					Vector3f axis = cross(light_tree_node->cone_ray, unit_z);
+			d = std::max(min_dist, distToBox(shading_point_position,
+				light_tree_node->min_bounds, light_tree_node->max_bounds));
+			geometric = cosBoundB2P(light_tree_node->max_bounds, light_tree_node->min_bounds, 
+				light_tree_node->bcone, shading_point_position) / (d * d);
 
-					//zero cross product means cone is pointing either in positive or negative z. Can set axis arbitrarily
-					//as long as it is orthogonal to unit z
-					if(axis.lengthSquared() < 1e-20f){
-						axis = Vector(1, 0, 0);
-					}
-					Transform rot = Transform::rotate(axis, angle);
-					
-					Point transformed_points[8];
-
-					for(std::uint8_t i = 0; i < 8; ++i){
-						Point p = Point(shading_point_position - bounding_points[i]);
-						transformed_points[i] = rot.transformAffine(p);
-					}
-
-					float min_x2 = std::numeric_limits<float>::max();
-					float min_y2 = std::numeric_limits<float>::max();
-					float max_x2 = std::numeric_limits<float>::min();
-					float max_y2 = std::numeric_limits<float>::min();
-					float max_z = std::numeric_limits<float>::min();
-
-					for(std::uint8_t i = 0; i < 8; ++i){
-						float x2 = transformed_points[i][0] * transformed_points[i][0];
-						float y2 = transformed_points[i][1] * transformed_points[i][1];
-						min_x2 = std::min(x2, min_x2);
-						min_y2 = std::min(y2, min_y2);
-						max_x2 = std::max(x2, max_x2);
-						max_y2 = std::max(y2, max_y2);
-						max_z = std::max((float)transformed_points[i][2], max_z);
-					}
-
-					float cos_theta = max_z > 0.f ? max_z / sqrt(min_x2 + min_y2 + max_z * max_z) :
-						max_z / sqrt(max_x2 + max_y2 + max_z * max_z);
-					float degree = acos(cos_theta);
-
-					degree = std::max(0.f, degree - light_tree_node->cone_halfangle);
-
-					geometric = std::max(0., cos(degree));
-				}
-				
-				geometric /= (d * d);
-			}
 			break;
 		case EDirectionalEmitterVPL:
 			geometric = 1.f;
@@ -589,20 +558,22 @@ float calculateClusterBounds(Point shading_point_position, Normal shading_point_
 	}
 
 	//only dealing with lambertian diffuse right now
-	float largest = std::numeric_limits<float>::min();
+	float largest = -std::numeric_limits<float>::max();
 
 	if(vpl_type != EDirectionalEmitterVPL){
 		for(std::uint8_t i = 0; i < 8; ++i){
 			float dp = dot(normalize(bounding_points[i] - shading_point_position), shading_point_normal);
 			float angle = acos(dp);
-			float dif = std::max(0.f, angle - light_tree_node->cone_halfangle);
+			float coneAngle = acos(light_tree_node->bcone.GetAngleCos());
+			float dif = std::max(0.f, angle - coneAngle);
 			largest = std::max(float(cos(dif)), largest);
 		}
 		largest = std::max(0.f, largest);
 	}
 	else{
-		float angle = acos(dot(-light_tree_node->cone_ray, shading_point_normal));
-		float dif = std::max(0.f, angle - light_tree_node->cone_halfangle);
+		float angle = acos(dot(-light_tree_node->bcone.GetAxis(), shading_point_normal));
+		float coneAngle = acos(light_tree_node->bcone.GetAngleCos());
+		float dif = std::max(0.f, angle - coneAngle);
 		largest = std::max(0., cos(dif));
 	}
 
@@ -777,7 +748,7 @@ std::vector<VPL> LightTree::getClusteringForPoints(Scene* scene, const std::vect
 	slice_centroid_pos /= points.size();
 	slice_centroid_normal = normalize(slice_centroid_normal);
 
-	/*std::vector<VPL> lights;
+	std::vector<VPL> lights;
 	if(point_tree_root_ != nullptr){
 		float rad = calculateClusterBounds(slice_centroid_pos, Normal(slice_centroid_normal), point_tree_root_.get(), 
 			point_tree_root_->vpl.type, min_dist_);
@@ -839,9 +810,9 @@ std::vector<VPL> LightTree::getClusteringForPoints(Scene* scene, const std::vect
 		pqueue.pop();
 	}
 
-	lightcut.insert(lightcut.end(), lights.begin(), lights.end());*/
+	lightcut.insert(lightcut.end(), lights.begin(), lights.end());
 
-	if(point_tree_root_ != nullptr){
+	/*if(point_tree_root_ != nullptr){
 		std::vector<VPL> lights;
 		pqueue.push(std::make_tuple(point_tree_root_.get(), std::numeric_limits<float>::max()));
 		float ratio = float(point_vpls_.size()) / float(total_lights);
@@ -1009,7 +980,7 @@ std::vector<VPL> LightTree::getClusteringForPoints(Scene* scene, const std::vect
 	}
 
 	while(lightcut.size() > max_lights_)
-		lightcut.pop_back();
+		lightcut.pop_back();*/
 
 	return lightcut;
 }
