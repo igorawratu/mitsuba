@@ -4,6 +4,7 @@
 #include <chrono>
 #include <algorithm>
 #include <set>
+#include <unordered_set>
 #include <fstream>
 #include <string>
 #include "definitions.h"
@@ -1121,10 +1122,34 @@ std::tuple<std::uint32_t, float, float, float, float> adaptiveMatrixReconstructi
     return std::make_tuple(total_samples, time_for_svd, time_for_reconstruct, time_for_sampling, time_other);
 }
 
+std::vector<std::pair<std::uint32_t, bool>> getMatchingCols(const std::vector<std::vector<std::uint8_t>>& cols,
+    const std::vector<std::uint32_t>& sampled_indices, const std::vector<std::uint8_t>& sampled_vals){
+    std::vector<std::pair<std::uint32_t, bool>> matching_cols;
+    for(std::uint32_t i = 0; i < cols.size(); ++i){
+        bool matching = true;
+        bool opposite = true;
+
+        for(std::uint32_t j = 0; j < sampled_indices.size(); ++j){
+            if(sampled_vals[j] == cols[i][sampled_indices[j]]){
+                opposite = false;
+            }
+            else{
+                matching = false;
+            }
+        }
+
+        if(matching || opposite){
+            matching_cols.push_back(std::make_pair(i, matching));
+        }
+    }
+
+    return matching_cols;
+}
+
 std::uint32_t adaptiveMatrixReconstructionB(
     std::vector<std::uint8_t>& mat, Scene* scene, KDTNode<ReconstructionSample>* slice, 
-    const std::vector<VPL>& vpls, float min_dist, float sample_perc, std::mt19937& rng, 
-    std::uint32_t& basis_rank, const std::vector<float>& col_estimations){
+    const std::vector<VPL>& vpls, float min_dist, float sample_perc, float max_sample_perc, float verification_inc, 
+    std::mt19937& rng, std::uint32_t& basis_rank, const std::vector<float>& col_estimations){
 
     assert(sample_perc > 0.f && slice->sample_indices.size() > 0 && vpls.size() > 0);
 
@@ -1137,6 +1162,7 @@ std::uint32_t adaptiveMatrixReconstructionB(
     }
 
     std::uint32_t num_samples = num_rows * sample_perc + 0.5f;
+    std::uint32_t num_verification_samples = std::max(1, int(num_rows * verification_inc + 0.5f));
     //just in case, this shouldn't ever really happen
     if(num_samples == 0){
         num_samples = slice->sample_indices.size();
@@ -1181,23 +1207,7 @@ std::uint32_t adaptiveMatrixReconstructionB(
                 col_to_add = sample_omega;
             }
             else{
-                for(std::uint32_t curr_basis_idx = 0; curr_basis_idx < basis.size(); ++curr_basis_idx){
-                    bool matching = true;
-                    bool opposite = true;
-
-                    for(std::uint32_t idx = 0; idx < sampled.size(); ++idx){
-                        if(sample_omega[idx] == basis[curr_basis_idx][sampled[idx]]){
-                            opposite = false;
-                        }
-                        else{
-                            matching = false;
-                        }
-                    }
-
-                    if(matching || opposite){
-                        matching_cols.push_back(std::make_pair(curr_basis_idx, matching));
-                    }
-                }
+                matching_cols = getMatchingCols(basis, sampled, sample_omega);
 
                 if(matching_cols.size() > 0){
                     std::uniform_int_distribution<std::uint32_t> select_col(0, matching_cols.size() - 1);
@@ -1210,9 +1220,45 @@ std::uint32_t adaptiveMatrixReconstructionB(
                             col_to_add[j] = (col_to_add[j] + 1) % 2;
                         }
                     }
+
+                    std::vector<std::uint32_t> ver_indices;
+                    std::unordered_set<std::uint32_t> current_set(sampled.begin(), sampled.end());
+
+                    std::uniform_int_distribution<std::uint32_t> gen_row(0, num_rows - 1);
+                    while(ver_indices.size() < num_verification_samples){
+                        std::uint32_t row = gen_row(rng);
+                        if(current_set.find(row) == current_set.end()){
+                            ver_indices.push_back(row);
+                        }
+                    }
+
+                    std::vector<std::uint8_t> ver_samples(ver_indices.size());
+                    sampleColB(scene, slice, vpls, order[i], min_dist, num_verification_samples, rng, ver_samples, 
+                        probabilities, ver_indices, false);
+
+                    bool correct = true;
+                    for(std::uint32_t j = 0; j < ver_samples.size(); ++j){
+                        if(ver_samples[j] != col_to_add[ver_indices[j]]){
+                            correct = false;
+                            break;
+                        }
+                    }
+
+                    if(!correct){
+                        sample_perc = std::min(max_sample_perc, sample_perc + verification_inc);
+                        num_samples = num_rows * sample_perc + 0.5f;
+                        sample_omega.resize(num_samples);
+
+                        sampleColB(scene, slice, vpls, order[i], min_dist, num_rows, rng, col_to_add, 
+                            probabilities, sampled, true);
+                        samples_for_col = num_rows;
+                        basis.push_back(col_to_add);
+                        
+                        full_col_sampled = true;
+                    }
                 }
                 else{
-                    sampled = sampleColB(scene, slice, vpls, order[i], min_dist, num_rows, rng, col_to_add, 
+                    sampleColB(scene, slice, vpls, order[i], min_dist, num_rows, rng, col_to_add, 
                         probabilities, sampled, true);
                     samples_for_col = num_rows;
     
@@ -1319,7 +1365,7 @@ MatrixReconstructionRenderer::MatrixReconstructionRenderer(const std::vector<VPL
     bool adaptive_importance_sampling, bool adaptive_force_resample, bool adaptive_recover_transpose,
     bool truncated, bool show_slices, bool vsl, bool gather_stat_images, bool show_svd,
     ClusteringStrategy clustering_strategy, float error_scale, bool hw, bool bin_vis, std::uint32_t num_clusters,
-    std::uint32_t samples_per_slice) : 
+    std::uint32_t samples_per_slice, float max_sample_perc, float ver_inc) : 
         vpls_(vpls), 
         sample_percentage_(sample_percentage), 
         min_dist_(min_dist), 
@@ -1344,6 +1390,8 @@ MatrixReconstructionRenderer::MatrixReconstructionRenderer(const std::vector<VPL
         bin_vis_(bin_vis),
         num_clusters_(num_clusters),
         samples_per_slice_(samples_per_slice),
+        sample_inc_(ver_inc), 
+        max_sample_perc_(max_sample_perc),
         cancel_(false){
 }
 
@@ -1371,6 +1419,8 @@ MatrixReconstructionRenderer::MatrixReconstructionRenderer(MatrixReconstructionR
     bin_vis_(other.bin_vis_),
     num_clusters_(other.num_clusters_),
     samples_per_slice_(other.samples_per_slice_),
+    sample_inc_(other.sample_inc_), 
+    max_sample_perc_(other.max_sample_perc_),
     cancel_(other.cancel_){
 }
 
@@ -1400,6 +1450,8 @@ MatrixReconstructionRenderer& MatrixReconstructionRenderer::operator = (MatrixRe
         bin_vis_ = other.bin_vis_;
         num_clusters_ = other.num_clusters_;
         samples_per_slice_ = other.samples_per_slice_;
+        sample_inc_ = other.sample_inc_; 
+        max_sample_perc_ = other.max_sample_perc_;
         cancel_ = other.cancel_;
     }
     return *this;
@@ -1429,6 +1481,8 @@ struct GeneralParams{
     bool adaptive_col;
     bool vsl;
     float sample_perc;
+    float max_sample_perc;
+    float sample_inc;
 };
 
 std::uint32_t getQuadrant(Vector3f v){
@@ -1519,7 +1573,8 @@ std::tuple<float, float, float, float, float, float> recover(KDTNode<Reconstruct
             else{
                 std::vector<std::uint8_t> bin_vis(slice->sample_indices.size() * quadranted_vpls[i].size(), 0);
                 samples = adaptiveMatrixReconstructionB(bin_vis, scene, slice,
-                    quadranted_vpls[i], general_params.min_dist, general_params.sample_perc, rng, 
+                    quadranted_vpls[i], general_params.min_dist, general_params.sample_perc, 
+                    general_params.max_sample_perc, general_params.sample_inc, rng, 
                     basis_rank, cluster_contribs);
 
                 for(auto col = 0; col < mat.cols(); ++col){
@@ -1803,8 +1858,8 @@ void unoccludedHWWorker(BlockingQueue<HWWorkUnit>& input, BlockingQueue<HWWorkUn
 }
 
 std::tuple<std::uint64_t, std::uint64_t> recoverHW(KDTNode<ReconstructionSample>* slice, const std::vector<VPL>& vpls, Scene* scene,
-    bool gather_stat_images, bool show_svd, float sample_perc, float min_dist, std::mt19937& rng, bool importance_sample,
-    bool bin_vis){
+    bool gather_stat_images, bool show_svd, float sample_perc, float max_sample_perc, float sample_inc,
+    float min_dist, std::mt19937& rng, bool importance_sample, bool bin_vis){
     Point3f slice_com_pos(0.f, 0.f, 0.f);
     Vector3f slice_com_norm(0.f);
     for(std::uint32_t i = 0; i < slice->sample_indices.size(); ++i){
@@ -1888,7 +1943,8 @@ std::tuple<std::uint64_t, std::uint64_t> recoverHW(KDTNode<ReconstructionSample>
         if(bin_vis){
             std::vector<std::uint8_t> bv(slice->sample_indices.size() * quadranted_vpls[i].size(), 0);
             samples = adaptiveMatrixReconstructionB(bv, scene, slice, 
-                quadranted_vpls[i], min_dist, sample_perc, rng, basis_rank, cluster_contribs);
+                quadranted_vpls[i], min_dist, sample_perc, max_sample_perc, sample_inc, rng, 
+                basis_rank, cluster_contribs);
 
             total_performed_samples += samples;
             slice->rank_ratio[i] = float(basis_rank) / std::min(slice->sample_indices.size(), quadranted_vpls[i].size());
@@ -1939,7 +1995,7 @@ std::tuple<std::uint64_t, std::uint64_t> recoverHW(KDTNode<ReconstructionSample>
 
 void clusterWorkerMDLC(BlockingQueue<HWWorkUnit>& input, BlockingQueue<HWWorkUnit>& output,
     std::vector<std::vector<VPL>>& vpls, LightTree* light_tree, Scene* scene, bool gather_stats, 
-    bool show_svd, float sample_perc, float min_dist, std::uint32_t thread_id, std::uint32_t num_threads, 
+    bool show_svd, float sample_perc, float max_sample_perc, float sample_inc, float min_dist, std::uint32_t thread_id, std::uint32_t num_threads, 
     std::mutex& barrier_mutex, std::condition_variable& barrier, std::mutex& sample_update_mutex,
     std::uint64_t& total_samples, std::uint64_t& num_samples, bool bin_vis, bool importance_sample){
     
@@ -1960,7 +2016,7 @@ void clusterWorkerMDLC(BlockingQueue<HWWorkUnit>& input, BlockingQueue<HWWorkUni
 
         std::uint64_t slice_samples, num_slice_sampled;
         std::tie(slice_samples, num_slice_sampled) = recoverHW(work_unit.first, vpls[work_unit.second], scene, gather_stats, show_svd, sample_perc,
-            min_dist, rng, importance_sample, bin_vis);
+            max_sample_perc, sample_inc, min_dist, rng, importance_sample, bin_vis);
         {
             std::lock_guard<std::mutex> lock(sample_update_mutex);
             total_samples += slice_samples;
@@ -1986,7 +2042,7 @@ void clusterWorkerLS(BlockingQueue<HWWorkUnit>& input, BlockingQueue<HWWorkUnit>
     std::vector<std::vector<VPL>>& vpls, const std::vector<std::vector<std::uint32_t>>& cbsamp, 
     const Eigen::MatrixXf& contribs, const std::vector<std::vector<int>>& nn, 
     const std::vector<VPL>& total_vpls, std::uint32_t num_clusters, Scene* scene, bool gather_stats, bool show_svd, 
-    float sample_perc, float min_dist, std::uint32_t thread_id, std::uint32_t num_threads, std::mutex& barrier_mutex,
+    float sample_perc, float max_sample_perc, float sample_inc, float min_dist, std::uint32_t thread_id, std::uint32_t num_threads, std::mutex& barrier_mutex,
     std::condition_variable& barrier, std::mutex& sample_update_mutex, std::uint64_t& total_samples, std::uint64_t& num_samples,
     bool bin_vis, bool importance_sample){
 
@@ -2002,7 +2058,7 @@ void clusterWorkerLS(BlockingQueue<HWWorkUnit>& input, BlockingQueue<HWWorkUnit>
 
         std::uint64_t slice_samples, num_slice_sampled;
         std::tie(slice_samples, num_slice_sampled) = recoverHW(work_unit.first, vpls[work_unit.second], scene, gather_stats, show_svd, sample_perc,
-            min_dist, rng, importance_sample, bin_vis);
+            max_sample_perc, sample_inc, min_dist, rng, importance_sample, bin_vis);
         {
             std::lock_guard<std::mutex> lock(sample_update_mutex);
             total_samples += slice_samples;
@@ -2049,6 +2105,8 @@ std::tuple<std::uint64_t, std::uint64_t> MatrixReconstructionRenderer::renderNon
     general_params.adaptive_col = adaptive_col_sampling_;
     general_params.vsl = vsl_;
     general_params.sample_perc = sample_percentage_;
+    general_params.max_sample_perc = max_sample_perc_;
+    general_params.sample_inc = sample_inc_;
 
     std::uint32_t num_cores = 16;//std::min(slices.size(), (size_t)std::thread::hardware_concurrency());
     std::uint32_t scheduled_slices = num_cores;
@@ -2302,7 +2360,7 @@ std::tuple<std::uint64_t, std::uint64_t> MatrixReconstructionRenderer::renderHW(
         for(std::uint32_t i = 0; i < num_workers; ++i){
             clusterers.emplace_back(clusterWorkerLS, std::ref(to_cluster), std::ref(to_shade), std::ref(vpls),
                 std::ref(cbsamp), std::ref(cluster_contributions), std::ref(nearest_neighbours), std::ref(vpls_),
-                num_clusters_, scene, gather_stat_images_, show_svd_, sample_percentage_, min_dist_, i,
+                num_clusters_, scene, gather_stat_images_, show_svd_, sample_percentage_, max_sample_perc_, sample_inc_, min_dist_, i,
                 num_workers, std::ref(barrier_mutex), std::ref(barrier), std::ref(sample_update_mutex), std::ref(total_samples), std::ref(num_samples),
                 bin_vis_, adaptive_importance_sampling_);
         }
@@ -2313,7 +2371,7 @@ std::tuple<std::uint64_t, std::uint64_t> MatrixReconstructionRenderer::renderHW(
         light_tree = std::unique_ptr<LightTree>(new LightTree(vpls_, min_dist_, num_clusters_, 0.f));
         for(std::uint32_t i = 0; i < num_workers; ++i){
             clusterers.emplace_back(clusterWorkerMDLC, std::ref(to_cluster), std::ref(to_shade), std::ref(vpls),
-                light_tree.get(), scene, gather_stat_images_, show_svd_, sample_percentage_, min_dist_, i,
+                light_tree.get(), scene, gather_stat_images_, show_svd_, sample_percentage_, max_sample_perc_, sample_inc_, min_dist_, i,
                 num_workers, std::ref(barrier_mutex), std::ref(barrier), std::ref(sample_update_mutex), 
                 std::ref(total_samples), std::ref(num_samples), bin_vis_, adaptive_importance_sampling_);
         }

@@ -381,7 +381,9 @@ private:
 			}
 			case MATRIXRECONSTRUCTION:
 			{
-				float sample_percentage = props.getFloat("completion-sample_perc", 0.1);
+				float sample_percentage = props.getFloat("completion-sample_perc", 0.05);
+				float max_sample_percentage = props.getFloat("completion-max_sample_perc", 0.4);
+				float ver_inc = props.getFloat("completion-verification_perc", 0.025);
 				float step_size_factor = props.getFloat("completion-step_factor", 1.5);
 				float tolerance = props.getFloat("completion-tolerance", 0.01);
 				float tau = props.getFloat("completion-tau", 5);
@@ -408,7 +410,8 @@ private:
 				return std::unique_ptr<ManyLightsRenderer>(new MatrixReconstructionRenderer(vpls_, sample_percentage, min_dist_, 
 					step_size_factor, tolerance, tau, max_iterations, slice_size, visibility_only, adaptive_col_sampling, 
 					adaptive_importance_sampling, adaptive_force_resample, adaptive_recover_transpose, truncated, show_slices, vsl,
-					show_stats, show_svd, cs, error_scale, hw, bin_vis, num_clusters, ls_samples_per_slice));
+					show_stats, show_svd, cs, error_scale, hw, bin_vis, num_clusters, ls_samples_per_slice,
+					max_sample_percentage, ver_inc));
 			}
 			case MATRIXSEPARATION:
 			{
