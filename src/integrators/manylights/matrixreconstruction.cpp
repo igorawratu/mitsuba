@@ -245,13 +245,11 @@ double computeCost(const Eigen::MatrixXf& contrib_mat, const std::vector<int>& n
                 norm_cache[cluster[j]];
         }
     }
-
     return total;*/
 
     /*float total_norm = 0.f;
     Eigen::MatrixXf variance = Eigen::MatrixXf::Zero(contrib_mat.rows(), 1);
     Eigen::MatrixXf mean = Eigen::MatrixXf::Zero(contrib_mat.rows(), 1);
-
     for(std::uint32_t i = 0; i < cluster.size(); ++i){
         total_norm += norm_cache[cluster[i]];
         Eigen::MatrixXf old_mean = mean;
@@ -260,7 +258,6 @@ double computeCost(const Eigen::MatrixXf& contrib_mat, const std::vector<int>& n
             (contrib_mat.col(cluster[i]) - mean).cwiseProduct((contrib_mat.col(cluster[i]) - old_mean));
     }
     variance /= float(cluster.size() - 1);
-
     return variance.norm() * total_norm;*/
 
 }
@@ -380,7 +377,6 @@ std::vector<std::vector<std::uint32_t>> clusterVPLsBySplitting(const std::vector
         std::vector<std::uint32_t> new_cluster2;
 
         /*float midpoint = (max_d + min_d) / 2.f;
-
         for(std::uint32_t i = 0; i < vpl_projection_distances.size(); ++i){
             if(vpl_projection_distances[i].second < midpoint){
                 new_cluster1.push_back(vpl_projection_distances[i].first);
@@ -440,22 +436,38 @@ std::vector<VPL> sampleRepresentatives(const Eigen::MatrixXf& contributions, con
             continue;
         }
         
+        float tot_cluster_power = 0.f;
         float total_vpl_power = 0.f;
-        std::vector<float> sample_dist(clusters[i].size());
         for(std::uint32_t j = 0; j < clusters[i].size(); ++j){
-            total_vpl_power += vpls[clusters[i][j]].P.getLuminance();
-            sample_dist[j] = contributions.col(clusters[i][j]).norm();
+            tot_cluster_power += contributions.col(clusters[i][j]).norm();
+            float r, g, b;
+            vpls[clusters[i][j]].P.toLinearRGB(r, g, b);
+            total_vpl_power += sqrt(r * r + g * g + b * b);
         }
 
-        std::discrete_distribution<> gen(sample_dist.begin(), sample_dist.end());
-        
-        representatives.push_back(vpls[gen(rng)]);
-        representatives.back().P /= representatives.back().P.getLuminance() * total_vpl_power;
+        std::uniform_real_distribution<float> gen(0, tot_cluster_power);
+        std::uint32_t rep_idx = 0;
+        float selected_norm = 0.f;
+
+        for(std::uint32_t j = 0; j < clusters[i].size(); ++j){
+            float curr_norm = contributions.col(clusters[i][j]).norm();
+            if(curr_norm > selected_norm){
+                selected_norm = curr_norm;
+                rep_idx = j;
+            }
+        }
+
+        representatives.push_back(vpls[clusters[i][rep_idx]]);
+        float r, g, b;
+        representatives.back().P.toLinearRGB(r, g, b);
+        float rep_power = sqrt(r * r + g * g + b * b);
+        representatives.back().P = representatives.back().P * total_vpl_power / rep_power;
     }
+
+    //updateVPLRadii(representatives, min_dist);
 
     return representatives;
 }
-
 std::unique_ptr<KDTNode<ReconstructionSample>> constructKDTree(Scene* scene, std::uint32_t size_threshold, 
     std::vector<ReconstructionSample>& samples, float min_dist, std::uint32_t min_slice_size, std::uint32_t spp){
 
@@ -547,7 +559,7 @@ std::unique_ptr<KDTNode<ReconstructionSample>> constructKDTree(Scene* scene, std
         }
     }
 
-    splitKDTree(kdt_root.get(), size_threshold, min_slice_size, min_dist);
+    splitKDTree(kdt_root.get(), size_threshold, min_slice_size, min_dist * 0.05f);
 
     return kdt_root;
 }
@@ -1162,7 +1174,8 @@ std::uint32_t adaptiveMatrixReconstructionB(
     }
 
     std::uint32_t num_samples = num_rows * sample_perc + 0.5f;
-    std::uint32_t num_verification_samples = std::max(1, int(num_rows * verification_inc + 0.5f));
+    std::uint32_t num_verification_samples = verification_inc < std::numeric_limits<float>::epsilon() ? 
+        0 : std::max(1, int(num_rows * verification_inc + 0.5f));
     //just in case, this shouldn't ever really happen
     if(num_samples == 0){
         num_samples = slice->sample_indices.size();
@@ -1221,40 +1234,42 @@ std::uint32_t adaptiveMatrixReconstructionB(
                         }
                     }
 
-                    std::vector<std::uint32_t> ver_indices;
-                    std::unordered_set<std::uint32_t> current_set(sampled.begin(), sampled.end());
+                    if(num_verification_samples > 0){
+                        std::vector<std::uint32_t> ver_indices;
+                        std::unordered_set<std::uint32_t> current_set(sampled.begin(), sampled.end());
 
-                    std::uniform_int_distribution<std::uint32_t> gen_row(0, num_rows - 1);
-                    while(ver_indices.size() < num_verification_samples){
-                        std::uint32_t row = gen_row(rng);
-                        if(current_set.find(row) == current_set.end()){
-                            ver_indices.push_back(row);
+                        std::uniform_int_distribution<std::uint32_t> gen_row(0, num_rows - 1);
+                        while(ver_indices.size() < num_verification_samples){
+                            std::uint32_t row = gen_row(rng);
+                            if(current_set.find(row) == current_set.end()){
+                                ver_indices.push_back(row);
+                            }
                         }
-                    }
 
-                    std::vector<std::uint8_t> ver_samples(ver_indices.size());
-                    sampleColB(scene, slice, vpls, order[i], min_dist, num_verification_samples, rng, ver_samples, 
-                        probabilities, ver_indices, false);
+                        std::vector<std::uint8_t> ver_samples(ver_indices.size());
+                        sampleColB(scene, slice, vpls, order[i], min_dist, num_verification_samples, rng, ver_samples, 
+                            probabilities, ver_indices, false);
 
-                    bool correct = true;
-                    for(std::uint32_t j = 0; j < ver_samples.size(); ++j){
-                        if(ver_samples[j] != col_to_add[ver_indices[j]]){
-                            correct = false;
-                            break;
+                        bool correct = true;
+                        for(std::uint32_t j = 0; j < ver_samples.size(); ++j){
+                            if(ver_samples[j] != col_to_add[ver_indices[j]]){
+                                correct = false;
+                                break;
+                            }
                         }
-                    }
 
-                    if(!correct){
-                        sample_perc = std::min(max_sample_perc, sample_perc + verification_inc);
-                        num_samples = num_rows * sample_perc + 0.5f;
-                        sample_omega.resize(num_samples);
+                        if(!correct){
+                            sample_perc = std::min(max_sample_perc, sample_perc + verification_inc);
+                            num_samples = num_rows * sample_perc + 0.5f;
+                            sample_omega.resize(num_samples);
 
-                        sampleColB(scene, slice, vpls, order[i], min_dist, num_rows, rng, col_to_add, 
-                            probabilities, sampled, true);
-                        samples_for_col = num_rows;
-                        basis.push_back(col_to_add);
-                        
-                        full_col_sampled = true;
+                            sampleColB(scene, slice, vpls, order[i], min_dist, num_rows, rng, col_to_add, 
+                                probabilities, sampled, true);
+                            samples_for_col = num_rows;
+                            basis.push_back(col_to_add);
+                            
+                            full_col_sampled = true;
+                        }
                     }
                 }
                 else{
@@ -1724,7 +1739,6 @@ void sliceWorkerLS(std::vector<std::int32_t>& work, std::uint32_t thread_id, std
 
         std::vector<std::vector<std::uint32_t>> cbsplit = clusterVPLsBySplitting(cbsamp, contribs, nn[slice_id], split_num_clusters, rng);
         auto vpls = sampleRepresentatives(contribs, total_vpls, cbsplit, rng, general_params.min_dist);
-        
 
         auto cluster_t = std::chrono::high_resolution_clock::now();
 
@@ -2054,7 +2068,7 @@ void clusterWorkerLS(BlockingQueue<HWWorkUnit>& input, BlockingQueue<HWWorkUnit>
         std::vector<std::vector<std::uint32_t>> cbsplit = 
             clusterVPLsBySplitting(cbsamp, contribs, nn[work_unit.second], split_num_clusters, rng);
         vpls[work_unit.second] = sampleRepresentatives(contribs, total_vpls, cbsplit, rng, min_dist);
-        //updateVPLRadii(vpls[work_unit.second], min_dist);
+        updateVPLRadii(vpls[work_unit.second], min_dist);
 
         std::uint64_t slice_samples, num_slice_sampled;
         std::tie(slice_samples, num_slice_sampled) = recoverHW(work_unit.first, vpls[work_unit.second], scene, gather_stats, show_svd, sample_perc,
@@ -2276,7 +2290,7 @@ std::tuple<std::uint64_t, std::uint64_t> MatrixReconstructionRenderer::renderHW(
     std::uint32_t samples_per_slice, std::uint32_t slice_size){
     auto start = std::chrono::high_resolution_clock::now();
     std::uint32_t num_workers = 15;//std::max(size_t(1), std::min(slices.size(), size_t(std::thread::hardware_concurrency() / 2)));
-    std::uint32_t batch_size = 500 / std::max(slice_size / 1000u, 1u);//std::max(num_workers * 2, 64u);
+    std::uint32_t batch_size = 500 / (std::max(slice_size / 1000u, 1u) * std::max(1u, num_clusters_ / 4000));//std::max(num_workers * 2, 64u);
 
     BlockingQueue<HWWorkUnit> to_cluster;
     BlockingQueue<HWWorkUnit> to_shade(batch_size * 2);
@@ -2422,7 +2436,7 @@ bool MatrixReconstructionRenderer::render(Scene* scene, std::uint32_t spp, const
     memset(output_image, 0, output_bitmap->getBytesPerPixel() * size.x * size.y);
 
     ProgressReporter kdt_pr("Constructing kd-tree", 1, job);
-    auto kdt_root = constructKDTree(scene, slice_size_, samples_, min_dist_, std::max(10u, samples_per_slice), spp);
+    auto kdt_root = constructKDTree(scene, slice_size_, samples_, scene->getAABB().getBSphere().radius, std::max(10u, samples_per_slice), spp);
     kdt_pr.finish();
     std::cout << std::endl;
 

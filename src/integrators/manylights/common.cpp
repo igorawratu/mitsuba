@@ -246,11 +246,13 @@ Spectrum sample(Scene* scene, Sampler* sampler, Intersection& its, const Ray& in
         if(vpl.type == ESurfaceVPL){
             if(vpl.emitter != nullptr){
                 DirectionSamplingRecord dir(-wi);
-                c *= vpl.emitter->evalDirection(dir, vpl.psr);
+                //c *= vpl.emitter->evalDirection(dir, vpl.psr);
+                c *= Spectrum(std::max(0.f, dot(vpl.its.shFrame.n, -wi))) / PI;
             }
             else if(vpl.its.getBSDF() != nullptr){
                 BSDFSamplingRecord bsdf_sample_record(vpl.its, vpl.its.toLocal(-wi));
-                c *= vpl.its.getBSDF()->eval(bsdf_sample_record);
+                //c *= vpl.its.getBSDF()->eval(bsdf_sample_record);
+                c *= Spectrum(std::max(0.f, dot(vpl.its.shFrame.n, -wi))) / PI;
             }
             //fallback to diffuse if no bsdf or emitter found
             else{
@@ -265,6 +267,7 @@ bool sampleVisibility(Scene* scene, const Intersection& its, const VPL& vpl, flo
     Point ray_origin = its.p;
     Vector dir = vpl.type == EDirectionalEmitterVPL ? -Vector3f(vpl.its.shFrame.n) : 
         normalize(vpl.its.p - ray_origin);
+
     Ray shadow_ray(ray_origin, dir, 0.f);
 
     bool visible = true;

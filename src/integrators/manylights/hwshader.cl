@@ -151,7 +151,7 @@ __kernel void shade(__global const struct PixelElement* pixels,
     __global struct OutputElement *output, 
     int num_pixels, float min_dist, int clusters_per_slice, int curr_pass){
     int i = get_global_id(0);
-    if(i >= num_pixels){    
+    if(i >= num_pixels){
         return;
     }
 
@@ -171,7 +171,7 @@ __kernel void shade(__global const struct PixelElement* pixels,
     float3 light_col;
     if(lights[lidx].type == 2){
         if(lights[lidx].light_surface_type == 0){
-            light_col = clamp(dot(-wi, lights[lidx].n), 0.0f, 1.0f) / (float)(PI) * lights[lidx].diff_col;
+            light_col = clamp(dot(-wi, lights[lidx].n), 0.0f, 1.0f) / (float)PI;
         }
         else{
             light_col = evalBSDF(lights[lidx].n, -wi, lights[lidx].wi, 
