@@ -10,7 +10,7 @@ rm "${source_dir}/kitchen/samplerates"*
 #MDLC with matrix sep
 for i in {1..5}
 do
-	mitsuba "${source_dir}/kitchen/scene.xml" -Dcstrat=3 -Dsamplerate=0.025 -Dcompcstrat=mdlc -Dcps=500 -Dsps=1 -Dspp=4 -Dslice=1000
+	mitsuba "${source_dir}/kitchen/scene.xml" -Dcstrat=3 -Dsamplerate=0.025 -Dcompcstrat=mdlc -Dcps=500 -Dsps=1 -Dspp=4 -Dslice=1000 -Dis=1 -Dbv=1 -Dvp=0.25
 	python3 "${source_dir}/../compare_err.py" "${source_dir}/kitchen/scene.exr" "${source_dir}/kitchen/groundtruth.exr" "${source_dir}/kitchen/scene_amr_500"
 done
 mv "${source_dir}/kitchen/timings" "${source_dir}/kitchen/timings_amr_500"
@@ -18,7 +18,7 @@ mv "${source_dir}/kitchen/samplerates" "${source_dir}/kitchen/samplerates_amr_50
 
 for i in {1..5}
 do
-	mitsuba "${source_dir}/kitchen/scene.xml" -Dcstrat=3 -Dsamplerate=0.025 -Dcompcstrat=mdlc -Dcps=1000 -Dsps=1 -Dspp=4 -Dslice=1000
+	mitsuba "${source_dir}/kitchen/scene.xml" -Dcstrat=3 -Dsamplerate=0.025 -Dcompcstrat=mdlc -Dcps=1000 -Dsps=1 -Dspp=4 -Dslice=1000 -Dis=1 -Dbv=1 -Dvp=0.25
 	python3 "${source_dir}/../compare_err.py" "${source_dir}/kitchen/scene.exr" "${source_dir}/kitchen/groundtruth.exr" "${source_dir}/kitchen/scene_amr_1000"
 done
 mv "${source_dir}/kitchen/timings" "${source_dir}/kitchen/timings_amr_1000"
@@ -26,7 +26,7 @@ mv "${source_dir}/kitchen/sampelrates" "${source_dir}/kitchen/sampelrates_amr_10
 
 for i in {1..5}
 do
-	mitsuba "${source_dir}/kitchen/scene.xml" -Dcstrat=3 -Dsamplerate=0.025 -Dcompcstrat=mdlc -Dcps=2000 -Dsps=1 -Dspp=4 -Dslice=1000
+	mitsuba "${source_dir}/kitchen/scene.xml" -Dcstrat=3 -Dsamplerate=0.025 -Dcompcstrat=mdlc -Dcps=2000 -Dsps=1 -Dspp=4 -Dslice=1000 -Dis=1 -Dbv=1 -Dvp=0.25
 	python3 "${source_dir}/../compare_err.py" "${source_dir}/kitchen/scene.exr" "${source_dir}/kitchen/groundtruth.exr" "${source_dir}/kitchen/scene_amr_2000"
 done
 mv "${source_dir}/kitchen/timings" "${source_dir}/kitchen/timings_amr_2000"
@@ -34,7 +34,7 @@ mv "${source_dir}/kitchen/samplerates" "${source_dir}/kitchen/samplerates_amr_20
 
 for i in {1..5}
 do
-	mitsuba "${source_dir}/kitchen/scene.xml" -Dcstrat=3 -Dsamplerate=0.025 -Dcompcstrat=mdlc -Dcps=4000 -Dsps=1 -Dspp=4 -Dslice=1000
+	mitsuba "${source_dir}/kitchen/scene.xml" -Dcstrat=3 -Dsamplerate=0.025 -Dcompcstrat=mdlc -Dcps=4000 -Dsps=1 -Dspp=4 -Dslice=1000 -Dis=1 -Dbv=1 -Dvp=0.25
 	python3 "${source_dir}/../compare_err.py" "${source_dir}/kitchen/scene.exr" "${source_dir}/kitchen/groundtruth.exr" "${source_dir}/kitchen/scene_amr_4000"
 done
 mv "${source_dir}/kitchen/timings" "${source_dir}/kitchen/timings_amr_4000"
@@ -42,7 +42,7 @@ mv "${source_dir}/kitchen/samplerates" "${source_dir}/kitchen/samplerates_amr_40
 
 for i in {1..5}
 do
-	mitsuba "${source_dir}/kitchen/scene.xml" -Dcstrat=3 -Dsamplerate=0.025 -Dcompcstrat=mdlc -Dcps=8000 -Dsps=1 -Dspp=4 -Dslice=1000
+	mitsuba "${source_dir}/kitchen/scene.xml" -Dcstrat=3 -Dsamplerate=0.025 -Dcompcstrat=mdlc -Dcps=8000 -Dsps=1 -Dspp=4 -Dslice=1000 -Dis=1 -Dbv=1 -Dvp=0.25
 	python3 "${source_dir}/../compare_err.py" "${source_dir}/kitchen/scene.exr" "${source_dir}/kitchen/groundtruth.exr" "${source_dir}/kitchen/scene_amr_8000"
 done
 mv "${source_dir}/kitchen/timings" "${source_dir}/kitchen/timings_amr_8000"
@@ -51,7 +51,7 @@ mv "${source_dir}/kitchen/samplerates" "${source_dir}/kitchen/samplerates_amr_80
 #MDLC
 for i in {1..5}
 do
-	mitsuba "${source_dir}/kitchen/scene.xml" -Dcstrat=3 -Dsamplerate=1 -Dcompcstrat=mdlc -Dcps=250 -Dsps=1 -Dspp=4 -Dslice=1000
+	mitsuba "${source_dir}/kitchen/scene.xml" -Dcstrat=3 -Dsamplerate=1 -Dcompcstrat=mdlc -Dcps=250 -Dsps=1 -Dspp=4 -Dslice=1000 -Dis=1 -Dbv=1 -Dvp=0.25
 	python3 "${source_dir}/../compare_err.py" "${source_dir}/kitchen/scene.exr" "${source_dir}/kitchen/groundtruth.exr" "${source_dir}/kitchen/scene_mdlc_250"
 done
 mv "${source_dir}/kitchen/timings" "${source_dir}/kitchen/timings_mdlc_250"
@@ -59,7 +59,7 @@ mv "${source_dir}/kitchen/samplerates" "${source_dir}/kitchen/samplerates_mdlc_2
 
 for i in {1..5}
 do
-	mitsuba "${source_dir}/kitchen/scene.xml" -Dcstrat=3 -Dsamplerate=1 -Dcompcstrat=mdlc -Dcps=500 -Dsps=1 -Dspp=4 -Dslice=1000
+	mitsuba "${source_dir}/kitchen/scene.xml" -Dcstrat=3 -Dsamplerate=1 -Dcompcstrat=mdlc -Dcps=500 -Dsps=1 -Dspp=4 -Dslice=1000 -Dis=1 -Dbv=1 -Dvp=0.25
 	python3 "${source_dir}/../compare_err.py" "${source_dir}/kitchen/scene.exr" "${source_dir}/kitchen/groundtruth.exr" "${source_dir}/kitchen/scene_mdlc_500"
 done
 mv "${source_dir}/kitchen/timings" "${source_dir}/kitchen/timings_mdlc_500"
@@ -67,7 +67,7 @@ mv "${source_dir}/kitchen/samplerates" "${source_dir}/kitchen/samplerates_mdlc_5
 
 for i in {1..5}
 do
-	mitsuba "${source_dir}/kitchen/scene.xml" -Dcstrat=3 -Dsamplerate=1 -Dcompcstrat=mdlc -Dcps=1000 -Dsps=1 -Dspp=4 -Dslice=1000
+	mitsuba "${source_dir}/kitchen/scene.xml" -Dcstrat=3 -Dsamplerate=1 -Dcompcstrat=mdlc -Dcps=1000 -Dsps=1 -Dspp=4 -Dslice=1000 -Dis=1 -Dbv=1 -Dvp=0.25
 	python3 "${source_dir}/../compare_err.py" "${source_dir}/kitchen/scene.exr" "${source_dir}/kitchen/groundtruth.exr" "${source_dir}/kitchen/scene_mdlc_1000"
 done
 mv "${source_dir}/kitchen/timings" "${source_dir}/kitchen/timings_mdlc_1000"
@@ -75,7 +75,7 @@ mv "${source_dir}/kitchen/samplerates" "${source_dir}/kitchen/samplerates_mdlc_1
 
 for i in {1..5}
 do
-	mitsuba "${source_dir}/kitchen/scene.xml" -Dcstrat=3 -Dsamplerate=1 -Dcompcstrat=mdlc -Dcps=2000 -Dsps=1 -Dspp=4 -Dslice=1000
+	mitsuba "${source_dir}/kitchen/scene.xml" -Dcstrat=3 -Dsamplerate=1 -Dcompcstrat=mdlc -Dcps=2000 -Dsps=1 -Dspp=4 -Dslice=1000 -Dis=1 -Dbv=1 -Dvp=0.25
 	python3 "${source_dir}/../compare_err.py" "${source_dir}/kitchen/scene.exr" "${source_dir}/kitchen/groundtruth.exr" "${source_dir}/kitchen/scene_mdlc_2000"
 done
 mv "${source_dir}/kitchen/timings" "${source_dir}/kitchen/timings_mdlc_2000"
@@ -83,7 +83,7 @@ mv "${source_dir}/kitchen/samplerates" "${source_dir}/kitchen/samplerates_mdlc_2
 
 for i in {1..5}
 do
-	mitsuba "${source_dir}/kitchen/scene.xml" -Dcstrat=3 -Dsamplerate=1 -Dcompcstrat=mdlc -Dcps=4000 -Dsps=1 -Dspp=4 -Dslice=1000
+	mitsuba "${source_dir}/kitchen/scene.xml" -Dcstrat=3 -Dsamplerate=1 -Dcompcstrat=mdlc -Dcps=4000 -Dsps=1 -Dspp=4 -Dslice=1000 -Dis=1 -Dbv=1 -Dvp=0.25
 	python3 "${source_dir}/../compare_err.py" "${source_dir}/kitchen/scene.exr" "${source_dir}/kitchen/groundtruth.exr" "${source_dir}/kitchen/scene_mdlc_4000"
 done
 mv "${source_dir}/kitchen/timings" "${source_dir}/kitchen/timings_mdlc_4000"
@@ -93,7 +93,7 @@ mv "${source_dir}/kitchen/samplerates" "${source_dir}/kitchen/samplerates_mdlc_4
 #LS
 for i in {1..5}
 do
-	mitsuba "${source_dir}/kitchen/scene.xml" -Dcstrat=3 -Dsamplerate=1 -Dcompcstrat=ls -Dcps=250 -Dsps=1 -Dspp=4 -Dslice=5000
+	mitsuba "${source_dir}/kitchen/scene.xml" -Dcstrat=3 -Dsamplerate=1 -Dcompcstrat=ls -Dcps=250 -Dsps=1 -Dspp=4 -Dslice=5000 -Dis=1 -Dbv=1 -Dvp=0.25
 	python3 "${source_dir}/../compare_err.py" "${source_dir}/kitchen/scene.exr" "${source_dir}/kitchen/groundtruth.exr" "${source_dir}/kitchen/scene_ls_250"
 done
 mv "${source_dir}/kitchen/timings" "${source_dir}/kitchen/timings_ls_250"
@@ -101,7 +101,7 @@ mv "${source_dir}/kitchen/samplerates" "${source_dir}/kitchen/samplerates_ls_250
 
 for i in {1..5}
 do
-	mitsuba "${source_dir}/kitchen/scene.xml" -Dcstrat=3 -Dsamplerate=1 -Dcompcstrat=ls -Dcps=500 -Dsps=1 -Dspp=4 -Dslice=5000
+	mitsuba "${source_dir}/kitchen/scene.xml" -Dcstrat=3 -Dsamplerate=1 -Dcompcstrat=ls -Dcps=500 -Dsps=1 -Dspp=4 -Dslice=5000 -Dis=1 -Dbv=1 -Dvp=0.25
 	python3 "${source_dir}/../compare_err.py" "${source_dir}/kitchen/scene.exr" "${source_dir}/kitchen/groundtruth.exr" "${source_dir}/kitchen/scene_ls_500"
 done
 mv "${source_dir}/kitchen/timings" "${source_dir}/kitchen/timings_ls_500"
@@ -109,7 +109,7 @@ mv "${source_dir}/kitchen/samplerates" "${source_dir}/kitchen/samplerates_ls_500
 
 for i in {1..5}
 do
-	mitsuba "${source_dir}/kitchen/scene.xml" -Dcstrat=3 -Dsamplerate=1 -Dcompcstrat=ls -Dcps=1000 -Dsps=1 -Dspp=4 -Dslice=5000
+	mitsuba "${source_dir}/kitchen/scene.xml" -Dcstrat=3 -Dsamplerate=1 -Dcompcstrat=ls -Dcps=1000 -Dsps=1 -Dspp=4 -Dslice=5000 -Dis=1 -Dbv=1 -Dvp=0.25
 	python3 "${source_dir}/../compare_err.py" "${source_dir}/kitchen/scene.exr" "${source_dir}/kitchen/groundtruth.exr" "${source_dir}/kitchen/scene_ls_1000"
 done
 mv "${source_dir}/kitchen/timings" "${source_dir}/kitchen/timings_ls_1000"
@@ -117,7 +117,7 @@ mv "${source_dir}/kitchen/samplerates" "${source_dir}/kitchen/samplerates_ls_100
 
 for i in {1..5}
 do
-	mitsuba "${source_dir}/kitchen/scene.xml" -Dcstrat=3 -Dsamplerate=1 -Dcompcstrat=ls -Dcps=2000 -Dsps=1 -Dspp=4 -Dslice=5000
+	mitsuba "${source_dir}/kitchen/scene.xml" -Dcstrat=3 -Dsamplerate=1 -Dcompcstrat=ls -Dcps=2000 -Dsps=1 -Dspp=4 -Dslice=5000 -Dis=1 -Dbv=1 -Dvp=0.25
 	python3 "${source_dir}/../compare_err.py" "${source_dir}/kitchen/scene.exr" "${source_dir}/kitchen/groundtruth.exr" "${source_dir}/kitchen/scene_ls_2000"
 done
 mv "${source_dir}/kitchen/timings" "${source_dir}/kitchen/timings_ls_2000"
@@ -125,7 +125,7 @@ mv "${source_dir}/kitchen/samplerates" "${source_dir}/kitchen/samplerates_ls_200
 
 for i in {1..5}
 do
-	mitsuba "${source_dir}/kitchen/scene.xml" -Dcstrat=3 -Dsamplerate=1 -Dcompcstrat=ls -Dcps=4000 -Dsps=1 -Dspp=4 -Dslice=5000
+	mitsuba "${source_dir}/kitchen/scene.xml" -Dcstrat=3 -Dsamplerate=1 -Dcompcstrat=ls -Dcps=4000 -Dsps=1 -Dspp=4 -Dslice=5000 -Dis=1 -Dbv=1 -Dvp=0.25
 	python3 "${source_dir}/../compare_err.py" "${source_dir}/kitchen/scene.exr" "${source_dir}/kitchen/groundtruth.exr" "${source_dir}/kitchen/scene_ls_4000"
 done
 mv "${source_dir}/kitchen/timings" "${source_dir}/kitchen/timings_ls_4000"
