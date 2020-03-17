@@ -1,0 +1,37 @@
+#!/bin/bash
+set -x
+source_path="${BASH_SOURCE[0]}"
+source_dir=$(dirname "${source_path}")
+
+chmod +x "${source_dir}/run_time_error_cbox.sh"
+chmod +x "${source_dir}/run_time_error_breakfast-room.sh"
+chmod +x "${source_dir}/run_time_error_classroom.sh"
+chmod +x "${source_dir}/run_time_error_hairball.sh"
+chmod +x "${source_dir}/run_time_error_living_room_3.sh"
+chmod +x "${source_dir}/run_time_error_san_miguel.sh"
+chmod +x "${source_dir}/run_time_error_sponza.sh"
+chmod +x "${source_dir}/run_time_error_staircase.sh"
+chmod +x "${source_dir}/run_time_error_kitchen.sh"
+chmod +x "${source_dir}/run_time_error_bathroom.sh"
+
+#${source_dir}/run_time_error_cbox.sh
+#${source_dir}/run_time_error_breakfast-room.sh
+#${source_dir}/run_time_error_classroom.sh
+#${source_dir}/run_time_error_hairball.sh
+#${source_dir}/run_time_error_living_room_3.sh
+#${source_dir}/run_time_error_san_miguel.sh
+#${source_dir}/run_time_error_sponza.sh
+${source_dir}/run_time_error_staircase.sh
+${source_dir}/run_time_error_kitchen.sh
+${source_dir}/run_time_error_bathroom.sh
+
+python3 "${source_dir}/../generate_plots.py" "${source_dir}/cbox" "cbox" "Cornell box" "${source_dir}/cbox.tex"
+python3 "${source_dir}/../generate_plots.py" "${source_dir}/breakfast-room/breakfast-room" "scene" "Breakfast room" "${source_dir}/breakfast-room.tex"
+python3 "${source_dir}/../generate_plots.py" "${source_dir}/classroom" "scene" "Classroom" "${source_dir}/classroom.tex"
+python3 "${source_dir}/../generate_plots.py" "${source_dir}/hairball" "hairball" "Hairball" "${source_dir}/hairball.tex"
+python3 "${source_dir}/../generate_plots.py" "${source_dir}/living_room_3/living-room-3" "scene" "Living room" "${source_dir}/living-room.tex"
+python3 "${source_dir}/../generate_plots.py" "${source_dir}/san_miguel" "san-miguel" "San-miguel" "${source_dir}/san-miguel.tex"
+python3 "${source_dir}/../generate_plots.py" "${source_dir}/sponza" "sponza" "Sponza" "${source_dir}/sponza.tex"
+python3 "${source_dir}/../generate_plots.py" "${source_dir}/staircase/staircase" "scene" "Staircase" "${source_dir}/staircase.tex"
+python3 "${source_dir}/../generate_plots.py" "${source_dir}/kitchen" "scene" "Kitchen" "${source_dir}/kitchen.tex"
+python3 "${source_dir}/../generate_plots.py" "${source_dir}/bathroom/bathroom" "scene" "Bathroom" "${source_dir}/bathroom.tex"
