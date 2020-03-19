@@ -79,7 +79,7 @@ for config_code in configurations:
 output_str = ""
 output_str += "\\begin{center}\n"
 output_str += "\\begin{tabular}{c c c c}\n"
-output_str += " & Adaptive & Static 0.1 & Static 0.4"
+output_str += " & Adaptive & Static 0.1 & Static 0.4\n"
 
 output_str += "sample percentage"
 for dat in adaptive_dat["sample percentage"]:
