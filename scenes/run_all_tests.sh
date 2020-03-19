@@ -57,4 +57,4 @@ python3 "${source_dir}/../generate_isb_plots.py" "${source_dir}/kitchen" "kitche
 
 #${source_dir}/run_adaptive.sh
 
-python3 "${source_dir}/../generate_adaptive_plots.py" "${source_dir}/classroom" "scene" "Classroom" "${source_dir}/classroom_adaptive.tex"
+python3 "${source_dir}/../generate_adaptive_plots.py" "${source_dir}/classroom" "classroom" "Classroom" "${source_dir}/classroom_adaptive.tex"

@@ -15,14 +15,14 @@ configurations = {
 bool_dat = {}
 import_dat = {}
 
-for config_title, config_codes in configurations.items():
-    bool_dat["sample percentage"] = []
-    bool_dat["time"] = []
-    bool_dat["error"] = []
-    import_dat["sample percentage"] = []
-    import_dat["time"] = []
-    import_dat["error"] = []
+bool_dat["sample percentage"] = []
+bool_dat["time"] = []
+bool_dat["error"] = []
+import_dat["sample percentage"] = []
+import_dat["time"] = []
+import_dat["error"] = []
 
+for config_title, config_codes in configurations.items():
     for config_code in config_codes:
         timings_filename = path + "/timings_" + config_code
         error_filename = path + "/" + filename + "_" + config_code + "_errors.txt"
