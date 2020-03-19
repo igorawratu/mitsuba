@@ -66,7 +66,7 @@ for config_title, config_codes in configurations.items():
         with open(samplerate_filename, "r") as samplerates_file:
             total_num_samplerates = 0
 
-            for y in errors_file.read().split('\n'):
+            for y in samplerates_file.read().split('\n'):
                 try:
                     val = float(y)
                     total_samplerates += val
@@ -93,17 +93,17 @@ for config_title, config_codes in configurations.items():
 output_str = ""
 output_str += "Boolean:\n"
 for i in range(0, len(configurations["Boolean"])):
-    output_bool_str += "samplerate: " + str(bool_dat["sample percentage"][i][0]) + "(" + str(bool_dat["sample percentage"][i][1]) + ")"
-    output_bool_str += "time: " + str(bool_dat["time"][i][0]) + "(" + str(bool_dat["time"][i][1]) + ")"
-    output_bool_str += "error: " + str(bool_dat["error"][i][0]) + "(" + str(bool_dat["error"][i][1]) + ")\n"
+    output_str += "samplerate: " + str(bool_dat["sample percentage"][i][0]) + "(" + str(bool_dat["sample percentage"][i][1]) + ")"
+    output_str += "time: " + str(bool_dat["time"][i][0]) + "(" + str(bool_dat["time"][i][1]) + ")"
+    output_str += "error: " + str(bool_dat["error"][i][0]) + "(" + str(bool_dat["error"][i][1]) + ")\n"
 
 output_str += "\n"
 
 output_str += "Importance Sampling:\n"
 for i in range(0, len(configurations["Importance Sampling"])):
-    output_bool_str += "samplerate: " + str(import_dat["sample percentage"][i][0]) + "(" + str(import_dat["sample percentage"][i][1]) + ")"
-    output_bool_str += "time: " + str(import_dat["time"][i][0]) + "(" + str(import_dat["time"][i][1]) + ")"
-    output_bool_str += "error: " + str(import_dat["error"][i][0]) + "(" + str(import_dat["error"][i][1]) + ")\n"
+    output_str += "samplerate: " + str(import_dat["sample percentage"][i][0]) + "(" + str(import_dat["sample percentage"][i][1]) + ")"
+    output_str += "time: " + str(import_dat["time"][i][0]) + "(" + str(import_dat["time"][i][1]) + ")"
+    output_str += "error: " + str(import_dat["error"][i][0]) + "(" + str(import_dat["error"][i][1]) + ")\n"
 
 o = open(output, "w")
 o.write(output_str)
