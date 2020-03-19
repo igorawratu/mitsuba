@@ -57,7 +57,7 @@ for config_code in configurations:
     with open(samplerate_filename, "r") as samplerates_file:
         total_num_samplerates = 0
 
-        for y in errors_file.read().split('\n'):
+        for y in samplerates_file.read().split('\n'):
             try:
                 val = float(y)
                 total_samplerates += val

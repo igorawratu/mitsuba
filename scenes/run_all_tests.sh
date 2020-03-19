@@ -45,11 +45,11 @@ chmod +x "${source_dir}/run_bool_kitchen.sh"
 chmod +x "${source_dir}/run_is_kitchen.sh"
 
 #${source_dir}/run_bool_sanmiguel.sh
-#${source_dir}/run_is_sanmiguel.sh
+${source_dir}/run_is_sanmiguel.sh
 #${source_dir}/run_bool_classroom.sh
-#${source_dir}/run_is_classroom.sh
+${source_dir}/run_is_classroom.sh
 #${source_dir}/run_bool_kitchen.sh
-#${source_dir}/run_is_kitchen.sh
+${source_dir}/run_is_kitchen.sh
 
 python3 "${source_dir}/../generate_isb_plots.py" "${source_dir}/san_miguel" "san-miguel" "San-miguel" "${source_dir}/san-miguel_boolimport"
 python3 "${source_dir}/../generate_isb_plots.py" "${source_dir}/classroom" "classroom" "Classroom" "${source_dir}/classroom_boolimport"
