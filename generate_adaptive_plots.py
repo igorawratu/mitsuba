@@ -83,17 +83,17 @@ output_str += " & Adaptive & Static 0.1 & Static 0.4\n"
 
 output_str += "sample percentage"
 for dat in adaptive_dat["sample percentage"]:
-    output_str += " & " + str(adaptive_dat["sample percentage"][0]) + "\\% (" + str(adaptive_dat["sample percentage"]) + "\\%)"
+    output_str += " & " + str(adaptive_dat["sample percentage"][0]) + "\\% (" + str(adaptive_dat["sample percentage"][1]) + "\\%)"
 output_str += "\n"
 
 output_str += "time"
 for dat in adaptive_dat["time"]:
-    output_str += " & " + str(adaptive_dat["time"][0]) + "s (" + str(adaptive_dat["time"]) + "s)"
+    output_str += " & " + str(adaptive_dat["time"][0]) + "s (" + str(adaptive_dat["time"][1]) + "s)"
 output_str += "\n"
 
 output_str += "error (rmse)"
 for dat in adaptive_dat["error"]:
-    output_str += " & " + str(adaptive_dat["error"][0]) + " (" + str(adaptive_dat["error"]) + ")"
+    output_str += " & " + str(adaptive_dat["error"][0]) + " (" + str(adaptive_dat["error"][1]) + ")"
 output_str += "\n"
 
 output_str += "\\end{tabular}\n"
