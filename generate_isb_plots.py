@@ -81,7 +81,7 @@ for config_title, config_codes in configurations.items():
         error_standard_dev = statistics.stdev(errors) if len(errors) > 1 else 0
         samplerate_standard_dev = statistics.stdev(samplerates) if len(samplerates) > 1 else 0
 
-        if config_code is "Boolean":
+        if config_title == "Boolean":
             bool_dat["sample percentage"].append((total_samplerates, samplerate_standard_dev))
             bool_dat["time"].append((total_timings, time_standard_dev))
             bool_dat["error"].append((total_errors, error_standard_dev))
