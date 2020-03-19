@@ -9,7 +9,7 @@ output = sys.argv[4]
 
 configurations = {
     "Boolean" : ["bool_05", "nbool_05", "bool_1", "nbool_1", "bool_2", "nbool_2", "bool_4", "nbool_4"],
-    "Importance Sampling" : ["import_05", "nimport_05", "import_1", "nimport_1", "import_2", "nimport_2", "import_4", "nimport_4"]
+    "Importance Sampling" : ["import_05", "nimport_05", "import_1", "nimport_1", "import_15", "nimport_15", "import_2", "nimport_2"]
 }
 
 bool_dat = {}
