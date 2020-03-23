@@ -164,8 +164,8 @@ size_t generateVPLs(const Scene *scene, size_t offset, size_t count, int max_dep
 	if (max_depth <= 1)
 		return 0;
 
-	Properties props("halton");
-    props.setInteger("scramble", 0);
+	Properties props("independant");
+    //props.setInteger("scramble", 0);
     ref<Sampler> sampler = static_cast<Sampler *> (PluginManager::getInstance()->
         createObject(MTS_CLASS(Sampler), props));
     sampler->configure();
@@ -178,8 +178,8 @@ size_t generateVPLs(const Scene *scene, size_t offset, size_t count, int max_dep
 	int retries = 0;
 
 	while (vpls.size() < count) {
-		sampler->setSampleIndex(++offset);
-		//offset++;
+		//sampler->setSampleIndex(++offset);
+		offset++;
 
 		if (vpls.empty() && ++retries > 10000) {
 			return 0;
