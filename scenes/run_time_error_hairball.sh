@@ -94,7 +94,7 @@ mv "${source_dir}/hairball/samplerates" "${source_dir}/hairball/samplerates_mdlc
 #LS
 for i in {1..5}
 do
-	mitsuba "${source_dir}/hairball/hairball.xml" -Dcstrat=3 -Dsamplerate=1 -Dcompcstrat=ls -Dcps=250 -Dsps=1 -Dspp=4 -Dslice=5000 -Dis=1 -Dbv=1 -Dvp=0.25
+	mitsuba "${source_dir}/hairball/hairball.xml" -Dcstrat=3 -Dsamplerate=1 -Dcompcstrat=ls -Dcps=250 -Dsps=10 -Dspp=4 -Dslice=5000 -Dis=1 -Dbv=1 -Dvp=0.25
 	python3 "${source_dir}/../compare_err.py" "${source_dir}/hairball/hairball.exr" "${source_dir}/hairball/groundtruth.exr" "${source_dir}/hairball/hairball_ls_250"
 done
 mv "${source_dir}/hairball/timings" "${source_dir}/hairball/timings_ls_250"
@@ -102,7 +102,7 @@ mv "${source_dir}/hairball/samplerates" "${source_dir}/hairball/samplerates_ls_2
 
 for i in {1..5}
 do
-	mitsuba "${source_dir}/hairball/hairball.xml" -Dcstrat=3 -Dsamplerate=1 -Dcompcstrat=ls -Dcps=500 -Dsps=1 -Dspp=4 -Dslice=5000 -Dis=1 -Dbv=1 -Dvp=0.25
+	mitsuba "${source_dir}/hairball/hairball.xml" -Dcstrat=3 -Dsamplerate=1 -Dcompcstrat=ls -Dcps=500 -Dsps=10 -Dspp=4 -Dslice=5000 -Dis=1 -Dbv=1 -Dvp=0.25
 	python3 "${source_dir}/../compare_err.py" "${source_dir}/hairball/hairball.exr" "${source_dir}/hairball/groundtruth.exr" "${source_dir}/hairball/hairball_ls_500"
 done
 mv "${source_dir}/hairball/timings" "${source_dir}/hairball/timings_ls_500"
@@ -110,7 +110,7 @@ mv "${source_dir}/hairball/samplerates" "${source_dir}/hairball/samplerates_ls_5
 
 for i in {1..5}
 do
-	mitsuba "${source_dir}/hairball/hairball.xml" -Dcstrat=3 -Dsamplerate=1 -Dcompcstrat=ls -Dcps=1000 -Dsps=1 -Dspp=4 -Dslice=5000 -Dis=1 -Dbv=1 -Dvp=0.25
+	mitsuba "${source_dir}/hairball/hairball.xml" -Dcstrat=3 -Dsamplerate=1 -Dcompcstrat=ls -Dcps=1000 -Dsps=10 -Dspp=4 -Dslice=5000 -Dis=1 -Dbv=1 -Dvp=0.25
 	python3 "${source_dir}/../compare_err.py" "${source_dir}/hairball/hairball.exr" "${source_dir}/hairball/groundtruth.exr" "${source_dir}/hairball/hairball_ls_1000"
 done
 mv "${source_dir}/hairball/timings" "${source_dir}/hairball/timings_ls_1000"
@@ -118,7 +118,7 @@ mv "${source_dir}/hairball/samplerates" "${source_dir}/hairball/samplerates_ls_1
 
 for i in {1..5}
 do
-	mitsuba "${source_dir}/hairball/hairball.xml" -Dcstrat=3 -Dsamplerate=1 -Dcompcstrat=ls -Dcps=2000 -Dsps=1 -Dspp=4 -Dslice=5000 -Dis=1 -Dbv=1 -Dvp=0.25
+	mitsuba "${source_dir}/hairball/hairball.xml" -Dcstrat=3 -Dsamplerate=1 -Dcompcstrat=ls -Dcps=2000 -Dsps=10 -Dspp=4 -Dslice=5000 -Dis=1 -Dbv=1 -Dvp=0.25
 	python3 "${source_dir}/../compare_err.py" "${source_dir}/hairball/hairball.exr" "${source_dir}/hairball/groundtruth.exr" "${source_dir}/hairball/hairball_ls_2000"
 done
 mv "${source_dir}/hairball/timings" "${source_dir}/hairball/timings_ls_2000"
@@ -126,7 +126,7 @@ mv "${source_dir}/hairball/samplerates" "${source_dir}/hairball/samplerates_ls_2
 
 for i in {1..5}
 do
-	mitsuba "${source_dir}/hairball/hairball.xml" -Dcstrat=3 -Dsamplerate=1 -Dcompcstrat=ls -Dcps=4000 -Dsps=1 -Dspp=4 -Dslice=5000 -Dis=1 -Dbv=1 -Dvp=0.25
+	mitsuba "${source_dir}/hairball/hairball.xml" -Dcstrat=3 -Dsamplerate=1 -Dcompcstrat=ls -Dcps=4000 -Dsps=10 -Dspp=4 -Dslice=5000 -Dis=1 -Dbv=1 -Dvp=0.25
 	python3 "${source_dir}/../compare_err.py" "${source_dir}/hairball/hairball.exr" "${source_dir}/hairball/groundtruth.exr" "${source_dir}/hairball/hairball_ls_4000"
 done
 mv "${source_dir}/hairball/timings" "${source_dir}/hairball/timings_ls_4000"

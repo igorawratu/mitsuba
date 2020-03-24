@@ -93,7 +93,7 @@ mv "${source_dir}/breakfast-room/breakfast-room/samplerates" "${source_dir}/brea
 #LS
 for i in {1..5}
 do
-	mitsuba "${source_dir}/breakfast-room/breakfast-room/scene.xml" -Dcstrat=3 -Dsamplerate=1 -Dcompcstrat=ls -Dcps=250 -Dsps=1 -Dspp=4 -Dslice=5000 -Dis=1 -Dbv=1 -Dvp=0.25
+	mitsuba "${source_dir}/breakfast-room/breakfast-room/scene.xml" -Dcstrat=3 -Dsamplerate=1 -Dcompcstrat=ls -Dcps=250 -Dsps=10 -Dspp=4 -Dslice=5000 -Dis=1 -Dbv=1 -Dvp=0.25
 	python3 "${source_dir}/../compare_err.py" "${source_dir}/breakfast-room/breakfast-room/scene.exr" "${source_dir}/breakfast-room/breakfast-room/groundtruth.exr" "${source_dir}/breakfast-room/breakfast-room/scene_ls_250"
 done
 mv "${source_dir}/breakfast-room/breakfast-room/timings" "${source_dir}/breakfast-room/breakfast-room/timings_ls_250"
@@ -101,7 +101,7 @@ mv "${source_dir}/breakfast-room/breakfast-room/samplerates" "${source_dir}/brea
 
 for i in {1..5}
 do
-	mitsuba "${source_dir}/breakfast-room/breakfast-room/scene.xml" -Dcstrat=3 -Dsamplerate=1 -Dcompcstrat=ls -Dcps=500 -Dsps=1 -Dspp=4 -Dslice=5000 -Dis=1 -Dbv=1 -Dvp=0.25
+	mitsuba "${source_dir}/breakfast-room/breakfast-room/scene.xml" -Dcstrat=3 -Dsamplerate=1 -Dcompcstrat=ls -Dcps=500 -Dsps=10 -Dspp=4 -Dslice=5000 -Dis=1 -Dbv=1 -Dvp=0.25
 	python3 "${source_dir}/../compare_err.py" "${source_dir}/breakfast-room/breakfast-room/scene.exr" "${source_dir}/breakfast-room/breakfast-room/groundtruth.exr" "${source_dir}/breakfast-room/breakfast-room/scene_ls_500"
 done
 mv "${source_dir}/breakfast-room/breakfast-room/timings" "${source_dir}/breakfast-room/breakfast-room/timings_ls_500"
@@ -109,7 +109,7 @@ mv "${source_dir}/breakfast-room/breakfast-room/samplerates" "${source_dir}/brea
 
 for i in {1..5}
 do
-	mitsuba "${source_dir}/breakfast-room/breakfast-room/scene.xml" -Dcstrat=3 -Dsamplerate=1 -Dcompcstrat=ls -Dcps=1000 -Dsps=1 -Dspp=4 -Dslice=5000 -Dis=1 -Dbv=1 -Dvp=0.25
+	mitsuba "${source_dir}/breakfast-room/breakfast-room/scene.xml" -Dcstrat=3 -Dsamplerate=1 -Dcompcstrat=ls -Dcps=1000 -Dsps=10 -Dspp=4 -Dslice=5000 -Dis=1 -Dbv=1 -Dvp=0.25
 	python3 "${source_dir}/../compare_err.py" "${source_dir}/breakfast-room/breakfast-room/scene.exr" "${source_dir}/breakfast-room/breakfast-room/groundtruth.exr" "${source_dir}/breakfast-room/breakfast-room/scene_ls_1000"
 done
 mv "${source_dir}/breakfast-room/breakfast-room/timings" "${source_dir}/breakfast-room/breakfast-room/timings_ls_1000"
@@ -117,7 +117,7 @@ mv "${source_dir}/breakfast-room/breakfast-room/samplerates" "${source_dir}/brea
 
 for i in {1..5}
 do
-	mitsuba "${source_dir}/breakfast-room/breakfast-room/scene.xml" -Dcstrat=3 -Dsamplerate=1 -Dcompcstrat=ls -Dcps=2000 -Dsps=1 -Dspp=4 -Dslice=5000 -Dis=1 -Dbv=1 -Dvp=0.25
+	mitsuba "${source_dir}/breakfast-room/breakfast-room/scene.xml" -Dcstrat=3 -Dsamplerate=1 -Dcompcstrat=ls -Dcps=2000 -Dsps=10 -Dspp=4 -Dslice=5000 -Dis=1 -Dbv=1 -Dvp=0.25
 	python3 "${source_dir}/../compare_err.py" "${source_dir}/breakfast-room/breakfast-room/scene.exr" "${source_dir}/breakfast-room/breakfast-room/groundtruth.exr" "${source_dir}/breakfast-room/breakfast-room/scene_ls_2000"
 done
 mv "${source_dir}/breakfast-room/breakfast-room/timings" "${source_dir}/breakfast-room/breakfast-room/timings_ls_2000"
@@ -125,7 +125,7 @@ mv "${source_dir}/breakfast-room/breakfast-room/samplerates" "${source_dir}/brea
 
 for i in {1..5}
 do
-	mitsuba "${source_dir}/breakfast-room/breakfast-room/scene.xml" -Dcstrat=3 -Dsamplerate=1 -Dcompcstrat=ls -Dcps=4000 -Dsps=1 -Dspp=4 -Dslice=5000 -Dis=1 -Dbv=1 -Dvp=0.25
+	mitsuba "${source_dir}/breakfast-room/breakfast-room/scene.xml" -Dcstrat=3 -Dsamplerate=1 -Dcompcstrat=ls -Dcps=4000 -Dsps=10 -Dspp=4 -Dslice=5000 -Dis=1 -Dbv=1 -Dvp=0.25
 	python3 "${source_dir}/../compare_err.py" "${source_dir}/breakfast-room/breakfast-room/scene.exr" "${source_dir}/breakfast-room/breakfast-room/groundtruth.exr" "${source_dir}/breakfast-room/breakfast-room/scene_ls_4000"
 done
 mv "${source_dir}/breakfast-room/breakfast-room/timings" "${source_dir}/breakfast-room/breakfast-room/timings_ls_4000"
