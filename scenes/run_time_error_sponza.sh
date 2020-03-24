@@ -94,7 +94,7 @@ mv "${source_dir}/sponza/samplerates" "${source_dir}/sponza/samplerates_mdlc_400
 #LS
 for i in {1..5}
 do
-	mitsuba "${source_dir}/sponza/sponza.xml" -Dcstrat=3 -Dsamplerate=1 -Dcompcstrat=ls -Dcps=250 -Dsps=1 -Dspp=4 -Dslice=10000 -Dis=1 -Dbv=1 -Dvp=0.25
+	mitsuba "${source_dir}/sponza/sponza.xml" -Dcstrat=3 -Dsamplerate=1 -Dcompcstrat=ls -Dcps=250 -Dsps=5 -Dspp=4 -Dslice=10000 -Dis=1 -Dbv=1 -Dvp=0.25
 	python3 "${source_dir}/../compare_err.py" "${source_dir}/sponza/sponza.exr" "${source_dir}/sponza/groundtruth.exr" "${source_dir}/sponza/sponza_ls_250"
 done
 mv "${source_dir}/sponza/timings" "${source_dir}/sponza/timings_ls_250"
@@ -102,7 +102,7 @@ mv "${source_dir}/sponza/samplerates" "${source_dir}/sponza/samplerates_ls_250"
 
 for i in {1..5}
 do
-	mitsuba "${source_dir}/sponza/sponza.xml" -Dcstrat=3 -Dsamplerate=1 -Dcompcstrat=ls -Dcps=500 -Dsps=1 -Dspp=4 -Dslice=10000 -Dis=1 -Dbv=1 -Dvp=0.25
+	mitsuba "${source_dir}/sponza/sponza.xml" -Dcstrat=3 -Dsamplerate=1 -Dcompcstrat=ls -Dcps=500 -Dsps=5 -Dspp=4 -Dslice=10000 -Dis=1 -Dbv=1 -Dvp=0.25
 	python3 "${source_dir}/../compare_err.py" "${source_dir}/sponza/sponza.exr" "${source_dir}/sponza/groundtruth.exr" "${source_dir}/sponza/sponza_ls_500"
 done
 mv "${source_dir}/sponza/timings" "${source_dir}/sponza/timings_ls_500"
@@ -110,7 +110,7 @@ mv "${source_dir}/sponza/samplerates" "${source_dir}/sponza/samplerates_ls_500"
 
 for i in {1..5}
 do
-	mitsuba "${source_dir}/sponza/sponza.xml" -Dcstrat=3 -Dsamplerate=1 -Dcompcstrat=ls -Dcps=1000 -Dsps=1 -Dspp=4 -Dslice=10000 -Dis=1 -Dbv=1 -Dvp=0.25
+	mitsuba "${source_dir}/sponza/sponza.xml" -Dcstrat=3 -Dsamplerate=1 -Dcompcstrat=ls -Dcps=1000 -Dsps=5 -Dspp=4 -Dslice=10000 -Dis=1 -Dbv=1 -Dvp=0.25
 	python3 "${source_dir}/../compare_err.py" "${source_dir}/sponza/sponza.exr" "${source_dir}/sponza/groundtruth.exr" "${source_dir}/sponza/sponza_ls_1000"
 done
 mv "${source_dir}/sponza/timings" "${source_dir}/sponza/timings_ls_1000"
@@ -118,7 +118,7 @@ mv "${source_dir}/sponza/samplerates" "${source_dir}/sponza/samplerates_ls_1000"
 
 for i in {1..5}
 do
-	mitsuba "${source_dir}/sponza/sponza.xml" -Dcstrat=3 -Dsamplerate=1 -Dcompcstrat=ls -Dcps=2000 -Dsps=1 -Dspp=4 -Dslice=10000 -Dis=1 -Dbv=1 -Dvp=0.25
+	mitsuba "${source_dir}/sponza/sponza.xml" -Dcstrat=3 -Dsamplerate=1 -Dcompcstrat=ls -Dcps=2000 -Dsps=5 -Dspp=4 -Dslice=10000 -Dis=1 -Dbv=1 -Dvp=0.25
 	python3 "${source_dir}/../compare_err.py" "${source_dir}/sponza/sponza.exr" "${source_dir}/sponza/groundtruth.exr" "${source_dir}/sponza/sponza_ls_2000"
 done
 mv "${source_dir}/sponza/timings" "${source_dir}/sponza/timings_ls_2000"
@@ -126,7 +126,7 @@ mv "${source_dir}/sponza/samplerates" "${source_dir}/sponza/samplerates_ls_2000"
 
 for i in {1..5}
 do
-	mitsuba "${source_dir}/sponza/sponza.xml" -Dcstrat=3 -Dsamplerate=1 -Dcompcstrat=ls -Dcps=4000 -Dsps=1 -Dspp=4 -Dslice=10000 -Dis=1 -Dbv=1 -Dvp=0.25
+	mitsuba "${source_dir}/sponza/sponza.xml" -Dcstrat=3 -Dsamplerate=1 -Dcompcstrat=ls -Dcps=4000 -Dsps=5 -Dspp=4 -Dslice=10000 -Dis=1 -Dbv=1 -Dvp=0.25
 	python3 "${source_dir}/../compare_err.py" "${source_dir}/sponza/sponza.exr" "${source_dir}/sponza/groundtruth.exr" "${source_dir}/sponza/sponza_ls_4000"
 done
 mv "${source_dir}/sponza/timings" "${source_dir}/sponza/timings_ls_4000"
