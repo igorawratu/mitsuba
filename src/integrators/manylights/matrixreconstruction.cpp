@@ -700,7 +700,7 @@ void updateSliceWithMatData(const Eigen::MatrixXf& mat, KDTNode<ReconstructionSa
             }
             else{
                 for(std::uint32_t j = 0; j < actual_vpl_indices.size(); ++j){
-                    float coeff = 1.f;//((recover_transpose ? mat(j, i) : mat(i, j)) + 1.f) / 2.f;
+                    float coeff = ((recover_transpose ? mat(j, i) : mat(i, j)) + 1.f) / 2.f;
                     //float coeff = mat(i, j) > 0.f ? 1.f : 0.f;
                     std::uint32_t idx = actual_vpl_indices[j];
                     slice->sample(i).color += slice->sample(i).unoccluded_samples[idx] * coeff;

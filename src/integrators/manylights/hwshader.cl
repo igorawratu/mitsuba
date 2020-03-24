@@ -159,7 +159,7 @@ __kernel void shade(__global const struct PixelElement* pixels,
         return;
     }
 
-    float coeff = 1.0f;//coefficients[i].coeff;
+    float coeff = coefficients[i].coeff;
     int lidx = pixels[i].slice_id * clusters_per_slice + curr_pass;
 
     float3 dir = lights[lidx].type == 0 ? -lights[lidx].n : lights[lidx].p - pixels[i].p;
