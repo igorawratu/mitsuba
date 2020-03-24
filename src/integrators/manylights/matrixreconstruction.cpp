@@ -447,7 +447,7 @@ std::vector<VPL> sampleRepresentatives(const Eigen::MatrixXf& contributions, con
             std::discrete_distribution<std::uint32_t> gen(cluster_dist.begin(), cluster_dist.end());
 
             std::uint32_t rep_idx = gen(rng);
-            float repo_power = cluster_dist[rep_idx];
+            float rep_power = cluster_dist[rep_idx];
 
             representatives.push_back(vpls[clusters[i][rep_idx]]);
             representatives.back().P = representatives.back().P * total_vpl_power / rep_power;
