@@ -436,18 +436,28 @@ std::vector<VPL> sampleRepresentatives(const Eigen::MatrixXf& contributions, con
             continue;
         }
         
-        float tot_cluster_power = 0.f;
+        std::vector<float> cluster_dist[clusters[i].size()];
         float total_vpl_power = 0.f;
         for(std::uint32_t j = 0; j < clusters[i].size(); ++j){
-            tot_cluster_power += contributions.col(clusters[i][j]).norm();
-            float r, g, b;
-            vpls[clusters[i][j]].P.toLinearRGB(r, g, b);
-            total_vpl_power += sqrt(r * r + g * g + b * b);
+            cluster_dist[j] = contributions.col(clusters[i][j]).norm();
+            total_vpl_power += contributions.col(clusters[i][j]).norm();//vpls[clusters[i][j]].P.getLuminance();
         }
 
-        std::uniform_real_distribution<float> gen(0, tot_cluster_power);
-        std::uint32_t rep_idx = 0;
-        float selected_norm = 0.f;
+        if(total_vpl_power > 0.f){
+            std::discrete_distribution<std::uint32_t> gen(cluster_dist.begin(), cluster_dist.end());
+
+            std::uint32_t rep_idx = gen(rng);
+            float repo_power = cluster_dist[rep_idx];
+
+            representatives.push_back(vpls[clusters[i][rep_idx]]);
+            representatives.back().P = representatives.back().P * total_vpl_power / rep_power;
+        }
+        else{
+            representatives.push_back(vpls[clusters[i][0]]);
+            representatives.back().P = Spectrum(0.f);
+        }
+
+        /*float selected_norm = 0.f;
 
         for(std::uint32_t j = 0; j < clusters[i].size(); ++j){
             float curr_norm = contributions.col(clusters[i][j]).norm();
@@ -460,8 +470,8 @@ std::vector<VPL> sampleRepresentatives(const Eigen::MatrixXf& contributions, con
         representatives.push_back(vpls[clusters[i][rep_idx]]);
         float r, g, b;
         representatives.back().P.toLinearRGB(r, g, b);
-        float rep_power = sqrt(r * r + g * g + b * b);
-        representatives.back().P = representatives.back().P * total_vpl_power / rep_power;
+        float rep_power = sqrt(r * r + g * g + b * b);*/
+        
     }
 
     //updateVPLRadii(representatives, min_dist);
