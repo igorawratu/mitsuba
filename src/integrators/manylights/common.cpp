@@ -244,8 +244,8 @@ Spectrum sample(Scene* scene, Sampler* sampler, Intersection& its, const Ray& in
         }
 
         if(vpl.type == ESurfaceVPL){
-            Normal n = vpl.its.wi.z > 0.f ? vpl.its.shFrame.n : -vpl.its.shFrame.n;
-            
+            Vector3f n = vpl.its.wi.z > 0.f ? Vector3f(vpl.its.shFrame.n) : Vector3f(-vpl.its.shFrame.n);
+
             if(vpl.emitter != nullptr){
                 DirectionSamplingRecord dir(-wi);
                 //c *= vpl.emitter->evalDirection(dir, vpl.psr);
