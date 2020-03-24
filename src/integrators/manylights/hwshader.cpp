@@ -722,6 +722,8 @@ void HWShader::renderHWBF(std::vector<HWBFPix>& receivers, const std::vector<VPL
         }
         else{
             light_for_slice.type = 2;
+            n = vpl.its.wi.z > 0.f ? n : -n;
+            
             Vector light_wi = vpl.its.toWorld(vpl.its.wi);
 
             light_for_slice.wi.s[0] = light_wi.x;
