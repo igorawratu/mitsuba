@@ -1807,7 +1807,7 @@ void sliceWorkerMDLC(std::vector<std::int32_t>& work, std::uint32_t thread_id, s
             slice_points[i] = slices[slice_id]->sample(i).its;
         }
 
-        auto vpls = light_tree->getClusteringForPoints(scene, slice_points);
+        auto vpls = tot_vpls;//light_tree->getClusteringForPoints(scene, slice_points);
         updateVPLRadii(vpls, general_params.min_dist);
 
         auto cluster_t = std::chrono::high_resolution_clock::now();
@@ -2019,7 +2019,7 @@ std::tuple<std::uint64_t, std::uint64_t> recoverHW(KDTNode<ReconstructionSample>
 }
 
 void clusterWorkerMDLC(BlockingQueue<HWWorkUnit>& input, BlockingQueue<HWWorkUnit>& output,
-    std::vector<std::vector<VPL>>& vpls, LightTree* light_tree, Scene* scene, bool gather_stats, 
+    std::vector<std::vector<VPL>>& vpls, const std::vector<VPL>& tot_vpls, LightTree* light_tree, Scene* scene, bool gather_stats, 
     bool show_svd, float sample_perc, float max_sample_perc, float sample_inc, float min_dist, std::uint32_t thread_id, std::uint32_t num_threads, 
     std::mutex& barrier_mutex, std::condition_variable& barrier, std::mutex& sample_update_mutex,
     std::uint64_t& total_samples, std::uint64_t& num_samples, bool bin_vis, bool importance_sample){
@@ -2035,7 +2035,7 @@ void clusterWorkerMDLC(BlockingQueue<HWWorkUnit>& input, BlockingQueue<HWWorkUni
             slice_points[i] = work_unit.first->sample(i).its;
         }
 
-        vpls[work_unit.second] = light_tree->getClusteringForPoints(scene, slice_points);
+        vpls[work_unit.second] = tot_vpls;//light_tree->getClusteringForPoints(scene, slice_points);
         //not sure if this should change to a radius union approach instead
         updateVPLRadii(vpls[work_unit.second], min_dist);
 
@@ -2395,7 +2395,7 @@ std::tuple<std::uint64_t, std::uint64_t> MatrixReconstructionRenderer::renderHW(
         std::cout << "Creating light tree" << std::endl;
         light_tree = std::unique_ptr<LightTree>(new LightTree(vpls_, min_dist_, num_clusters_, 0.f));
         for(std::uint32_t i = 0; i < num_workers; ++i){
-            clusterers.emplace_back(clusterWorkerMDLC, std::ref(to_cluster), std::ref(to_shade), std::ref(vpls),
+            clusterers.emplace_back(clusterWorkerMDLC, std::ref(to_cluster), std::ref(to_shade), std::ref(vpls), std::ref(vpls_),
                 light_tree.get(), scene, gather_stat_images_, show_svd_, sample_percentage_, max_sample_perc_, sample_inc_, min_dist_, i,
                 num_workers, std::ref(barrier_mutex), std::ref(barrier), std::ref(sample_update_mutex), 
                 std::ref(total_samples), std::ref(num_samples), bin_vis_, adaptive_importance_sampling_);
