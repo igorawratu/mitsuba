@@ -115,9 +115,9 @@ Eigen::MatrixXf calculateClusterContributions(const std::vector<VPL>& vpls,
             }
             
 
-            contributions(i * 3 * samples_per_slice, j) = tot_r;
-            contributions(i * 3 * samples_per_slice + 1, j) = tot_g;
-            contributions(i * 3 * samples_per_slice + 2, j) = tot_b;
+            contributions(i * 3, j) = tot_r;
+            contributions(i * 3 + 1, j) = tot_g;
+            contributions(i * 3 + 2, j) = tot_b;
         }
     }
 
