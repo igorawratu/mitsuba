@@ -247,16 +247,16 @@ Spectrum sample(Scene* scene, Sampler* sampler, Intersection& its, const Ray& in
             if(vpl.emitter != nullptr){
                 DirectionSamplingRecord dir(-wi);
                 //c *= vpl.emitter->evalDirection(dir, vpl.psr);
-                c *= Spectrum(std::max(0.f, dot(vpl.its.shFrame.n, -wi))) / PI;
+                c *= Spectrum(std::min(1.f, std::max(0.f, dot(vpl.its.shFrame.n, -wi)))) / PI;
             }
             else if(vpl.its.getBSDF() != nullptr){
                 BSDFSamplingRecord bsdf_sample_record(vpl.its, vpl.its.toLocal(-wi));
                 //c *= vpl.its.getBSDF()->eval(bsdf_sample_record);
-                c *= Spectrum(std::max(0.f, dot(vpl.its.shFrame.n, -wi))) / PI;
+                c *= Spectrum(std::min(1.f, std::max(0.f, dot(vpl.its.shFrame.n, -wi)))) / PI;
             }
             //fallback to diffuse if no bsdf or emitter found
             else{
-                c *= Spectrum(std::max(0.f, dot(vpl.its.shFrame.n, -wi))) / PI;
+                c *= Spectrum(std::min(1.f, std::max(0.f, dot(vpl.its.shFrame.n, -wi)))) / PI;
             }
         }
     }
