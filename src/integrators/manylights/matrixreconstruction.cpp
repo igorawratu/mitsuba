@@ -1807,7 +1807,7 @@ void sliceWorkerMDLC(std::vector<std::int32_t>& work, std::uint32_t thread_id, s
             slice_points[i] = slices[slice_id]->sample(i).its;
         }
 
-        auto vpls = tot_vpls;//light_tree->getClusteringForPoints(scene, slice_points);
+        auto vpls = light_tree->getClusteringForPoints(scene, slice_points);
         updateVPLRadii(vpls, general_params.min_dist);
 
         auto cluster_t = std::chrono::high_resolution_clock::now();
@@ -2035,7 +2035,7 @@ void clusterWorkerMDLC(BlockingQueue<HWWorkUnit>& input, BlockingQueue<HWWorkUni
             slice_points[i] = work_unit.first->sample(i).its;
         }
 
-        vpls[work_unit.second] = tot_vpls;//light_tree->getClusteringForPoints(scene, slice_points);
+        vpls[work_unit.second] = light_tree->getClusteringForPoints(scene, slice_points);
         //not sure if this should change to a radius union approach instead
         updateVPLRadii(vpls[work_unit.second], min_dist);
 
