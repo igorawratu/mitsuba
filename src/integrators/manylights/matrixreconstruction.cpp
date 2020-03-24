@@ -90,8 +90,13 @@ Eigen::MatrixXf calculateClusterContributions(const std::vector<VPL>& vpls,
 
     #pragma omp parallel for
     for(std::uint32_t i = 0; i < slices.size(); ++i){
-        for(std::uint32_t k = 0; k < samples_per_slice; ++k){
-            auto& curr_sample = slices[i]->sample(rand() % slices[i]->sample_indices.size());
+        std::set<std::uint32_t> generated;
+        while(generated.size() < samples_per_slice){
+            generated.insert(rand() % slices[i]->sample_indices.size());
+        }
+
+        for(auto idx = generated.begin(); idx != generated.end(); ++idx){
+            auto& curr_sample = slices[i]->sample(*idx); 
             for(std::uint32_t j = 0; j < vpls.size(); ++j){
                 std::uint32_t num_samples;
                 Spectrum c = sample(scene, sampler, curr_sample.its, curr_sample.ray, vpls[j], min_dist, true, 5, false, 
@@ -100,9 +105,9 @@ Eigen::MatrixXf calculateClusterContributions(const std::vector<VPL>& vpls,
                 float r, g, b;
                 c.toLinearRGB(r, g, b);
 
-                contributions(i * 3, j) += r;
-                contributions(i * 3 + 1, j) += g;
-                contributions(i * 3 + 2, j) += b;
+                contributions(i * 3, j) = r;
+                contributions(i * 3 + 1, j) = g;
+                contributions(i * 3 + 2, j) = b;
             }
         }
     }
