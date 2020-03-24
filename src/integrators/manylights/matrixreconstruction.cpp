@@ -436,7 +436,7 @@ std::vector<VPL> sampleRepresentatives(const Eigen::MatrixXf& contributions, con
             continue;
         }
         
-        std::vector<float> cluster_dist[clusters[i].size()];
+        std::vector<float> cluster_dist(clusters[i].size());
         float total_vpl_power = 0.f;
         for(std::uint32_t j = 0; j < clusters[i].size(); ++j){
             cluster_dist[j] = contributions.col(clusters[i][j]).norm();
