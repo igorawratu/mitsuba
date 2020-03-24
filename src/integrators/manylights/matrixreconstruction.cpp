@@ -79,11 +79,10 @@ void updateVPLRadii(std::vector<VPL>& vpls, float min_dist){
 
 Eigen::MatrixXf calculateClusterContributions(const std::vector<VPL>& vpls, 
     const std::vector<KDTNode<ReconstructionSample>*>& slices, Scene* scene,
-    float min_dist, std::vector<std::uint32_t>& sampled_slice_rows, std::uint32_t samples_per_slice,
-    bool vsl){
+    float min_dist, std::uint32_t samples_per_slice, bool vsl){
 
     assert(slices.size() > 0 && vpls.size() > 0);
-    Eigen::MatrixXf contributions = Eigen::MatrixXf::Zero(slices.size() * 3 * samples_per_slice, vpls.size());
+    Eigen::MatrixXf contributions = Eigen::MatrixXf::Zero(slices.size() * 3, vpls.size());
     Properties props("independent");
     ref<Sampler> sampler = static_cast<Sampler*>(PluginManager::getInstance()->createObject(MTS_CLASS(Sampler), props));
     sampler->configure();
@@ -91,16 +90,18 @@ Eigen::MatrixXf calculateClusterContributions(const std::vector<VPL>& vpls,
 
     #pragma omp parallel for
     for(std::uint32_t i = 0; i < slices.size(); ++i){
-        std::set<std::uint32_t> generated;
-        while(generated.size() < samples_per_slice){
-            generated.insert(rand() % slices[i]->sample_indices.size());
-        }
+        for(std::uint32_t j = 0; j < vpls.size(); ++j){
+            float tot_r = 0.f;
+            float tot_g = 0.f;
+            float tot_b = 0.f;
 
-        std::uint32_t pos = 0;
-        for(auto idx = generated.begin(); idx != generated.end(); ++idx){
-            sampled_slice_rows[i * samples_per_slice + pos] = *idx;
-            auto& curr_sample = slices[i]->sample(*idx); 
-            for(std::uint32_t j = 0; j < vpls.size(); ++j){
+            std::set<std::uint32_t> generated;
+            while(generated.size() < samples_per_slice){
+                generated.insert(rand() % slices[i]->sample_indices.size());
+            }
+
+            for(auto idx = generated.begin(); idx != generated.end(); ++idx){
+                auto& curr_sample = slices[i]->sample(*idx); 
                 std::uint32_t num_samples;
                 Spectrum c = sample(scene, sampler, curr_sample.its, curr_sample.ray, vpls[j], min_dist, true, 5, false, 
                     curr_sample.intersected_scene, false, vsl, num_samples);
@@ -108,11 +109,15 @@ Eigen::MatrixXf calculateClusterContributions(const std::vector<VPL>& vpls,
                 float r, g, b;
                 c.toLinearRGB(r, g, b);
 
-                contributions(i * 3 * samples_per_slice + pos, j) = r;
-                contributions(i * 3 * samples_per_slice + pos + 1, j) = g;
-                contributions(i * 3 * samples_per_slice + pos + 2, j) = b;
+                tot_r += r;
+                tot_g += g;
+                tot_b += b;
             }
-            pos++;
+            
+
+            contributions(i * 3 * samples_per_slice, j) = tot_r;
+            contributions(i * 3 * samples_per_slice + 1, j) = tot_g;
+            contributions(i * 3 * samples_per_slice + 2, j) = tot_b;
         }
     }
 
@@ -2141,7 +2146,6 @@ std::tuple<std::uint64_t, std::uint64_t> MatrixReconstructionRenderer::renderNon
     std::mutex work_mutex, stats_mutex;
     std::vector<std::thread> workers;
     
-    std::vector<std::uint32_t> sampled_slice_rows;
     Eigen::MatrixXf cluster_contributions;
     std::vector<std::vector<std::uint32_t>> clusters_by_sampling;
     std::vector<std::vector<int>> nearest_neighbours;
@@ -2159,9 +2163,8 @@ std::tuple<std::uint64_t, std::uint64_t> MatrixReconstructionRenderer::renderNon
     if(clustering_strategy_ == ClusteringStrategy::LS){
         ProgressReporter lscc_pr("Calculating cluster contributions", 1, job);
         std::uint32_t num_clusters = std::min(std::uint32_t(vpls_.size()), std::uint32_t(num_clusters_ * 0.3f));
-        sampled_slice_rows.resize(slices.size() * samples_per_slice);
         cluster_contributions = calculateClusterContributions(vpls_, slices, scene, min_dist_,
-            sampled_slice_rows, samples_per_slice, vsl_);
+            samples_per_slice, vsl_);
         lscc_pr.finish();
         std::cout << std::endl;
 
@@ -2173,21 +2176,8 @@ std::tuple<std::uint64_t, std::uint64_t> MatrixReconstructionRenderer::renderNon
 
         ProgressReporter lsann_pr("Finding cluster neighbours", 1, job);
         //approx nearest neighbours here
-        flann::Matrix<float> data_points(new float[sampled_slice_rows.size() * 3], 
-            sampled_slice_rows.size(), 3);
         flann::Matrix<float> slice_centroids(new float[slices.size() * 3], 
             slices.size(), 3);
-
-        for(std::uint32_t i = 0; i < sampled_slice_rows.size(); ++i){
-            float* curr_col = (float*)data_points[i];
-
-            std::uint32_t slice_idx = i / samples_per_slice;
-            auto& sample = slices[slice_idx]->sample(sampled_slice_rows[i]);
-
-            curr_col[0] = sample.its.p.x;
-            curr_col[1] = sample.its.p.y;
-            curr_col[2] = sample.its.p.z;
-        }
 
         for(std::uint32_t i = 0; i < slices.size(); ++i){
             Point slice_centroid(0.f, 0.f, 0.f);
@@ -2202,7 +2192,7 @@ std::tuple<std::uint64_t, std::uint64_t> MatrixReconstructionRenderer::renderNon
             curr_centroid[2] = slice_centroid.z;
         }
 
-        flann::Index<flann::L2<float>> index(data_points, flann::KDTreeIndexParams(4));
+        flann::Index<flann::L2<float>> index(slice_centroids, flann::KDTreeIndexParams(4));
         index.buildIndex();
 
         index.knnSearch(slice_centroids, nearest_neighbours, neighbour_distances, 10 * samples_per_slice, flann::SearchParams(128));
@@ -2320,7 +2310,6 @@ std::tuple<std::uint64_t, std::uint64_t> MatrixReconstructionRenderer::renderHW(
     std::vector<std::thread> clusterers;
 
     std::vector<std::vector<std::uint32_t>> cbsamp;
-    std::vector<std::uint32_t> sampled_slice_rows;
     Eigen::MatrixXf cluster_contributions;
     std::vector<std::vector<int>> nearest_neighbours;
     std::vector<std::vector<float>> neighbour_distances;
@@ -2334,10 +2323,9 @@ std::tuple<std::uint64_t, std::uint64_t> MatrixReconstructionRenderer::renderHW(
 
     if(clustering_strategy_ == ClusteringStrategy::LS){
         std::uint32_t num_clusters = std::min(std::uint32_t(vpls_.size()), std::uint32_t(num_clusters_ * 0.3f));
-        sampled_slice_rows.resize(slices.size() * samples_per_slice);
         std::cout << "Clusters initialized" << std::endl;
         cluster_contributions = calculateClusterContributions(vpls_, slices, scene, min_dist_,
-            sampled_slice_rows, samples_per_slice, vsl_);
+            samples_per_slice, vsl_);
 
         std::cout << "Contributions calculated" << std::endl;
 
@@ -2345,22 +2333,8 @@ std::tuple<std::uint64_t, std::uint64_t> MatrixReconstructionRenderer::renderHW(
 
         std::cout << "VPLs clustered by sampling" << std::endl;
 
-        //approx nearest neighbours here
-        flann::Matrix<float> data_points(new float[sampled_slice_rows.size() * 3], 
-            sampled_slice_rows.size(), 3);
         flann::Matrix<float> slice_centroids(new float[slices.size() * 3], 
             slices.size(), 3);
-
-        for(std::uint32_t i = 0; i < sampled_slice_rows.size(); ++i){
-            float* curr_col = (float*)data_points[i];
-
-            std::uint32_t slice_idx = i / samples_per_slice;
-            auto& sample = slices[slice_idx]->sample(sampled_slice_rows[i]);
-
-            curr_col[0] = sample.its.p.x;
-            curr_col[1] = sample.its.p.y;
-            curr_col[2] = sample.its.p.z;
-        }
 
         for(std::uint32_t i = 0; i < slices.size(); ++i){
             Point slice_centroid(0.f, 0.f, 0.f);
@@ -2375,10 +2349,10 @@ std::tuple<std::uint64_t, std::uint64_t> MatrixReconstructionRenderer::renderHW(
             curr_centroid[2] = slice_centroid.z;
         }
 
-        flann::Index<flann::L2<float>> index(data_points, flann::KDTreeIndexParams(4));
+        flann::Index<flann::L2<float>> index(slice_centroids, flann::KDTreeIndexParams(4));
         index.buildIndex();
 
-        index.knnSearch(slice_centroids, nearest_neighbours, neighbour_distances, 10 * samples_per_slice, flann::SearchParams(128));
+        index.knnSearch(slice_centroids, nearest_neighbours, neighbour_distances, 10, flann::SearchParams(128));
 
         std::cout << "Nearest neighbours found" << std::endl;
 
