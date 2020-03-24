@@ -105,9 +105,9 @@ Eigen::MatrixXf calculateClusterContributions(const std::vector<VPL>& vpls,
                 float r, g, b;
                 c.toLinearRGB(r, g, b);
 
-                contributions(i * 3, j) = r;
-                contributions(i * 3 + 1, j) = g;
-                contributions(i * 3 + 2, j) = b;
+                contributions(i * 3, j) += r;
+                contributions(i * 3 + 1, j) += g;
+                contributions(i * 3 + 2, j) += b;
             }
         }
     }
