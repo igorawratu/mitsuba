@@ -20,20 +20,19 @@ styles = {
 }
 
 coords = {}
-
-min_x = sys.float_info.max
-max_x = -sys.float_info.max
-min_y = sys.float_info.max
-max_y = -sys.float_info.max
+stats = {}
 
 for config_title, config_codes in configurations.items():
 	coords[config_title] = []
+	stats[config_title] = []
 	for config_code in config_codes:
 		timings_filename = path + "/timings_" + config_code
 		error_filename = path + "/" + filename + "_" + config_code + "_errors.txt"
+		samplerates_filename = path + "/samplerates_" + config_code
 
 		timings = []
 		errors = []
+		samplerates = []
 
 		total_timings = 0
 		with open(timings_filename, "r") as timings_file:
@@ -65,18 +64,30 @@ for config_title, config_codes in configurations.items():
 
 			total_errors /= total_num_errors
 
-		min_x = min(min_x, total_timings)
-		max_x = max(max_x, total_timings)
-		min_y = min(min_y, total_errors)
-		max_y = max(max_y, total_errors)
+		total_samplerates = 0
+		with open(samplerates_filename, "r") as samplerates_file:
+			total_num_samplerates = 0
+
+			for y in samplerates_file.read().split('\n'):
+				try:
+					val = float(y)
+					total_samplerates += val
+					samplerates.append(val)
+					total_num_samplerates += 1
+				except:
+					pass
+
+			total_samplerates /= total_num_samplerates
 
 		time_standard_dev = statistics.stdev(timings) if len(timings) > 1 else 0
 		error_standard_dev = statistics.stdev(errors) if len(errors) > 1 else 0
+		samplerates_standard_dev = statistics.stdev(samplerates) if len(samplerates) > 1 else 0
 
 		ebar_x = time_standard_dev / math.sqrt(len(timings))
 		ebar_y = error_standard_dev / math.sqrt(len(errors))
 
 		coords[config_title].append((total_timings, total_errors, ebar_x, ebar_y))
+		stats[config_title].append((config_code, total_timings, time_standard_dev, total_errors, error_standard_dev, total_samplerates, samplerates_standard_dev))
 
 output_str = ""
 output_str += "\\begin{figure}\n"
@@ -112,6 +123,20 @@ output_str += "\\end{axis}\n"
 output_str += "\\end{tikzpicture}\n"
 output_str += "\\end{figure}\n"
 
-o = open(output, "w")
+output_table_str = ""
+for config_title, ccc in coords.items():
+	for cc in ccc:
+		output_table_str += config_title + " " + cc[0] + ":\n"
+		output_table_str += "Time: " + str(cc[1]) + " (" + str(cc[2]) + ")\n"
+		output_table_str += "Error: " + str(cc[3]) + " (" + str(cc[4]) + ")\n"
+		output_table_str += "Samples: " + str(cc[5]) + " (" + str(cc[6]) + ")\n"
+		output_table_str += "\n"
+	output_table_str += "\n\n"
+
+o = open(output + ".tex", "w")
 o.write(output_str)
 o.close()
+
+t = open(output + ".stats", "w")
+t.write(output_table_str)
+t.close()
