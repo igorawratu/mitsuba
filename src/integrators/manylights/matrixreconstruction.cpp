@@ -1382,7 +1382,7 @@ MatrixReconstructionRenderer::MatrixReconstructionRenderer(const std::vector<VPL
     bool adaptive_importance_sampling, bool adaptive_force_resample, bool adaptive_recover_transpose,
     bool truncated, bool show_slices, bool vsl, bool gather_stat_images, bool show_svd,
     ClusteringStrategy clustering_strategy, float error_scale, bool hw, bool bin_vis, std::uint32_t num_clusters,
-    std::uint32_t samples_per_slice, float max_sample_perc, float ver_inc) : 
+    std::uint32_t samples_per_slice, float max_sample_perc, float ver_inc, bool show_vmat) : 
         vpls_(vpls), 
         sample_percentage_(sample_percentage), 
         min_dist_(min_dist), 
@@ -1409,6 +1409,7 @@ MatrixReconstructionRenderer::MatrixReconstructionRenderer(const std::vector<VPL
         samples_per_slice_(samples_per_slice),
         sample_inc_(ver_inc), 
         max_sample_perc_(max_sample_perc),
+        show_vmat_(show_vmat),
         cancel_(false){
 }
 
@@ -1438,6 +1439,7 @@ MatrixReconstructionRenderer::MatrixReconstructionRenderer(MatrixReconstructionR
     samples_per_slice_(other.samples_per_slice_),
     sample_inc_(other.sample_inc_), 
     max_sample_perc_(other.max_sample_perc_),
+    show_vmat_(other.show_vmat_),
     cancel_(other.cancel_){
 }
 
@@ -1469,6 +1471,7 @@ MatrixReconstructionRenderer& MatrixReconstructionRenderer::operator = (MatrixRe
         samples_per_slice_ = other.samples_per_slice_;
         sample_inc_ = other.sample_inc_; 
         max_sample_perc_ = other.max_sample_perc_;
+        show_vmat_ = other.show_vmat_;
         cancel_ = other.cancel_;
     }
     return *this;
@@ -2009,11 +2012,62 @@ std::tuple<std::uint64_t, std::uint64_t> recoverHW(KDTNode<ReconstructionSample>
     return std::make_tuple(slice->sample_indices.size() * vpls.size(), total_performed_samples);
 }
 
+void writeVisibilityToFile(const std::vector<float>& coefficients, std::uint32_t num_lights, std::uint32_t num_receivers, std::string file_name){
+    std::ofstream file;
+    file.open(file_name);
+
+    for(std::uint32_t i = 0; i < num_lights; ++i){
+        for(std::uint32_t j = 0; j < num_receivers; ++j){
+            std::uint32_t idx = i * num_receivers + j;
+            file << coefficients[idx];
+            if(j != num_receivers - 1){
+                file << ", ";
+            }
+            else file << std::endl;
+        }
+    }
+    file.close();
+}
+
+float getVisibilityRank(const std::vector<float>& coefficients, std::uint32_t num_lights, std::uint32_t num_receivers){
+    std::vector<std::vector<std::uint8_t>> basis;
+
+    for(std::uint32_t i = 0; i < num_lights; ++i){
+        std::vector<std::uint8_t> curr_col(num_receivers);
+
+        for(std::uint32_t j = 0; j < num_receivers; ++j){
+            std::uint32_t idx = i * num_receivers + j;
+            curr_col[j] = coefficients[idx] > 0.5f ? 1 : 0;
+        }
+
+        int matching_col = -1;
+        for(std::uint32_t j = 0; j < basis.size(); ++j){
+            bool match = true;
+            for(std::uint32_t k = 0; k < num_receivers; ++k){
+                if(basis[j][k] != curr_col[k]){
+                    match = false;
+                    break;
+                }
+            }
+            if(match){
+                matching_col = j;
+                break;
+            }
+        }
+
+        if(matching_col < 0){
+            basis.push_back(curr_col);
+        }
+    }
+
+    return float(basis.size()) / std::min(num_lights, num_receivers);
+}
+
 void clusterWorkerMDLC(BlockingQueue<HWWorkUnit>& input, BlockingQueue<HWWorkUnit>& output,
     std::vector<std::vector<VPL>>& vpls, const std::vector<VPL>& tot_vpls, LightTree* light_tree, Scene* scene, bool gather_stats, 
     bool show_svd, float sample_perc, float max_sample_perc, float sample_inc, float min_dist, std::uint32_t thread_id, std::uint32_t num_threads, 
     std::mutex& barrier_mutex, std::condition_variable& barrier, std::mutex& sample_update_mutex,
-    std::uint64_t& total_samples, std::uint64_t& num_samples, bool bin_vis, bool importance_sample){
+    std::uint64_t& total_samples, std::uint64_t& num_samples, bool bin_vis, bool importance_sample, bool show_vmat){
     
     HWWorkUnit work_unit;
 
@@ -2033,6 +2087,15 @@ void clusterWorkerMDLC(BlockingQueue<HWWorkUnit>& input, BlockingQueue<HWWorkUni
         std::uint64_t slice_samples, num_slice_sampled;
         std::tie(slice_samples, num_slice_sampled) = recoverHW(work_unit.first, vpls[work_unit.second], scene, gather_stats, show_svd, sample_perc,
             max_sample_perc, sample_inc, min_dist, rng, importance_sample, bin_vis);
+
+        if(gather_stats){
+            writeVisibilityToFile(work_unit.first->visibility_coefficients, vpls[work_unit.second].size(), work_unit.first->sample_indices.size(), 
+                std::string("vmat/vmat_" + std::to_string(work_unit.first->sample(0).image_x) + "_" + std::to_string(work_unit.first->sample(0).image_y)));
+        
+            work_unit.first->rank_ratio2 = getVisibilityRank(work_unit.first->visibility_coefficients, 
+                vpls[work_unit.second].size(), work_unit.first->sample_indices.size());
+        }
+        
         {
             std::lock_guard<std::mutex> lock(sample_update_mutex);
             total_samples += slice_samples;
@@ -2060,7 +2123,7 @@ void clusterWorkerLS(BlockingQueue<HWWorkUnit>& input, BlockingQueue<HWWorkUnit>
     const std::vector<VPL>& total_vpls, std::uint32_t num_clusters, Scene* scene, bool gather_stats, bool show_svd, 
     float sample_perc, float max_sample_perc, float sample_inc, float min_dist, std::uint32_t thread_id, std::uint32_t num_threads, std::mutex& barrier_mutex,
     std::condition_variable& barrier, std::mutex& sample_update_mutex, std::uint64_t& total_samples, std::uint64_t& num_samples,
-    bool bin_vis, bool importance_sample){
+    bool bin_vis, bool importance_sample, bool show_vmat){
 
     std::mt19937 rng(std::chrono::high_resolution_clock::now().time_since_epoch().count() * thread_id);
     std::uint32_t split_num_clusters = std::min(total_vpls.size(), num_clusters - cbsamp.size());
@@ -2075,6 +2138,14 @@ void clusterWorkerLS(BlockingQueue<HWWorkUnit>& input, BlockingQueue<HWWorkUnit>
         std::uint64_t slice_samples, num_slice_sampled;
         std::tie(slice_samples, num_slice_sampled) = recoverHW(work_unit.first, vpls[work_unit.second], scene, gather_stats, show_svd, sample_perc,
             max_sample_perc, sample_inc, min_dist, rng, importance_sample, bin_vis);
+        if(gather_stats){
+            writeVisibilityToFile(work_unit.first->visibility_coefficients, vpls[work_unit.second].size(), work_unit.first->sample_indices.size(), 
+                std::string("vmat/vmat_" + std::to_string(work_unit.first->sample(0).image_x) + "_" + std::to_string(work_unit.first->sample(0).image_y)));
+            
+            work_unit.first->rank_ratio2 = getVisibilityRank(work_unit.first->visibility_coefficients, 
+                vpls[work_unit.second].size(), work_unit.first->sample_indices.size());
+        }
+
         {
             std::lock_guard<std::mutex> lock(sample_update_mutex);
             total_samples += slice_samples;
@@ -2347,7 +2418,7 @@ std::tuple<std::uint64_t, std::uint64_t> MatrixReconstructionRenderer::renderHW(
                 std::ref(cbsamp), std::ref(cluster_contributions), std::ref(nearest_neighbours), std::ref(vpls_),
                 num_clusters_, scene, gather_stat_images_, show_svd_, sample_percentage_, max_sample_perc_, sample_inc_, min_dist_, i,
                 num_workers, std::ref(barrier_mutex), std::ref(barrier), std::ref(sample_update_mutex), std::ref(total_samples), std::ref(num_samples),
-                bin_vis_, adaptive_importance_sampling_);
+                bin_vis_, adaptive_importance_sampling_, show_vmat_);
         }
         
     }
@@ -2358,7 +2429,7 @@ std::tuple<std::uint64_t, std::uint64_t> MatrixReconstructionRenderer::renderHW(
             clusterers.emplace_back(clusterWorkerMDLC, std::ref(to_cluster), std::ref(to_shade), std::ref(vpls), std::ref(vpls_),
                 light_tree.get(), scene, gather_stat_images_, show_svd_, sample_percentage_, max_sample_perc_, sample_inc_, min_dist_, i,
                 num_workers, std::ref(barrier_mutex), std::ref(barrier), std::ref(sample_update_mutex), 
-                std::ref(total_samples), std::ref(num_samples), bin_vis_, adaptive_importance_sampling_);
+                std::ref(total_samples), std::ref(num_samples), bin_vis_, adaptive_importance_sampling_, show_vmat_);
         }
     }
 
@@ -2450,6 +2521,12 @@ bool MatrixReconstructionRenderer::render(Scene* scene, std::uint32_t spp, const
         writeOutputImage(scene, "slices", size.x, size.y, true, slice_cols);
         writeOutputImage(scene, "full_sample", size.x, size.y, true, full_sample);
         writeOutputImage(scene, "visibility_errors", size.x, size.y, true, visibility_errors);
+
+        if(hw_){
+            std::vector<Spectrum> col_rank(image_size, Spectrum(0.f));
+            constructSvdBuffers(col_rank, slices, spp, size.x);
+            writeOutputImage(scene, "visibility_rank", size.x, size.y, true, col_rank);
+        }
         
         /*float err = writeOutputErrorImage(scene, "error", size.x, size.y, true, recovered, full_sample, error_scale_);
         std::cout << "Total error: " << err << std::endl;
