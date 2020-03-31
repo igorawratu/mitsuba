@@ -22,6 +22,9 @@ styles = {
 coords = {}
 stats = {}
 
+max_x = -99999
+max_y = -99999
+
 for config_title, config_codes in configurations.items():
 	coords[config_title] = []
 	stats[config_title] = []
@@ -41,6 +44,7 @@ for config_title, config_codes in configurations.items():
 			for y in timings_file.read().split('\n'):
 				try:
 					val = float(y)
+					max_x = max(max_x, val)
 					total_timings += val
 					timings.append(val)
 					total_num_timings += 1
@@ -56,6 +60,7 @@ for config_title, config_codes in configurations.items():
 			for y in errors_file.read().split('\n'):
 				try:
 					val = float(y)
+					max_y = max(max_y, val)
 					total_errors += val
 					errors.append(val)
 					total_num_errors += 1
