@@ -129,7 +129,7 @@ output_str += "\\end{tikzpicture}\n"
 output_str += "\\end{figure}\n"
 
 output_table_str = ""
-for config_title, ccc in coords.items():
+for config_title, ccc in stats.items():
 	for cc in ccc:
 		output_table_str += config_title + " " + cc[0] + ":\n"
 		output_table_str += "Time: " + str(cc[1]) + " (" + str(cc[2]) + ")\n"
