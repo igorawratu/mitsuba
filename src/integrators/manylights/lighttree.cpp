@@ -574,7 +574,7 @@ float calculateClusterBounds(Point shading_point_position, Normal shading_point_
 		float angle = acos(dot(-light_tree_node->bcone.GetAxis(), shading_point_normal));
 		float coneAngle = acos(light_tree_node->bcone.GetAngleCos());
 		float dif = std::max(0.f, angle - coneAngle);
-		largest = std::max(0.f, cos(dif));
+		largest = std::max(0.f, float(cos(dif)));
 	}
 
 	float material = std::max(0.f, largest);
