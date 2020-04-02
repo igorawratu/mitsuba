@@ -2089,8 +2089,11 @@ void clusterWorkerMDLC(BlockingQueue<HWWorkUnit>& input, BlockingQueue<HWWorkUni
             max_sample_perc, sample_inc, min_dist, rng, importance_sample, bin_vis);
 
         if(gather_stats){
+            fs::path scene_path = scene->getDestinationFile();
+            std::string filename_and_path = (scene_path.parent_path() / std::string("vmat/vmat_" + std::to_string(work_unit.first->sample(0).image_x) + "_" + std::to_string(work_unit.first->sample(0).image_y))).string();
+
             writeVisibilityToFile(work_unit.first->visibility_coefficients, vpls[work_unit.second].size(), work_unit.first->sample_indices.size(), 
-                std::string("vmat/vmat_" + std::to_string(work_unit.first->sample(0).image_x) + "_" + std::to_string(work_unit.first->sample(0).image_y)));
+                filename_and_path);
         
             work_unit.first->rank_ratio2 = getVisibilityRank(work_unit.first->visibility_coefficients, 
                 vpls[work_unit.second].size(), work_unit.first->sample_indices.size());
@@ -2139,8 +2142,10 @@ void clusterWorkerLS(BlockingQueue<HWWorkUnit>& input, BlockingQueue<HWWorkUnit>
         std::tie(slice_samples, num_slice_sampled) = recoverHW(work_unit.first, vpls[work_unit.second], scene, gather_stats, show_svd, sample_perc,
             max_sample_perc, sample_inc, min_dist, rng, importance_sample, bin_vis);
         if(gather_stats){
+            fs::path scene_path = scene->getDestinationFile();
+            std::string filename_and_path = (scene_path.parent_path() / std::string("vmat/vmat_" + std::to_string(work_unit.first->sample(0).image_x) + "_" + std::to_string(work_unit.first->sample(0).image_y))).string();
             writeVisibilityToFile(work_unit.first->visibility_coefficients, vpls[work_unit.second].size(), work_unit.first->sample_indices.size(), 
-                std::string("vmat/vmat_" + std::to_string(work_unit.first->sample(0).image_x) + "_" + std::to_string(work_unit.first->sample(0).image_y)));
+                filename_and_path);
             
             work_unit.first->rank_ratio2 = getVisibilityRank(work_unit.first->visibility_coefficients, 
                 vpls[work_unit.second].size(), work_unit.first->sample_indices.size());
