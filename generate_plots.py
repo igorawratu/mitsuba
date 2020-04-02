@@ -6,18 +6,37 @@ path = sys.argv[1]
 filename = sys.argv[2]
 scene_name = sys.argv[3]
 output = sys.argv[4]
+material = sys.argv[5]
 
-configurations = {
-	"AMC" : ["amr_500", "amr_1000", "amr_2000", "amr_4000", "amr_8000"],
-	"MDLC" : ["mdlc_250", "mdlc_500", "mdlc_1000", "mdlc_2000", "mdlc_4000"],
-	"LS" : ["ls_250", "ls_500", "ls_1000", "ls_2000", "ls_4000"]
-}
+configurations = {}
+styles = {}
 
-styles = {
-	"AMC" : ("blue", "square"),
-	"MDLC" : ("red", "square"),
-	"LS" : ("green", "square")
-}
+if material == "diffuse":
+	configurations = {
+		"AMC" : ["amr_500", "amr_1000", "amr_2000", "amr_4000", "amr_8000"],
+		"MDLC" : ["mdlc_250", "mdlc_500", "mdlc_1000", "mdlc_2000", "mdlc_4000"],
+		"LS" : ["ls_250", "ls_500", "ls_1000", "ls_2000", "ls_4000"],
+		"Mat Sep" : ["amr_500", "amr_1000", "amr_2000", "amr_4000", "amr_8000"]
+	}
+
+	styles = {
+		"AMC" : ("blue", "square"),
+		"MDLC" : ("red", "square"),
+		"LS" : ("green", "square"),
+		"Mat Sep" : ("black", "square")
+	}
+else:
+	configurations = {
+		"AMC" : ["amr_500", "amr_1000", "amr_2000", "amr_4000", "amr_8000"],
+		"MDLC" : ["mdlc_250", "mdlc_500", "mdlc_1000", "mdlc_2000", "mdlc_4000"],
+		"LS" : ["ls_250", "ls_500", "ls_1000", "ls_2000", "ls_4000"]
+	}
+
+	styles = {
+		"AMC" : ("blue", "square"),
+		"MDLC" : ("red", "square"),
+		"LS" : ("green", "square")
+	}
 
 coords = {}
 stats = {}

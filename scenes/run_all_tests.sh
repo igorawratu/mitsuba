@@ -26,16 +26,16 @@ ${source_dir}/run_time_error_staircase.sh
 ${source_dir}/run_time_error_kitchen.sh
 ${source_dir}/run_time_error_bathroom.sh
 
-python3 "${source_dir}/../generate_plots.py" "${source_dir}/cbox" "cbox" "Cornell box" "${source_dir}/cbox"
-python3 "${source_dir}/../generate_plots.py" "${source_dir}/breakfast-room/breakfast-room" "scene" "Breakfast room" "${source_dir}/breakfast-room"
-python3 "${source_dir}/../generate_plots.py" "${source_dir}/classroom" "scene" "Classroom" "${source_dir}/classroom"
-python3 "${source_dir}/../generate_plots.py" "${source_dir}/hairball" "hairball" "Hairball" "${source_dir}/hairball"
-python3 "${source_dir}/../generate_plots.py" "${source_dir}/living_room_3/living-room-3" "scene" "Living room" "${source_dir}/living-room"
-python3 "${source_dir}/../generate_plots.py" "${source_dir}/san_miguel" "san-miguel" "San-miguel" "${source_dir}/san-miguel"
-python3 "${source_dir}/../generate_plots.py" "${source_dir}/sponza" "sponza" "Sponza" "${source_dir}/sponza"
-python3 "${source_dir}/../generate_plots.py" "${source_dir}/staircase/staircase" "scene" "Staircase" "${source_dir}/staircase"
-python3 "${source_dir}/../generate_plots.py" "${source_dir}/kitchen" "scene" "Kitchen" "${source_dir}/kitchen"
-python3 "${source_dir}/../generate_plots.py" "${source_dir}/bathroom/bathroom" "scene" "Bathroom" "${source_dir}/bathroom"
+python3 "${source_dir}/../generate_plots.py" "${source_dir}/cbox" "cbox" "Cornell box" "${source_dir}/cbox" "diffuse"
+python3 "${source_dir}/../generate_plots.py" "${source_dir}/breakfast-room/breakfast-room" "scene" "Breakfast room" "${source_dir}/breakfast-room" "diffuse"
+python3 "${source_dir}/../generate_plots.py" "${source_dir}/classroom" "scene" "Classroom" "${source_dir}/classroom" "diffuse"
+python3 "${source_dir}/../generate_plots.py" "${source_dir}/hairball" "hairball" "Hairball" "${source_dir}/hairball" "diffuse"
+python3 "${source_dir}/../generate_plots.py" "${source_dir}/living_room_3/living-room-3" "scene" "Living room" "${source_dir}/living-room" "diffuse"
+python3 "${source_dir}/../generate_plots.py" "${source_dir}/san_miguel" "san-miguel" "San-miguel" "${source_dir}/san-miguel" "diffuse"
+python3 "${source_dir}/../generate_plots.py" "${source_dir}/sponza" "sponza" "Sponza" "${source_dir}/sponza" "diffuse"
+python3 "${source_dir}/../generate_plots.py" "${source_dir}/staircase/staircase" "scene" "Staircase" "${source_dir}/staircase" "diffuse"
+python3 "${source_dir}/../generate_plots.py" "${source_dir}/kitchen" "scene" "Kitchen" "${source_dir}/kitchen" "glossy"
+python3 "${source_dir}/../generate_plots.py" "${source_dir}/bathroom/bathroom" "scene" "Bathroom" "${source_dir}/bathroom" "glossy"
 
 chmod +x "${source_dir}/run_bool_sanmiguel.sh"
 chmod +x "${source_dir}/run_is_sanmiguel.sh"
