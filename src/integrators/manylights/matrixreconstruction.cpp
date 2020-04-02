@@ -2060,7 +2060,7 @@ float getVisibilityRank(const std::vector<float>& coefficients, std::uint32_t nu
         }
     }
 
-    return float(basis.size()) / std::min(num_lights, num_receivers);
+    return float(basis.size()) / num_lights;
 }
 
 void clusterWorkerMDLC(BlockingQueue<HWWorkUnit>& input, BlockingQueue<HWWorkUnit>& output,
