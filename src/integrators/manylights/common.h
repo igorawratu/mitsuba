@@ -8,6 +8,7 @@
 #include <eigen3/Eigen/Dense>
 #include <flann/flann.hpp>
 #include <mutex>
+#include <limits>
 
 #include "definitions.h"
 #include "arpaca.hpp"
@@ -365,6 +366,86 @@ void getSlices(KDTNode<Sample>* curr, std::vector<KDTNode<Sample>*>& slices){
 }
 
 std::uint64_t upperPo2(std::uint64_t v);
+
+
+/*template<class Sample>
+struct OctreeNode{
+    std::vector<std::uint32_t> sample_indices;
+    std::vector<Sample>* samples;
+    std::vector<std::unique_ptr<KDTNode>> children;
+    Spectrum min_est, est;
+    std::pair<Vector3f, Vector3f> bb;
+    std::pair<Vector3f, Vector3f> nbb;
+
+    std::uint32_t representative;
+    float estimated_total_contrib;
+
+    OctreeNode() = delete;
+
+    OctreeNode(std::vector<Sample>* sample_set, std::vector<Sample>&& indices, const std::pair<Vector3f, Vector3f>& cbb,
+            const std::pair<Vector3f, Vector3f>& cnbb, std::uint8_t level, std::uint8_t num_normal_levels) : 
+        sample_indices(indices),
+        samples(sample_set), min_est(0.f), est(0.f), 
+        children(8, nullptr),
+        bb(cbb), nbb(cnbb){
+        assert(sample_indices.size() > 0);
+
+        if(sample_indices.size() > 1){
+            Vector3f midpoints = level < num_normal_levels ? (nbb_max + nbb_min) / 2.f : (bb_max + bb_min) / 2.f;
+
+            std::vector<std::pair<Vector3f, Vector3f>> children_bb(8, 
+                std::make_pair(Vector3f(std::numeric_limits<float>::max()), Vector3f(-std::numeric_limits<float>::max())));
+            std::vector<std::pair<Vector3f, Vector3f>> children_nbb(8, 
+                std::make_pair(Vector3f(std::numeric_limits<float>::max()), Vector3f(-std::numeric_limits<float>::max())));
+            std::vector<std::vector<std::uint32_t>> children_indices(8);
+
+            for(std::uint32_t i = 0; i < sample_indices.size(); ++i){
+                Sample& curr_sample = sample(i);
+
+                Vector3f p(curr_sample.its.p);
+                Vector3f n(curr_sample.its.shFrame.n);
+
+                std::uint8_t child = getChildIndex()
+            }
+        }
+        
+
+
+    }
+
+    Sample& sample(std::uint32_t index){
+        assert(samples != nullptr && index < sample_indices.size());
+
+        return (*samples)[sample_indices[index]];
+    }
+
+private:
+    std::uint8_t getChildIndex(Vector3f child_pos, Vector3f midpoints){
+        std::uint8_t idx = 0;
+
+        if(child_pos.x > midpoints.x){
+            idx |= 1;
+        }
+
+        if(child_pos.y > midpoints.y){
+            idx |= 2;
+        }
+
+        if(child_pos.z > midpoints.z){
+            idx |= 4;
+        }
+    }
+
+    void expand_bb(std::pair<Vector3f, Vector3f>& bb, const Vector3f& v){
+        bb.first.x = std::min(bb.first.x, v.x);
+        bb.first.y = std::min(bb.first.y, v.y);
+        bb.first.z = std::min(bb.first.z, v.z);
+
+        bb.second.x = std::min(bb.second.x, v.x);
+        bb.second.y = std::min(bb.second.y, v.y);
+        bb.second.z = std::min(bb.second.z, v.z);
+    }
+};*/
 
 MTS_NAMESPACE_END
 
