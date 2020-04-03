@@ -16,7 +16,7 @@ if material == "diffuse":
 		"AMC" : ["amr_500", "amr_1000", "amr_2000", "amr_4000", "amr_8000"],
 		"MDLC" : ["mdlc_250", "mdlc_500", "mdlc_1000", "mdlc_2000", "mdlc_4000"],
 		"LS" : ["ls_250", "ls_500", "ls_1000", "ls_2000", "ls_4000"],
-		"Mat Sep" : ["amr_500", "amr_1000", "amr_2000", "amr_4000", "amr_8000"]
+		"Mat Sep" : ["matsep_500", "matsep_1000", "matsep_2000", "matsep_4000", "matsep_8000"]
 	}
 
 	styles = {
