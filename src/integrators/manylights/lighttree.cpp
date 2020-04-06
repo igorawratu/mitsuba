@@ -520,7 +520,7 @@ float calculateClusterEstimate(Scene* scene, Point shading_point_position, Norma
 	return material * geometric * node->emission_scale;
 }
 
-float calculateClusterBounds(Point shading_point_position, Normal shading_point_normal,
+float LightTree::calculateClusterBounds(Point shading_point_position, Normal shading_point_normal,
 	LightTreeNode* light_tree_node, EVPLType vpl_type, float min_dist){
 
 	float geometric = 0.f;

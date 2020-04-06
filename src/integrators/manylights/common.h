@@ -9,10 +9,12 @@
 #include <flann/flann.hpp>
 #include <mutex>
 #include <limits>
+#include <random>
 
 #include "definitions.h"
 #include "arpaca.hpp"
 #include "RedSVD-h.hpp"
+#include "dircone.h"
 
 MTS_NAMESPACE_BEGIN
 
@@ -368,7 +370,7 @@ void getSlices(KDTNode<Sample>* curr, std::vector<KDTNode<Sample>*>& slices){
 std::uint64_t upperPo2(std::uint64_t v);
 
 
-/*template<class Sample>
+template<class Sample>
 struct OctreeNode{
     std::vector<std::uint32_t> sample_indices;
     std::vector<Sample>* samples;
@@ -376,28 +378,33 @@ struct OctreeNode{
     Spectrum min_est, est;
     std::pair<Vector3f, Vector3f> bb;
     std::pair<Vector3f, Vector3f> nbb;
+    std::uint8_t level;
 
     std::uint32_t representative;
-    float estimated_total_contrib;
+    float upper_bound;
+    DirConef bcone;
 
     OctreeNode() = delete;
 
-    OctreeNode(std::vector<Sample>* sample_set, std::vector<Sample>&& indices, const std::pair<Vector3f, Vector3f>& cbb,
-            const std::pair<Vector3f, Vector3f>& cnbb, std::uint8_t level, std::uint8_t num_normal_levels) : 
+    OctreeNode(std::vector<Sample>* sample_set, std::vector<std::uint32_t>&& indices, const std::pair<Vector3f, Vector3f>& cbb,
+            const std::pair<Vector3f, Vector3f>& cnbb, std::uint8_t curr_level, std::uint8_t num_normal_levels,
+            std::mt19937& rng) : 
         sample_indices(indices),
         samples(sample_set), min_est(0.f), est(0.f), 
         children(8, nullptr),
-        bb(cbb), nbb(cnbb){
+        bb(cbb), nbb(cnbb), level(curr_level), representative(0), upper_bound(0.f){
         assert(sample_indices.size() > 0);
 
         if(sample_indices.size() > 1){
             Vector3f midpoints = level < num_normal_levels ? (nbb_max + nbb_min) / 2.f : (bb_max + bb_min) / 2.f;
 
-            std::vector<std::pair<Vector3f, Vector3f>> children_bb(8, 
+            std::vector<std::pair<Vector3f, Vector3f>> child_bb(8, 
                 std::make_pair(Vector3f(std::numeric_limits<float>::max()), Vector3f(-std::numeric_limits<float>::max())));
-            std::vector<std::pair<Vector3f, Vector3f>> children_nbb(8, 
+            std::vector<std::pair<Vector3f, Vector3f>> child_nbb(8, 
                 std::make_pair(Vector3f(std::numeric_limits<float>::max()), Vector3f(-std::numeric_limits<float>::max())));
-            std::vector<std::vector<std::uint32_t>> children_indices(8);
+            std::vector<std::vector<std::uint32_t>> child_indices(8);
+
+            std::vector<float> point_energies(sample_indices.size());
 
             for(std::uint32_t i = 0; i < sample_indices.size(); ++i){
                 Sample& curr_sample = sample(i);
@@ -405,12 +412,48 @@ struct OctreeNode{
                 Vector3f p(curr_sample.its.p);
                 Vector3f n(curr_sample.its.shFrame.n);
 
-                std::uint8_t child = getChildIndex()
+                Vector3f div_dims = level < num_normal_levels ? n : p;
+
+                std::uint8_t child_idx = getChildIndex(div_dims, midpoints);
+                child_indices[child_idx].push_back(sample_indices[i]);
+                expandBB(child_bb[child_idx], p);
+                expandBB(child_bb[child_idx], n);
+
+                //only modeling diffuse for representative sampling for now, glossier bsdfs would require actually evaluating them as they are
+                //view dependant
+                point_energies[i] = curr_sample.its.getBSDF()->getDiffuseReflectance(curr_sample.its);
+            }
+
+            bcone = DirConef(Vector3f(0.f));
+
+            for(std::uint8_t i = 0; i < child_indices.size(); ++i){
+                if(child_indices[i].size() == 0){
+                    continue;
+                }
+
+                children[i].emplace_back(new OctreeNode(sample_set, 
+                    std::move(child_indices[i]), child_bb[i], child_nbb[i], level + 1, num_normal_levels));
+
+                bcone = DirConef::Union(bcone, children[i]->bcone);
+            }
+
+            std::discrete_distribution<std::uint32_t> energy_dist(point_energies.begin(), point_energies.end());
+            representative = energy_dist(rng);
+        }
+        else{
+            Vector3f cone_axis(representative().its.shFrame.n);
+            bcone = DirConef(cone_axis);
+        }
+    }
+
+    void updateUpperBound(float val){
+        upper_bound += val;
+
+        for(std::uint8_t i = 0; i < children.size(); ++i){
+            if(children[i] != nullptr){
+                children[i]->updateUpperBound(val);
             }
         }
-        
-
-
     }
 
     Sample& sample(std::uint32_t index){
@@ -418,6 +461,13 @@ struct OctreeNode{
 
         return (*samples)[sample_indices[index]];
     }
+
+    Sample& representative(){
+        assert(samples != nullptr && representative < sample_indices.size());
+
+        return (*samples)[sample_indices[representative]];
+    }
+
 
 private:
     std::uint8_t getChildIndex(Vector3f child_pos, Vector3f midpoints){
@@ -436,7 +486,7 @@ private:
         }
     }
 
-    void expand_bb(std::pair<Vector3f, Vector3f>& bb, const Vector3f& v){
+    void expandBB(std::pair<Vector3f, Vector3f>& bb, const Vector3f& v){
         bb.first.x = std::min(bb.first.x, v.x);
         bb.first.y = std::min(bb.first.y, v.y);
         bb.first.z = std::min(bb.first.z, v.z);
@@ -445,7 +495,7 @@ private:
         bb.second.y = std::min(bb.second.y, v.y);
         bb.second.z = std::min(bb.second.z, v.z);
     }
-};*/
+};
 
 MTS_NAMESPACE_END
 
