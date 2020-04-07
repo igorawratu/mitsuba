@@ -447,6 +447,11 @@ struct OctreeNode{
         }
     }
 
+    OctreeNode(const OctreeNode& other) = delete;
+    OctreeNode& operator=(const OctreeNode& other) = delete;
+    OctreeNode(OctreeNode&& other) = delete;
+    OctreeNode& operator=(OctreeNode&& other) = delete;
+
     void updateUpperBound(float val){
         upper_bound += val;
 
