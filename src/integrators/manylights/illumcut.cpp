@@ -325,7 +325,7 @@ void computeUpperBounds(LightTree* lt, OctreeNode<IllumcutSample>* rt_root, Scen
             }
         }
         else{
-            std::cout << "sampling upper bound " << curr.second.sample_indices.size() << std::endl;
+            std::cout << "sampling upper bound " << curr.second->sample_indices.size() << std::endl;
             IllumcutSample& curr_sample = curr.second->representative();
 
             std::uint32_t samples_taken;
