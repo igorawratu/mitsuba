@@ -301,12 +301,12 @@ void computeUpperBounds(LightTree* lt, OctreeNode<IllumcutSample>* rt_root, Scen
     }
 
     while(!node_stack.empty()){
-        std::cout << node_stack.size() << std::endl;
         IllumPair curr = node_stack.top();
         node_stack.pop();
 
         if(refineUpper(curr)){
             if(refineLTree(curr)){
+                std::cout << "refine l tree" << std::endl;
                 if(curr.first->left != nullptr){
                     node_stack.push(std::make_pair(curr.first->left.get(), curr.second));
                 }
@@ -316,6 +316,7 @@ void computeUpperBounds(LightTree* lt, OctreeNode<IllumcutSample>* rt_root, Scen
                 }
             }
             else{
+                std::cout << "refine r tree" << std::endl;
                 for(std::uint8_t i = 0; i < curr.second->children.size(); ++i){
                     if(curr.second->children[i] != nullptr){
                         node_stack.push(std::make_pair(curr.first, curr.second->children[i].get()));
@@ -324,6 +325,7 @@ void computeUpperBounds(LightTree* lt, OctreeNode<IllumcutSample>* rt_root, Scen
             }
         }
         else{
+            std::cout << "sampling upper bound " << curr.second.sample_indices.size() << std::endl;
             IllumcutSample& curr_sample = curr.second->representative();
 
             std::uint32_t samples_taken;
