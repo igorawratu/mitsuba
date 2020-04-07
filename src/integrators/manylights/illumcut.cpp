@@ -453,7 +453,7 @@ bool IlluminationCutRenderer::render(Scene* scene, std::uint32_t spp, const Rend
     std::cout << "Computed upper bounds" << std::endl;
 
     std::vector<IllumPair> illum_aware_pairs = getIlluminationAwarePairs(light_tree.get(), receiver_root.get(), min_dist_, error_threshold_);
-    std::cout << "acquired " << illum_aware_pairs << " illumination aware pairs" << std::endl;
+    std::cout << "acquired " << illum_aware_pairs.size() << " illumination aware pairs" << std::endl;
 
     std::cout << "rendering..." << std::endl;
     renderIllumAwarePairs(illum_aware_pairs, scene, min_dist_);
