@@ -227,6 +227,10 @@ bool refineLTree(const IllumPair& illum_pair){
         return false;
     }
 
+    if(illum_pair.second->sample_indices.size() == 1){
+        return true;
+    }
+
     assert(illum_pair.first->left && illum_pair.first->right);
 
     std::pair<Vector3f, Vector3f> lightbb(Vector3f(illum_pair.first->min_bounds), Vector3f(illum_pair.first->max_bounds));
