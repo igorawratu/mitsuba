@@ -443,10 +443,18 @@ bool IlluminationCutRenderer::render(Scene* scene, std::uint32_t spp, const Rend
     memset(output_image, 0, output_bitmap->getBytesPerPixel() * size.x * size.y);
 
     std::unique_ptr<LightTree> light_tree(new LightTree(vpls_, min_dist_, 0, 0.f));
+    std::cout << "Created light tree" << std::endl;
+
     auto receiver_root = constructOctree(scene, samples_, min_dist_, spp);
+    std::cout << "Constructed octree" << std::endl;
 
     computeUpperBounds(light_tree.get(), receiver_root.get(), scene, min_dist_);
+    std::cout << "Computed upper bounds" << std::endl;
+
     std::vector<IllumPair> illum_aware_pairs = getIlluminationAwarePairs(light_tree.get(), receiver_root.get(), min_dist_, error_threshold_);
+    std::cout << "acquired " << illum_aware_pairs << " illumination aware pairs" << std::endl;
+
+    std::cout << "rendering..." << std::endl;
     renderIllumAwarePairs(illum_aware_pairs, scene, min_dist_);
 
     copySamplesToBuffer(output_image, samples_, size, spp);
