@@ -131,7 +131,9 @@ std::unique_ptr<OctreeNode<IllumcutSample>> constructOctree(Scene* scene, std::v
 
     std::mt19937 rng(std::chrono::high_resolution_clock::now().time_since_epoch().count());
 
-    return std::unique_ptr<OctreeNode<IllumcutSample>>(new OctreeNode(&samples, std::move(sample_indices), bb, nbb, 0, 3, rng));
+    std::unique_ptr<OctreeNode<IllumcutSample>> root(new OctreeNode(&samples, std::move(sample_indices), bb, nbb, 0, 3, rng));
+
+    return std::move(root);
 }
 
 typedef std::pair<LightTreeNode*, OctreeNode<IllumcutSample>*> IllumPair;
@@ -328,7 +330,7 @@ void computeUpperBounds(LightTree* lt, OctreeNode<IllumcutSample>* rt_root, Scen
             Spectrum col = sample(scene, sampler, curr_sample.its, curr_sample.ray, curr.first->vpl, min_dist, 
                 true, 10, false, curr_sample.intersected_scene, true, false, samples_taken);
 
-            curr.first->updateUpperBound(col.getLuminance());
+            curr.second->updateUpperBound(col.getLuminance());
         }
     }
 }
@@ -387,7 +389,7 @@ void renderIllumAwarePairs(const std::vector<IllumPair>& ilps, Scene* scene, flo
     sampler->generate(Point2i(0));
 
     for(std::uint32_t i = 0; i < ilps.size(); ++i){
-        for(std::uint32_t j = 0; j < ilps[i].second->sample_indices(); ++j){
+        for(std::uint32_t j = 0; j < ilps[i].second->sample_indices.size(); ++j){
             IllumcutSample& curr_sample = ilps[i].second->sample(j);
             std::uint32_t samples_taken;
 
@@ -437,7 +439,6 @@ bool IlluminationCutRenderer::render(Scene* scene, std::uint32_t spp, const Rend
     if(size.x == 0 || size.y == 0){
         return true;
     }
-    std::uint32_t samples_per_slice = samples_per_slice_;
 
     ref<Bitmap> output_bitmap = new Bitmap(Bitmap::ERGB, Bitmap::EUInt8, size);
     std::uint8_t* output_image = output_bitmap->getUInt8Data();
@@ -447,11 +448,13 @@ bool IlluminationCutRenderer::render(Scene* scene, std::uint32_t spp, const Rend
     auto receiver_root = constructOctree(scene, samples_, min_dist_, spp);
 
     computeUpperBounds(light_tree.get(), receiver_root.get(), scene, min_dist_);
-    std::vector<IllumPair> illum_aware_pairs = getIlluminationAwarePairs(light_tree.get(), receiver_root.get());
+    std::vector<IllumPair> illum_aware_pairs = getIlluminationAwarePairs(light_tree.get(), receiver_root.get(), min_dist_, error_threshold_);
     renderIllumAwarePairs(illum_aware_pairs, scene, min_dist_);
 
     copySamplesToBuffer(output_image, samples_, size, spp);
     film->setBitmap(output_bitmap);
+
+    return true;
 }
 
 MTS_NAMESPACE_END
