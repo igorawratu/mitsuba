@@ -390,7 +390,7 @@ struct OctreeNode{
             const std::pair<Vector3f, Vector3f>& cnbb, std::uint8_t curr_level, std::uint8_t num_normal_levels,
             std::mt19937& rng) : 
         sample_indices(indices),
-        samples(sample_set), children(8, nullptr),
+        samples(sample_set), children(8),
         min_est(0.f), est(0.f), 
         bb(cbb), nbb(cnbb), level(curr_level), representative_idx(0), upper_bound(0.f){
         assert(sample_indices.size() > 0);
