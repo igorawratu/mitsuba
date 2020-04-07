@@ -223,6 +223,7 @@ float distanceSqr(const std::pair<Vector3f, Vector3f>& a, const std::pair<Vector
 
 bool refineLTree(const IllumPair& illum_pair){
     if(illum_pair.first->left == nullptr || illum_pair.first->right == nullptr){
+        std::cout << "hit ltree root" << std::endl;
         return false;
     }
 
@@ -277,6 +278,8 @@ bool refineLTree(const IllumPair& illum_pair){
 
     float rheuristic = rm * rg;
 
+    std::cout << lheuristic << " " << rheuristic << std::endl;
+
     return lheuristic > rheuristic;  
 }
 
@@ -306,7 +309,6 @@ void computeUpperBounds(LightTree* lt, OctreeNode<IllumcutSample>* rt_root, Scen
 
         if(refineUpper(curr)){
             if(refineLTree(curr)){
-                std::cout << "refine l tree" << std::endl;
                 if(curr.first->left != nullptr){
                     node_stack.push(std::make_pair(curr.first->left.get(), curr.second));
                 }
@@ -316,7 +318,6 @@ void computeUpperBounds(LightTree* lt, OctreeNode<IllumcutSample>* rt_root, Scen
                 }
             }
             else{
-                std::cout << "refine r tree" << std::endl;
                 for(std::uint8_t i = 0; i < curr.second->children.size(); ++i){
                     if(curr.second->children[i] != nullptr){
                         node_stack.push(std::make_pair(curr.first, curr.second->children[i].get()));
