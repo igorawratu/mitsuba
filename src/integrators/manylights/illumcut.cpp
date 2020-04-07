@@ -282,7 +282,7 @@ bool refineLTree(const IllumPair& illum_pair){
 
     float rheuristic = rm * rg;
 
-    std::cout << lm << "-" << lg << " : " << rm << "-" << rg << std::endl;
+    std::cout << lm << "-" << lg << " : " << rm << "-" << rg << " " << illum_pair.second->sample_indices.size() << std::endl;
 
     return lheuristic > rheuristic;  
 }
