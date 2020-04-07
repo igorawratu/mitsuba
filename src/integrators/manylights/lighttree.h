@@ -82,9 +82,9 @@ public:
     std::vector<VPL> getClusteringForPoint(const Intersection& its);
     std::vector<VPL> getClusteringForPoints(Scene* scene, const std::vector<Intersection>& points);
 
-    LightTreeNode* getPointTreeRoot(){return point_tree_root_;}
-    LightTreeNode* getDirectionalTreeRoot(){return directional_tree_root_;}
-    LightTreeNode* getOrientedTreeRoot(){return oriented_tree_root_;}
+    LightTreeNode* getPointTreeRoot(){return point_tree_root_.get();}
+    LightTreeNode* getDirectionalTreeRoot(){return directional_tree_root_.get();}
+    LightTreeNode* getOrientedTreeRoot(){return oriented_tree_root_.get();}
 
 private:
     std::vector<VPL> point_vpls_, directional_vpls_, oriented_vpls_;

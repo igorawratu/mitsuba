@@ -8,6 +8,8 @@
 
 #include "common.h"
 
+MTS_NAMESPACE_BEGIN
+
 IlluminationCutRenderer::IlluminationCutRenderer(const std::vector<VPL>& vpls, float error_thresh, float min_dist) :
     vpls_(vpls),
     error_threshold_(error_thresh),
@@ -451,3 +453,5 @@ bool IlluminationCutRenderer::render(Scene* scene, std::uint32_t spp, const Rend
     copySamplesToBuffer(output_image, samples_, size, spp);
     film->setBitmap(output_bitmap);
 }
+
+MTS_NAMESPACE_END

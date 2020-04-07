@@ -484,6 +484,8 @@ private:
         if(child_pos.z > midpoints.z){
             idx |= 4;
         }
+
+        return idx;
     }
 
     void expandBB(std::pair<Vector3f, Vector3f>& bb, const Vector3f& v){
