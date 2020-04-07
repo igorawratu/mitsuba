@@ -76,8 +76,15 @@ public:
     LightTree& operator = (LightTree&& other);
     ~LightTree();
 
+    static float calculateClusterBounds(Point shading_point_position, Normal shading_point_normal,
+      LightTreeNode* light_tree_node, EVPLType vpl_type, float min_dist);
+
     std::vector<VPL> getClusteringForPoint(const Intersection& its);
     std::vector<VPL> getClusteringForPoints(Scene* scene, const std::vector<Intersection>& points);
+
+    LightTreeNode* getPointTreeRoot(){return point_tree_root_.get();}
+    LightTreeNode* getDirectionalTreeRoot(){return directional_tree_root_.get();}
+    LightTreeNode* getOrientedTreeRoot(){return oriented_tree_root_.get();}
 
 private:
     std::vector<VPL> point_vpls_, directional_vpls_, oriented_vpls_;

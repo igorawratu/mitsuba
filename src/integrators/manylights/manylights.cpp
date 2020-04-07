@@ -16,6 +16,7 @@
 #include "manylightsbase.h"
 #include "passthroughclusterer.h"
 #include "matrixseparationrenderer.h"
+#include "illumcut.h"
 
 #include "definitions.h"
 #include "common.h"
@@ -25,8 +26,8 @@
 MTS_NAMESPACE_BEGIN
 
 enum CLUSTERING_STRATEGY{
-		NONE = 0, LIGHTCUTS, ROWCOLSAMPLING, MATRIXRECONSTRUCTION, MATRIXSEPARATION,
-		CLUSTER_STRATEGY_MIN = NONE, CLUSTER_STRATEGY_MAX = MATRIXSEPARATION 
+		NONE = 0, LIGHTCUTS, ROWCOLSAMPLING, MATRIXRECONSTRUCTION, MATRIXSEPARATION, ILLUMINATIONCUT,
+		CLUSTER_STRATEGY_MIN = NONE, CLUSTER_STRATEGY_MAX = ILLUMINATIONCUT 
 	};
 
 float calculateMinDistance(const Scene *scene, const std::vector<VPL>& vpls, float clamping){
@@ -441,6 +442,12 @@ private:
 					max_prediction_iterations, max_separation_iterations, show_slices, only_directsamples, separate,
 					show_error, show_sparse, predictor_mask, show_rank, show_predictors, rank_increase_threshold,
 					theta, vsl));
+			}
+			case ILLUMINATIONCUT:
+			{
+				float error_threshold = props.getFloat("illumcut-_error_thresh", 0.01);
+
+				return std::unique_ptr<ManyLightsRenderer>(new IlluminationCutRenderer(vpls_, error_threshold, min_dist_));
 			}
 			default:
 				return nullptr;
