@@ -8,6 +8,7 @@
 #include <chrono>
 #include <random>
 #include <unordered_map>
+#include <iostream>
 
 #include "common.h"
 
