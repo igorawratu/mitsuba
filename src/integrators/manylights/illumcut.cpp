@@ -32,9 +32,9 @@ void expandBB(std::pair<Vector3f, Vector3f>& bb, const Vector3f& v){
     bb.first.y = std::min(bb.first.y, v.y);
     bb.first.z = std::min(bb.first.z, v.z);
 
-    bb.second.x = std::min(bb.second.x, v.x);
-    bb.second.y = std::min(bb.second.y, v.y);
-    bb.second.z = std::min(bb.second.z, v.z);
+    bb.second.x = std::max(bb.second.x, v.x);
+    bb.second.y = std::max(bb.second.y, v.y);
+    bb.second.z = std::max(bb.second.z, v.z);
 }
 
 std::unique_ptr<OctreeNode<IllumcutSample>> constructOctree(Scene* scene, std::vector<IllumcutSample>& samples, float min_dist, std::uint32_t spp){
