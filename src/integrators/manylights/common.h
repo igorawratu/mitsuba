@@ -397,8 +397,8 @@ struct OctreeNode{
 
         if(sample_indices.size() > 1){
             Vector3f midpoints = level < num_normal_levels ? (nbb.first + nbb.second) / 2.f : (bb.first + bb.second) / 2.f;
-            std::cout << "nbb: " << nbb.first.x << " " << nbb.first.y << " " << nbb.first.z << " " << nbb.second.x << " " << nbb.second.y << " " << nbb.second.z << std::endl;
-            std::cout << "bb: " << bb.first.x << " " << bb.first.y << " " << bb.first.z << " " << bb.second.x << " " << bb.second.y << " " << bb.second.z << std::endl;
+            //std::cout << "nbb: " << nbb.first.x << " " << nbb.first.y << " " << nbb.first.z << " " << nbb.second.x << " " << nbb.second.y << " " << nbb.second.z << std::endl;
+            //std::cout << "bb: " << bb.first.x << " " << bb.first.y << " " << bb.first.z << " " << bb.second.x << " " << bb.second.y << " " << bb.second.z << std::endl;
 
             std::vector<std::pair<Vector3f, Vector3f>> child_bb(8, 
                 std::make_pair(Vector3f(std::numeric_limits<float>::max()), Vector3f(-std::numeric_limits<float>::max())));
@@ -419,7 +419,7 @@ struct OctreeNode{
                 std::uint8_t child_idx = getChildIndex(div_dims, midpoints);
                 child_indices[child_idx].push_back(sample_indices[i]);
                 expandBB(child_bb[child_idx], p);
-                expandBB(child_bb[child_idx], n);
+                expandBB(child_nbb[child_idx], n);
 
                 //only modeling diffuse for representative sampling for now, glossier bsdfs would require actually evaluating them as they are
                 //view dependant
