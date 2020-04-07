@@ -432,8 +432,8 @@ struct OctreeNode{
                     continue;
                 }
 
-                children[i] = std::unique_ptr<OctreeNode>(new OctreeNode(sample_set, 
-                    std::move(child_indices[i]), child_bb[i], child_nbb[i], level + 1, num_normal_levels, rng));
+                children[i] = std::move(std::unique_ptr<OctreeNode>(new OctreeNode(sample_set, 
+                    std::move(child_indices[i]), child_bb[i], child_nbb[i], level + 1, num_normal_levels, rng)));
 
                 bcone = DirConef::Union(bcone, children[i]->bcone);
             }
