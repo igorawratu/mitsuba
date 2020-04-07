@@ -374,13 +374,13 @@ template<class Sample>
 struct OctreeNode{
     std::vector<std::uint32_t> sample_indices;
     std::vector<Sample>* samples;
-    std::vector<std::unique_ptr<KDTNode>> children;
+    std::vector<std::unique_ptr<OctreeNode<Sample>>> children;
     Spectrum min_est, est;
     std::pair<Vector3f, Vector3f> bb;
     std::pair<Vector3f, Vector3f> nbb;
     std::uint8_t level;
 
-    std::uint32_t representative;
+    std::uint32_t representative_idx;
     float upper_bound;
     DirConef bcone;
 
@@ -392,11 +392,11 @@ struct OctreeNode{
         sample_indices(indices),
         samples(sample_set), min_est(0.f), est(0.f), 
         children(8, nullptr),
-        bb(cbb), nbb(cnbb), level(curr_level), representative(0), upper_bound(0.f){
+        bb(cbb), nbb(cnbb), level(curr_level), representative_idx(0), upper_bound(0.f){
         assert(sample_indices.size() > 0);
 
         if(sample_indices.size() > 1){
-            Vector3f midpoints = level < num_normal_levels ? (nbb_max + nbb_min) / 2.f : (bb_max + bb_min) / 2.f;
+            Vector3f midpoints = level < num_normal_levels ? (nbb.first + nbb.second) / 2.f : (bb.first + bb.second) / 2.f;
 
             std::vector<std::pair<Vector3f, Vector3f>> child_bb(8, 
                 std::make_pair(Vector3f(std::numeric_limits<float>::max()), Vector3f(-std::numeric_limits<float>::max())));
@@ -438,7 +438,7 @@ struct OctreeNode{
             }
 
             std::discrete_distribution<std::uint32_t> energy_dist(point_energies.begin(), point_energies.end());
-            representative = energy_dist(rng);
+            representative_idx = energy_dist(rng);
         }
         else{
             Vector3f cone_axis(representative().its.shFrame.n);
@@ -463,9 +463,9 @@ struct OctreeNode{
     }
 
     Sample& representative(){
-        assert(samples != nullptr && representative < sample_indices.size());
+        assert(samples != nullptr && representative_idx < sample_indices.size());
 
-        return (*samples)[sample_indices[representative]];
+        return (*samples)[sample_indices[representative_idx]];
     }
 
 
