@@ -277,8 +277,6 @@ bool refineLTree(const IllumPair& illum_pair){
 
     float rheuristic = rm * rg;
 
-    std::cout << lheuristic > rheuristic ? "l" : "r" << std::endl;
-
     return lheuristic > rheuristic;  
 }
 
@@ -303,6 +301,7 @@ void computeUpperBounds(LightTree* lt, OctreeNode<IllumcutSample>* rt_root, Scen
     }
 
     while(!node_stack.empty()){
+        std::cout << node_stack.size() << std::endl;
         IllumPair curr = node_stack.top();
         node_stack.pop();
 
