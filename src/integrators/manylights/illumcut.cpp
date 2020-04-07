@@ -5,6 +5,8 @@
 #include <queue>
 #include <tuple>
 #include <stack>
+#include <chrono>
+#include <random>
 
 #include "common.h"
 
@@ -34,9 +36,6 @@ void expandBB(std::pair<Vector3f, Vector3f>& bb, const Vector3f& v){
 }
 
 std::unique_ptr<OctreeNode<IllumcutSample>> constructOctree(Scene* scene, std::vector<IllumcutSample>& samples, float min_dist, std::uint32_t spp){
-
-    auto kdt_root = std::unique_ptr<KDTNode<ReconstructionSample>>(new KDTNode<ReconstructionSample>(&samples));
-
     ref<Sensor> sensor = scene->getSensor();
     ref<Film> film = sensor->getFilm();
 
@@ -135,7 +134,7 @@ std::unique_ptr<OctreeNode<IllumcutSample>> constructOctree(Scene* scene, std::v
 }
 
 typedef std::pair<LightTreeNode*, OctreeNode<IllumcutSample>*> IllumPair;
-const CONE_THRESH = cos(20.f / 180.f * M_PI);
+const float CONE_THRESH = cos(20.f / 180.f * M_PI);
 
 bool refineUpper(const IllumPair& illum_pair){
     bool refine = false;
