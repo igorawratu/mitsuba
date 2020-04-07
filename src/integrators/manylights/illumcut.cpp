@@ -131,9 +131,7 @@ std::unique_ptr<OctreeNode<IllumcutSample>> constructOctree(Scene* scene, std::v
 
     std::mt19937 rng(std::chrono::high_resolution_clock::now().time_since_epoch().count());
 
-    std::unique_ptr<OctreeNode<IllumcutSample>> root(new OctreeNode(&samples, std::move(sample_indices), bb, nbb, 0, 3, rng));
-
-    return std::move(root);
+    return std::unique_ptr<OctreeNode<IllumcutSample>>(new OctreeNode<IllumcutSample>(&samples, std::move(sample_indices), bb, nbb, 0, 3, rng));
 }
 
 typedef std::pair<LightTreeNode*, OctreeNode<IllumcutSample>*> IllumPair;
