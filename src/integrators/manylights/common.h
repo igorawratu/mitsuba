@@ -390,8 +390,8 @@ struct OctreeNode{
             const std::pair<Vector3f, Vector3f>& cnbb, std::uint8_t curr_level, std::uint8_t num_normal_levels,
             std::mt19937& rng) : 
         sample_indices(indices),
-        children(8, nullptr),
-        samples(sample_set), min_est(0.f), est(0.f), 
+        samples(sample_set), children(8, nullptr),
+        min_est(0.f), est(0.f), 
         bb(cbb), nbb(cnbb), level(curr_level), representative_idx(0), upper_bound(0.f){
         assert(sample_indices.size() > 0);
 
@@ -424,7 +424,8 @@ struct OctreeNode{
                 point_energies[i] = curr_sample.its.getBSDF()->getDiffuseReflectance(curr_sample.its).getLuminance();
             }
 
-            bcone = DirConef(Vector3f(0.f));
+            Vector3f zero_frame(0.f);
+            bcone = DirConef(zero_frame);
 
             for(std::uint8_t i = 0; i < child_indices.size(); ++i){
                 if(child_indices[i].size() == 0){
