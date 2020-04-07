@@ -7,6 +7,7 @@
 #include <stack>
 #include <chrono>
 #include <random>
+#include <unordered_map>
 
 #include "common.h"
 
@@ -140,8 +141,8 @@ bool refineUpper(const IllumPair& illum_pair){
     bool refine = false;
 
     if(illum_pair.first->vpl.type != EDirectionalEmitterVPL){
-        Vector3f c1 = (illum_pair.first->min_bounds + illum_pair.first->max_bounds) / 2.f;
-        Vector3f dim1 = illum_pair.first->max_bounds - illum_pair.first->min_bounds;
+        Vector3f c1 = Vector3f(illum_pair.first->min_bounds + illum_pair.first->max_bounds) / 2.f;
+        Vector3f dim1 = Vector3f(illum_pair.first->max_bounds - illum_pair.first->min_bounds);
         float r1 = std::max(dim1.x, std::max(dim1.y, dim1.z));
 
         Vector3f c2 = (illum_pair.second->bb.first + illum_pair.second->bb.second) / 2.f;
@@ -305,17 +306,17 @@ void computeUpperBounds(LightTree* lt, OctreeNode<IllumcutSample>* rt_root, Scen
         if(refineUpper(curr)){
             if(refineLTree(curr)){
                 if(curr.first->left != nullptr){
-                    node_stack.push(std::make_pair(curr.first->left, curr.second));
+                    node_stack.push(std::make_pair(curr.first->left.get(), curr.second));
                 }
 
                 if(curr.first->right != nullptr){
-                    node_stack.push(std::make_pair(curr.first->right, curr.second));
+                    node_stack.push(std::make_pair(curr.first->right.get(), curr.second));
                 }
             }
             else{
                 for(std::uint8_t i = 0; i < curr.second->children.size(); ++i){
                     if(curr.second->children[i] != nullptr){
-                        node_stack.push(std::make_pair(curr.first, curr.second->children[i]));
+                        node_stack.push(std::make_pair(curr.first, curr.second->children[i].get()));
                     }
                 }
             }
@@ -327,7 +328,7 @@ void computeUpperBounds(LightTree* lt, OctreeNode<IllumcutSample>* rt_root, Scen
             Spectrum col = sample(scene, sampler, curr_sample.its, curr_sample.ray, curr.first->vpl, min_dist, 
                 true, 10, false, curr_sample.intersected_scene, true, false, samples_taken);
 
-            curr_sample.first->updateUpperBound(col.getLuminance());
+            curr.first->updateUpperBound(col.getLuminance());
         }
     }
 }
@@ -355,17 +356,17 @@ std::vector<IllumPair> getIlluminationAwarePairs(LightTree* lt, OctreeNode<Illum
         if(!isIllumAware(curr, min_dist, error_thresh)){
             if(refineLTree(curr)){
                 if(curr.first->left != nullptr){
-                    node_stack.push(std::make_pair(curr.first->left, curr.second));
+                    node_stack.push(std::make_pair(curr.first->left.get(), curr.second));
                 }
 
                 if(curr.first->right != nullptr){
-                    node_stack.push(std::make_pair(curr.first->right, curr.second));
+                    node_stack.push(std::make_pair(curr.first->right.get(), curr.second));
                 }
             }
             else{
                 for(std::uint8_t i = 0; i < curr.second->children.size(); ++i){
                     if(curr.second->children[i] != nullptr){
-                        node_stack.push(std::make_pair(curr.first, curr.second->children[i]));
+                        node_stack.push(std::make_pair(curr.first, curr.second->children[i].get()));
                     }
                 }
             }
@@ -386,7 +387,7 @@ void renderIllumAwarePairs(const std::vector<IllumPair>& ilps, Scene* scene, flo
     sampler->generate(Point2i(0));
 
     for(std::uint32_t i = 0; i < ilps.size(); ++i){
-        for(std::uint32_t j = 0; j < ilps[i].second->sample_indices; ++j){
+        for(std::uint32_t j = 0; j < ilps[i].second->sample_indices(); ++j){
             IllumcutSample& curr_sample = ilps[i].second->sample(j);
             std::uint32_t samples_taken;
 
@@ -442,7 +443,7 @@ bool IlluminationCutRenderer::render(Scene* scene, std::uint32_t spp, const Rend
     std::uint8_t* output_image = output_bitmap->getUInt8Data();
     memset(output_image, 0, output_bitmap->getBytesPerPixel() * size.x * size.y);
 
-    std::unique_ptr<LightTree> light_tree(new LightTree(vpls_, min_dist_, num_clusters_, 0.f));
+    std::unique_ptr<LightTree> light_tree(new LightTree(vpls_, min_dist_, 0, 0.f));
     auto receiver_root = constructOctree(scene, samples_, min_dist_, spp);
 
     computeUpperBounds(light_tree.get(), receiver_root.get(), scene, min_dist_);
