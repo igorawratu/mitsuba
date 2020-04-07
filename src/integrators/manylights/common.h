@@ -374,7 +374,7 @@ template<class Sample>
 struct OctreeNode{
     std::vector<std::uint32_t> sample_indices;
     std::vector<Sample>* samples;
-    std::vector<std::unique_ptr<OctreeNode<Sample>>> children;
+    std::vector<std::unique_ptr<OctreeNode>> children;
     Spectrum min_est, est;
     std::pair<Vector3f, Vector3f> bb;
     std::pair<Vector3f, Vector3f> nbb;
@@ -390,8 +390,8 @@ struct OctreeNode{
             const std::pair<Vector3f, Vector3f>& cnbb, std::uint8_t curr_level, std::uint8_t num_normal_levels,
             std::mt19937& rng) : 
         sample_indices(indices),
-        samples(sample_set), min_est(0.f), est(0.f), 
         children(8, nullptr),
+        samples(sample_set), min_est(0.f), est(0.f), 
         bb(cbb), nbb(cnbb), level(curr_level), representative_idx(0), upper_bound(0.f){
         assert(sample_indices.size() > 0);
 
@@ -421,7 +421,7 @@ struct OctreeNode{
 
                 //only modeling diffuse for representative sampling for now, glossier bsdfs would require actually evaluating them as they are
                 //view dependant
-                point_energies[i] = curr_sample.its.getBSDF()->getDiffuseReflectance(curr_sample.its);
+                point_energies[i] = curr_sample.its.getBSDF()->getDiffuseReflectance(curr_sample.its).getLuminance();
             }
 
             bcone = DirConef(Vector3f(0.f));
@@ -431,8 +431,8 @@ struct OctreeNode{
                     continue;
                 }
 
-                children[i].emplace_back(new OctreeNode(sample_set, 
-                    std::move(child_indices[i]), child_bb[i], child_nbb[i], level + 1, num_normal_levels));
+                children[i] = std::unique_ptr<OctreeNode>(new OctreeNode(sample_set, 
+                    std::move(child_indices[i]), child_bb[i], child_nbb[i], level + 1, num_normal_levels, rng));
 
                 bcone = DirConef::Union(bcone, children[i]->bcone);
             }
