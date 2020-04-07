@@ -277,6 +277,8 @@ bool refineLTree(const IllumPair& illum_pair){
 
     float rheuristic = rm * rg;
 
+    std::cout << lheuristic > rheuristic << std::endl;
+
     return lheuristic > rheuristic;  
 }
 
