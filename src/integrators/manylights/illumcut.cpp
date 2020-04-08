@@ -281,7 +281,7 @@ bool refineLTree(const IllumPair& illum_pair){
             }
         }
 
-        rg /= sqrt(dsqr);
+        rg /= dsqr;
     }
 
     float rm = (1.0f - illum_pair.second->bcone.GetAngleCos()) * rbb_extents.length() / sqrt(dsqr);
