@@ -1,0 +1,499 @@
+<?xml version='1.0' encoding='utf-8'?>
+<!--
+
+	Automatically converted from Wavefront OBJ
+
+-->
+
+<scene version="0.6.0">
+	<integrator type="direct"/>
+
+	<bsdf type="diffuse" id="grey_and_white_room:BottleCap_material">
+		<rgb name="reflectance" value="0.178867 0 0"/>
+	</bsdf>
+
+	<bsdf type="diffuse" id="grey_and_white_room:Branches_material">
+		<rgb name="reflectance" value="0.0219809 0.00719441 0.00154799"/>
+	</bsdf>
+
+	<bsdf type="diffuse" id="grey_and_white_room:BrushedStainlessSteel_material">
+		<rgb name="reflectance" value="0 0 0"/>
+	</bsdf>
+
+	<bsdf type="diffuse" id="grey_and_white_room:Dirt_material">
+		<rgb name="reflectance" value="0.0100228 0.00393594 0.00309598"/>
+	</bsdf>
+
+	<bsdf type="diffuse" id="grey_and_white_room:FireplaceGlass_material">
+		<rgb name="reflectance" value="0 0 0"/>
+	</bsdf>
+
+	<bsdf type="diffuse" id="grey_and_white_room:Floor_material">
+		<texture name="reflectance" type="bitmap" id="wood.png">
+			<string name="filename" value="textures/wood.png"/>
+		</texture>
+	</bsdf>
+
+	<bsdf type="diffuse" id="grey_and_white_room:Glass_material">
+		<rgb name="reflectance" value="0 0 0"/>
+	</bsdf>
+
+	<bsdf type="diffuse" id="grey_and_white_room:Leaves_material">
+		<texture name="reflectance" type="bitmap" id="leaf.png">
+			<string name="filename" value="textures/leaf.png"/>
+		</texture>
+	</bsdf>
+
+	<bsdf type="diffuse" id="grey_and_white_room:MattePaint_material">
+		<rgb name="reflectance" value="0.787412 0.787412 0.787412"/>
+	</bsdf>
+
+	<bsdf type="diffuse" id="grey_and_white_room:Mirror_material">
+		<rgb name="reflectance" value="0.603827 0.603827 0.603827"/>
+	</bsdf>
+
+	<bsdf type="diffuse" id="grey_and_white_room:Painting_material">
+		<texture name="reflectance" type="bitmap" id="picture8.png">
+			<string name="filename" value="textures/picture8.png"/>
+		</texture>
+	</bsdf>
+
+	<bsdf type="diffuse" id="grey_and_white_room:PaintingBack_material">
+		<rgb name="reflectance" value="0.0549717 0.0508761 0.0173891"/>
+	</bsdf>
+
+	<bsdf type="diffuse" id="grey_and_white_room:Paneling_material">
+		<rgb name="reflectance" value="0.787412 0.787412 0.787412"/>
+	</bsdf>
+
+	<bsdf type="diffuse" id="grey_and_white_room:PlantPot_material">
+		<rgb name="reflectance" value="0.0100228 0.0100228 0.0100228"/>
+	</bsdf>
+
+	<bsdf type="diffuse" id="grey_and_white_room:Sofa_material">
+		<rgb name="reflectance" value="0.787412 0.787412 0.748414"/>
+	</bsdf>
+
+	<bsdf type="diffuse" id="grey_and_white_room:SofaLegs_material">
+		<rgb name="reflectance" value="0.0100228 0.0100228 0.0100228"/>
+	</bsdf>
+
+	<bsdf type="diffuse" id="grey_and_white_room:TableWood_material">
+		<texture name="reflectance" type="bitmap" id="wood5.png">
+			<string name="filename" value="textures/wood5.png"/>
+		</texture>
+	</bsdf>
+
+	<bsdf type="diffuse" id="grey_and_white_room:Transluscent_material">
+		<rgb name="reflectance" value="0.073239 0.073239 0.073239"/>
+	</bsdf>
+
+	<bsdf type="diffuse" id="grey_and_white_room:Walls_material">
+		<rgb name="reflectance" value="0.024515 0.0157258 0.0100228"/>
+	</bsdf>
+
+	<bsdf type="diffuse" id="grey_and_white_room:initialShadingGroup_material">
+		<rgb name="reflectance" value="0.214041 0.214041 0.214041"/>
+	</bsdf>
+
+	<bsdf type="diffuse" id="grey_and_white_room:lambert2SG_light_material">
+		<rgb name="reflectance" value="0 0 0"/>
+	</bsdf>
+
+	<bsdf type="diffuse" id="lambert3SG_material">
+		<rgb name="reflectance" value="0 0 0"/>
+	</bsdf>
+
+	<shape type="serialized" id="grey_and_white_room:Mesh grey_and_white_room:polySurface1_mesh">
+		<string name="filename" value="fireplace_room.serialized"/>
+		<integer name="shapeIndex" value="0"/>
+
+		<ref name="bsdf" id="grey_and_white_room:TableWood_material"/>
+	</shape>
+
+	<shape type="serialized" id="fireplace_room_mesh">
+		<string name="filename" value="fireplace_room.serialized"/>
+		<integer name="shapeIndex" value="1"/>
+
+		<ref name="bsdf" id="grey_and_white_room:Glass_material"/>
+	</shape>
+
+	<shape type="serialized" id="fireplace_room_2_mesh">
+		<string name="filename" value="fireplace_room.serialized"/>
+		<integer name="shapeIndex" value="2"/>
+
+		<ref name="bsdf" id="grey_and_white_room:BottleCap_material"/>
+	</shape>
+
+	<shape type="serialized" id="fireplace_room_3_mesh">
+		<string name="filename" value="fireplace_room.serialized"/>
+		<integer name="shapeIndex" value="3"/>
+
+		<ref name="bsdf" id="grey_and_white_room:Glass_material"/>
+	</shape>
+
+	<shape type="serialized" id="fireplace_room_4_mesh">
+		<string name="filename" value="fireplace_room.serialized"/>
+		<integer name="shapeIndex" value="4"/>
+
+		<ref name="bsdf" id="grey_and_white_room:TableWood_material"/>
+	</shape>
+
+	<shape type="serialized" id="fireplace_room_5_mesh">
+		<string name="filename" value="fireplace_room.serialized"/>
+		<integer name="shapeIndex" value="5"/>
+
+		<ref name="bsdf" id="grey_and_white_room:PaintingBack_material"/>
+	</shape>
+
+	<shape type="serialized" id="fireplace_room_6_mesh">
+		<string name="filename" value="fireplace_room.serialized"/>
+		<integer name="shapeIndex" value="6"/>
+
+		<ref name="bsdf" id="grey_and_white_room:MattePaint_material"/>
+	</shape>
+
+	<shape type="serialized" id="fireplace_room_7_mesh">
+		<string name="filename" value="fireplace_room.serialized"/>
+		<integer name="shapeIndex" value="7"/>
+
+		<ref name="bsdf" id="grey_and_white_room:Painting_material"/>
+	</shape>
+
+	<shape type="serialized" id="fireplace_room_8_mesh">
+		<string name="filename" value="fireplace_room.serialized"/>
+		<integer name="shapeIndex" value="8"/>
+
+		<ref name="bsdf" id="grey_and_white_room:Leaves_material"/>
+	</shape>
+
+	<shape type="serialized" id="fireplace_room_9_mesh">
+		<string name="filename" value="fireplace_room.serialized"/>
+		<integer name="shapeIndex" value="9"/>
+
+		<ref name="bsdf" id="grey_and_white_room:Branches_material"/>
+	</shape>
+
+	<shape type="serialized" id="fireplace_room_10_mesh">
+		<string name="filename" value="fireplace_room.serialized"/>
+		<integer name="shapeIndex" value="10"/>
+
+		<ref name="bsdf" id="grey_and_white_room:Leaves_material"/>
+	</shape>
+
+	<shape type="serialized" id="fireplace_room_11_mesh">
+		<string name="filename" value="fireplace_room.serialized"/>
+		<integer name="shapeIndex" value="11"/>
+
+		<ref name="bsdf" id="grey_and_white_room:Branches_material"/>
+	</shape>
+
+	<shape type="serialized" id="fireplace_room_12_mesh">
+		<string name="filename" value="fireplace_room.serialized"/>
+		<integer name="shapeIndex" value="12"/>
+
+		<ref name="bsdf" id="grey_and_white_room:Dirt_material"/>
+	</shape>
+
+	<shape type="serialized" id="fireplace_room_13_mesh">
+		<string name="filename" value="fireplace_room.serialized"/>
+		<integer name="shapeIndex" value="13"/>
+
+		<ref name="bsdf" id="grey_and_white_room:PlantPot_material"/>
+	</shape>
+
+	<shape type="serialized" id="fireplace_room_14_mesh">
+		<string name="filename" value="fireplace_room.serialized"/>
+		<integer name="shapeIndex" value="14"/>
+
+		<ref name="bsdf" id="grey_and_white_room:MattePaint_material"/>
+	</shape>
+
+	<shape type="serialized" id="fireplace_room_15_mesh">
+		<string name="filename" value="fireplace_room.serialized"/>
+		<integer name="shapeIndex" value="15"/>
+
+		<ref name="bsdf" id="grey_and_white_room:SofaLegs_material"/>
+	</shape>
+
+	<shape type="serialized" id="fireplace_room_16_mesh">
+		<string name="filename" value="fireplace_room.serialized"/>
+		<integer name="shapeIndex" value="16"/>
+
+		<ref name="bsdf" id="grey_and_white_room:Sofa_material"/>
+	</shape>
+
+	<shape type="serialized" id="fireplace_room_17_mesh">
+		<string name="filename" value="fireplace_room.serialized"/>
+		<integer name="shapeIndex" value="17"/>
+
+		<ref name="bsdf" id="grey_and_white_room:Paneling_material"/>
+	</shape>
+
+	<shape type="serialized" id="fireplace_room_18_mesh">
+		<string name="filename" value="fireplace_room.serialized"/>
+		<integer name="shapeIndex" value="18"/>
+
+		<ref name="bsdf" id="grey_and_white_room:MattePaint_material"/>
+	</shape>
+
+	<shape type="serialized" id="fireplace_room_19_mesh">
+		<string name="filename" value="fireplace_room.serialized"/>
+		<integer name="shapeIndex" value="19"/>
+
+		<ref name="bsdf" id="grey_and_white_room:Walls_material"/>
+	</shape>
+
+	<shape type="serialized" id="fireplace_room_20_mesh">
+		<string name="filename" value="fireplace_room.serialized"/>
+		<integer name="shapeIndex" value="20"/>
+
+		<ref name="bsdf" id="grey_and_white_room:Floor_material"/>
+	</shape>
+
+	<shape type="serialized" id="fireplace_room_21_mesh">
+		<string name="filename" value="fireplace_room.serialized"/>
+		<integer name="shapeIndex" value="21"/>
+
+		<ref name="bsdf" id="grey_and_white_room:MattePaint_material"/>
+	</shape>
+
+	<shape type="serialized" id="fireplace_room_22_mesh">
+		<string name="filename" value="fireplace_room.serialized"/>
+		<integer name="shapeIndex" value="22"/>
+
+		<ref name="bsdf" id="grey_and_white_room:Paneling_material"/>
+	</shape>
+
+	<shape type="serialized" id="fireplace_room_23_mesh">
+		<string name="filename" value="fireplace_room.serialized"/>
+		<integer name="shapeIndex" value="23"/>
+
+		<ref name="bsdf" id="grey_and_white_room:Mirror_material"/>
+	</shape>
+
+	<shape type="serialized" id="fireplace_room_24_mesh">
+		<string name="filename" value="fireplace_room.serialized"/>
+		<integer name="shapeIndex" value="24"/>
+
+		<ref name="bsdf" id="grey_and_white_room:FireplaceGlass_material"/>
+	</shape>
+
+	<shape type="serialized" id="fireplace_room_25_mesh">
+		<string name="filename" value="fireplace_room.serialized"/>
+		<integer name="shapeIndex" value="25"/>
+
+		<ref name="bsdf" id="grey_and_white_room:Paneling_material"/>
+	</shape>
+
+	<shape type="serialized" id="fireplace_room_26_mesh">
+		<string name="filename" value="fireplace_room.serialized"/>
+		<integer name="shapeIndex" value="26"/>
+
+		<ref name="bsdf" id="grey_and_white_room:Walls_material"/>
+	</shape>
+
+	<shape type="serialized" id="fireplace_room_27_mesh">
+		<string name="filename" value="fireplace_room.serialized"/>
+		<integer name="shapeIndex" value="27"/>
+
+		<ref name="bsdf" id="grey_and_white_room:Paneling_material"/>
+	</shape>
+
+	<shape type="serialized" id="fireplace_room_28_mesh">
+		<string name="filename" value="fireplace_room.serialized"/>
+		<integer name="shapeIndex" value="28"/>
+
+		<ref name="bsdf" id="grey_and_white_room:BrushedStainlessSteel_material"/>
+	</shape>
+
+	<shape type="serialized" id="fireplace_room_29_mesh">
+		<string name="filename" value="fireplace_room.serialized"/>
+		<integer name="shapeIndex" value="29"/>
+
+		<ref name="bsdf" id="grey_and_white_room:Paneling_material"/>
+	</shape>
+
+	<shape type="serialized" id="fireplace_room_30_mesh">
+		<string name="filename" value="fireplace_room.serialized"/>
+		<integer name="shapeIndex" value="30"/>
+
+		<ref name="bsdf" id="grey_and_white_room:BrushedStainlessSteel_material"/>
+	</shape>
+
+	<shape type="serialized" id="fireplace_room_31_mesh">
+		<string name="filename" value="fireplace_room.serialized"/>
+		<integer name="shapeIndex" value="31"/>
+
+		<ref name="bsdf" id="grey_and_white_room:Paneling_material"/>
+	</shape>
+
+	<shape type="serialized" id="fireplace_room_32_mesh">
+		<string name="filename" value="fireplace_room.serialized"/>
+		<integer name="shapeIndex" value="32"/>
+
+		<ref name="bsdf" id="grey_and_white_room:BrushedStainlessSteel_material"/>
+	</shape>
+
+	<shape type="serialized" id="fireplace_room_33_mesh">
+		<string name="filename" value="fireplace_room.serialized"/>
+		<integer name="shapeIndex" value="33"/>
+
+		<ref name="bsdf" id="grey_and_white_room:Leaves_material"/>
+	</shape>
+
+	<shape type="serialized" id="fireplace_room_34_mesh">
+		<string name="filename" value="fireplace_room.serialized"/>
+		<integer name="shapeIndex" value="34"/>
+
+		<ref name="bsdf" id="grey_and_white_room:Branches_material"/>
+	</shape>
+
+	<shape type="serialized" id="fireplace_room_35_mesh">
+		<string name="filename" value="fireplace_room.serialized"/>
+		<integer name="shapeIndex" value="35"/>
+
+		<ref name="bsdf" id="grey_and_white_room:Leaves_material"/>
+	</shape>
+
+	<shape type="serialized" id="fireplace_room_36_mesh">
+		<string name="filename" value="fireplace_room.serialized"/>
+		<integer name="shapeIndex" value="36"/>
+
+		<ref name="bsdf" id="grey_and_white_room:Branches_material"/>
+	</shape>
+
+	<shape type="serialized" id="fireplace_room_37_mesh">
+		<string name="filename" value="fireplace_room.serialized"/>
+		<integer name="shapeIndex" value="37"/>
+
+		<ref name="bsdf" id="grey_and_white_room:Dirt_material"/>
+	</shape>
+
+	<shape type="serialized" id="fireplace_room_38_mesh">
+		<string name="filename" value="fireplace_room.serialized"/>
+		<integer name="shapeIndex" value="38"/>
+
+		<ref name="bsdf" id="grey_and_white_room:PlantPot_material"/>
+	</shape>
+
+	<shape type="serialized" id="fireplace_room_39_mesh">
+		<string name="filename" value="fireplace_room.serialized"/>
+		<integer name="shapeIndex" value="39"/>
+
+		<ref name="bsdf" id="grey_and_white_room:BrushedStainlessSteel_material"/>
+	</shape>
+
+	<shape type="serialized" id="fireplace_room_40_mesh">
+		<string name="filename" value="fireplace_room.serialized"/>
+		<integer name="shapeIndex" value="40"/>
+
+		<ref name="bsdf" id="grey_and_white_room:MattePaint_material"/>
+	</shape>
+
+	<shape type="serialized" id="fireplace_room_41_mesh">
+		<string name="filename" value="fireplace_room.serialized"/>
+		<integer name="shapeIndex" value="41"/>
+
+		<ref name="bsdf" id="grey_and_white_room:Transluscent_material"/>
+
+		<emitter type="area">
+			<spectrum name="radiance" value="400:18.4, 500:18.4, 600:18.4, 700:18.4"/>
+		</emitter>
+	</shape>
+
+	<shape type="serialized" id="fireplace_room_42_mesh">
+		<string name="filename" value="fireplace_room.serialized"/>
+		<integer name="shapeIndex" value="42"/>
+
+		<ref name="bsdf" id="grey_and_white_room:BrushedStainlessSteel_material"/>
+	</shape>
+
+	<shape type="serialized" id="fireplace_room_43_mesh">
+		<string name="filename" value="fireplace_room.serialized"/>
+		<integer name="shapeIndex" value="43"/>
+
+		<ref name="bsdf" id="grey_and_white_room:MattePaint_material"/>
+	</shape>
+
+	<shape type="serialized" id="fireplace_room_44_mesh">
+		<string name="filename" value="fireplace_room.serialized"/>
+		<integer name="shapeIndex" value="44"/>
+
+		<ref name="bsdf" id="grey_and_white_room:Transluscent_material"/>
+
+		<emitter type="area">
+			<spectrum name="radiance" value="400:18.4, 500:18.4, 600:18.4, 700:18.4"/>
+		</emitter>
+	</shape>
+
+	<shape type="serialized" id="fireplace_room_45_mesh">
+		<string name="filename" value="fireplace_room.serialized"/>
+		<integer name="shapeIndex" value="45"/>
+
+		<ref name="bsdf" id="grey_and_white_room:Paneling_material"/>
+	</shape>
+
+	<shape type="serialized" id="fireplace_room_46_mesh">
+		<string name="filename" value="fireplace_room.serialized"/>
+		<integer name="shapeIndex" value="46"/>
+
+		<ref name="bsdf" id="grey_and_white_room:initialShadingGroup_material"/>
+	</shape>
+
+	<shape type="serialized" id="grey_and_white_room:pPlane1 grey_and_white_room:polySurface1_mesh">
+		<string name="filename" value="fireplace_room.serialized"/>
+		<integer name="shapeIndex" value="47"/>
+
+		<bsdf type="diffuse"/>
+	</shape>
+
+	<shape type="serialized" id="grey_and_white_room:group grey_and_white_room:pasted__pPlane1 grey_and_white_room:polySurface1_mesh">
+		<string name="filename" value="fireplace_room.serialized"/>
+		<integer name="shapeIndex" value="48"/>
+
+		<bsdf type="diffuse"/>
+	</shape>
+
+	<shape type="serialized" id="grey_and_white_room:group1 grey_and_white_room:pasted__group grey_and_white_room:pasted__pasted__pPlane1 grey_and_white_room:polySurface1_mesh">
+		<string name="filename" value="fireplace_room.serialized"/>
+		<integer name="shapeIndex" value="49"/>
+
+		<ref name="bsdf" id="grey_and_white_room:lambert2SG_light_material"/>
+
+		<emitter type="area">
+			<spectrum name="radiance" value="400:18.4, 500:18.4, 600:18.4, 700:18.4"/>
+		</emitter>
+	</shape>
+
+	<shape type="serialized" id="grey_and_white_room:group2 grey_and_white_room:pasted__group1 grey_and_white_room:pasted__pasted__group grey_and_white_room:pasted__pasted__pasted__pPlane1 grey_and_white_room:polySurface1_mesh">
+		<string name="filename" value="fireplace_room.serialized"/>
+		<integer name="shapeIndex" value="50"/>
+
+		<ref name="bsdf" id="grey_and_white_room:lambert2SG_light_material"/>
+
+		<emitter type="area">
+			<spectrum name="radiance" value="400:18.4, 500:18.4, 600:18.4, 700:18.4"/>
+		</emitter>
+	</shape>
+
+	<sensor type="perspective">
+		<float name="farClip" value="34.9839"/>
+		<float name="focusDistance" value="2.68522"/>
+		<float name="fov" value="46.08"/>
+		<string name="fovAxis" value="x"/>
+		<float name="nearClip" value="0.0680339"/>
+		<transform name="toWorld">
+
+			<lookat origin="4.51894, 1.29857, -3.32618" up="-0.0905056, 0.993836, 0.0640201" target="3.75761, 1.18809, -2.6873"/>
+		</transform>
+
+		<sampler type="independent">
+			<integer name="sampleCount" value="4"/>
+		</sampler>
+
+		<film type="hdrfilm">
+			<rfilter type="gaussian"/>
+		</film>
+	</sensor>
+</scene>

@@ -1,0 +1,601 @@
+<?xml version="1.0" encoding="utf-8"?>
+
+<scene version="0.6.0">
+	<integrator type="manylights">
+		<integer name="max_depth" value="10" />
+		<boolean name="strictNormals" value="true" />
+
+		<!--GENERAL-->
+		<float name="clamping" value="0.1"/>
+		<integer name="clustering_strat" value="$cstrat"/>
+		<integer name="vsl" value="0"/>
+		<integer name="vpls" value="100000"/>
+		<integer name="bfhw" value="1"/>
+
+		<!--BRUTE FORCE, STRAT 0-->
+
+		<!--LIGHTCUTS, STRAT 1-->
+		<integer name="lightcuts-num_clusters" value="3000"/>
+		<float name="lightcuts-error_threshold" value="0.02"/>
+
+		<!--MATRIX ROW COLUMN SAMPLING, STRAT 2-->
+		<integer name="rowcol-rows" value="1000"/>
+		<integer name="rowcol-num_clusters" value="1000"/>
+
+		<!--MATRIX COMPLETION, STRAT 3-->
+		<float name="completion-sample_perc" value="$samplerate"/>
+		<float name="completion-step_factor" value="1.5"/>
+		<float name="completion-tolerance" value="5"/>
+		<float name="completion-tau" value="0.05"/>
+		<integer name="completion-reconstruction_iterations" value="10"/>
+		<integer name="completion-slice_size" value="$slice"/>
+		<integer name="completion-visibility_only" value="1"/>
+		<integer name="completion-adaptive_col_sampling" value="1"/>
+		<integer name="completion-adaptive_importance_sampling" value="$is"/>
+		<integer name="completion-adaptive_force_resample" value="0"/>
+		<integer name="completion-adaptive_recover_transpose" value="0"/>
+		<integer name="completion-use_truncated" value="1"/>
+		<integer name="completion-show_slices" value="0"/>
+		<integer name="completion-show_stats" value="0"/>
+		<integer name="completion-show_svd" value="0"/>
+		<float name="completion-error_scale" value="1"/>
+		<string name="completion-cluster_strat" value = "$compcstrat"/>
+		<integer name="completion-hw" value="1"/>
+		<integer name="completion-bvis" value="$bv"/>
+		<integer name="completion-clusters_per_slice" value="$cps"/>
+		<integer name="completion-ls_sps" value="$sps"/>
+		<float name="completion-verification_perc" value="$vp"/> 
+
+		<!--MATRIX SEPARATION, STRAT 4-->
+		<float name="separation-sample_perc" value="0.05"/>
+		<float name="separation-prediction_error_thresh" value="0.02"/>
+		<float name="separation-density_thresh" value="0.2"/>
+		<integer name="separation-slice_size" value="1024"/>
+		<integer name="separation-prediction_iter" value="10"/>
+		<integer name="separation-separation_iter" value="40"/>
+		<integer name="separation-show_slices" value="0"/>
+		<integer name="separation-only_direct_samples" value="0"/>
+		<integer name="separation-separate" value="1"/>
+		<integer name="separation-show_error" value="0"/>
+		<integer name="separation-show_sparse" value="1"/>
+		<integer name="separation-predictor_mask" value="7"/>
+		<integer name="separation-show_rank" value="0"/>
+		<integer name="separation-show_predictors" value = "0"/> 
+		<float name="separation-rank_increase_threshold" value = "0.1"/>
+		<float name="separation-theta" value = "0.01"/>
+	</integrator>
+
+	<sensor type="perspective">
+		<float name="fov" value="50"/>
+		<transform name="toWorld">
+			<matrix value="0.89903 -0.0125668 -0.437707 0.276962 -3.10776e-009 0.999588 -0.0286988 1.01795 0.437887 0.0258011 0.89866 -5.19292 0 0 0 1"/>
+		</transform>
+
+		<sampler type="sobol">
+			<integer name="sampleCount" value="$spp"/>
+		</sampler>
+
+		<film type="hdrfilm">
+			<integer name="width" value="1280"/>
+			<integer name="height" value="720"/>
+			<string name="fileFormat" value="openexr"/>
+			<string name="pixelFormat" value="rgb"/>
+			<float name="gamma" value="2.2"/>
+			<boolean name="banner" value="false"/>
+
+			<rfilter type="tent"/>
+		</film>
+	</sensor>
+
+	<bsdf type="twosided" id="Picture">
+		<bsdf type="diffuse">
+			<texture name="reflectance" type="bitmap">
+				<string name="filename" value="textures/Abstract.jpg"/>
+				<string name="filterType" value="trilinear"/>
+			</texture>
+		</bsdf>
+	</bsdf>
+
+	<bsdf type="twosided" id="Floor">
+		<bsdf type="roughplastic">
+			<float name="alpha" value="0.25"/>
+			<string name="distribution" value="ggx"/>
+			<float name="intIOR" value="1.25"/>
+			<float name="extIOR" value="1"/>
+			<boolean name="nonlinear" value="true"/>
+
+			<texture name="diffuseReflectance" type="bitmap">
+				<string name="filename" value="textures/WoodFloor.jpg"/>
+				<string name="filterType" value="trilinear"/>
+			</texture>
+		</bsdf>
+	</bsdf>
+
+	<bsdf type="dielectric" id="Glass">
+		<float name="intIOR" value="1.5"/>
+		<float name="extIOR" value="1"/>
+	</bsdf>
+
+	<bsdf type="twosided" id="Vase">
+		<bsdf type="roughplastic">
+			<float name="alpha" value="0.1"/>
+			<string name="distribution" value="ggx"/>
+			<float name="intIOR" value="1.5"/>
+			<float name="extIOR" value="1"/>
+			<boolean name="nonlinear" value="true"/>
+			<rgb name="diffuseReflectance" value="0.1, 0.1, 0.1"/>
+		</bsdf>
+	</bsdf>
+
+	<bsdf type="twosided" id="Legs">
+		<bsdf type="roughconductor">
+			<float name="alpha" value="0.3"/>
+			<string name="distribution" value="ggx"/>
+			<float name="extEta" value="1"/>
+			<rgb name="specularReflectance" value="0.1, 0.1, 0.1"/>
+			<rgb name="eta" value="4.36968, 2.9167, 1.6547"/>
+			<rgb name="k" value="5.20643, 4.23136, 3.75495"/>
+		</bsdf>
+	</bsdf>
+
+	<bsdf type="twosided" id="Fruits">
+		<bsdf type="diffuse">
+			<rgb name="reflectance" value="0.486897, 0.006799, 0.010756"/>
+		</bsdf>
+	</bsdf>
+
+	<bsdf type="twosided" id="Cushions">
+		<bsdf type="diffuse">
+			<texture name="reflectance" type="bitmap">
+				<string name="filename" value="textures/Fabric.jpg"/>
+				<string name="filterType" value="trilinear"/>
+			</texture>
+		</bsdf>
+	</bsdf>
+
+	<bsdf type="twosided" id="WhitePaint">
+		<bsdf type="roughplastic">
+			<float name="alpha" value="0.1"/>
+			<string name="distribution" value="ggx"/>
+			<float name="intIOR" value="1.5"/>
+			<float name="extIOR" value="1"/>
+			<boolean name="nonlinear" value="true"/>
+			<rgb name="diffuseReflectance" value="1, 1, 1"/>
+		</bsdf>
+	</bsdf>
+
+	<bsdf type="twosided" id="Sofa">
+		<bsdf type="roughplastic">
+			<float name="alpha" value="0.25"/>
+			<string name="distribution" value="ggx"/>
+			<float name="intIOR" value="1.5"/>
+			<float name="extIOR" value="1"/>
+			<boolean name="nonlinear" value="true"/>
+			<rgb name="diffuseReflectance" value="1, 1, 1"/>
+		</bsdf>
+	</bsdf>
+
+	<bsdf type="twosided" id="Twigs">
+		<bsdf type="diffuse">
+			<rgb name="reflectance" value="0.152325, 0.032489, 0.019341"/>
+		</bsdf>
+	</bsdf>
+
+	<bsdf type="twosided" id="Walls">
+		<bsdf type="diffuse">
+			<rgb name="reflectance" value="1, 1, 1"/>
+		</bsdf>
+	</bsdf>
+
+	<bsdf type="twosided" id="Rug">
+		<bsdf type="diffuse">
+			<rgb name="reflectance" value="0.481952, 0.00658496, 0.0103978"/>
+		</bsdf>
+	</bsdf>
+
+	<shape type="obj">
+		<string name="filename" value="models/Mesh019.obj"/>
+		<transform name="toWorld">
+			<matrix value="1 0 0 0 0 1 0 0 0 0 1 0 0 0 0 1"/>
+		</transform>
+		<boolean name="faceNormals" value="true"/>
+
+		<ref id="Glass"/>
+
+		<medium name="interior" type="homogeneous">
+			<rgb name="sigmaS" value="0, 0, 0"/>
+			<rgb name="sigmaA" value="250, 1000, 1000"/>
+		</medium>
+	</shape>
+
+	<shape type="obj">
+		<string name="filename" value="models/Mesh033.obj"/>
+		<transform name="toWorld">
+			<matrix value="1 0 0 0 0 1 0 0 0 0 1 0 0 0 0 1"/>
+		</transform>
+		<boolean name="faceNormals" value="true"/>
+
+		<ref id="Glass"/>
+
+		<medium name="interior" type="homogeneous">
+			<rgb name="sigmaS" value="0, 0, 0"/>
+			<rgb name="sigmaA" value="250, 1000, 1000"/>
+		</medium>
+	</shape>
+
+	<shape type="obj">
+		<string name="filename" value="models/Mesh020.obj"/>
+		<transform name="toWorld">
+			<matrix value="1 0 0 0 0 1 0 0 0 0 1 0 0 0 0 1"/>
+		</transform>
+
+		<ref id="Vase"/>
+	</shape>
+
+	<shape type="obj">
+		<string name="filename" value="models/Mesh016.obj"/>
+		<transform name="toWorld">
+			<matrix value="1 0 0 0 0 1 0 0 0 0 1 0 0 0 0 1"/>
+		</transform>
+
+		<ref id="Vase"/>
+	</shape>
+
+	<shape type="obj">
+		<string name="filename" value="models/Mesh017.obj"/>
+		<transform name="toWorld">
+			<matrix value="1 0 0 0 0 1 0 0 0 0 1 0 0 0 0 1"/>
+		</transform>
+		<boolean name="faceNormals" value="true"/>
+
+		<ref id="Glass"/>
+
+		<medium name="interior" type="homogeneous">
+			<rgb name="sigmaS" value="0, 0, 0"/>
+			<rgb name="sigmaA" value="250, 1000, 1000"/>
+		</medium>
+	</shape>
+
+	<shape type="obj">
+		<string name="filename" value="models/Mesh014.obj"/>
+		<transform name="toWorld">
+			<matrix value="1 0 0 0 0 1 0 0 0 0 1 0 0 0 0 1"/>
+		</transform>
+		<boolean name="faceNormals" value="true"/>
+
+		<ref id="Glass"/>
+
+		<medium name="interior" type="homogeneous">
+			<rgb name="sigmaS" value="0, 0, 0"/>
+			<rgb name="sigmaA" value="250, 1000, 1000"/>
+		</medium>
+	</shape>
+
+	<shape type="obj">
+		<string name="filename" value="models/Mesh025.obj"/>
+		<transform name="toWorld">
+			<matrix value="1 0 0 0 0 1 0 0 0 0 1 0 0 0 0 1"/>
+		</transform>
+		<boolean name="faceNormals" value="true"/>
+
+		<ref id="Glass"/>
+
+		<medium name="interior" type="homogeneous">
+			<rgb name="sigmaS" value="0, 0, 0"/>
+			<rgb name="sigmaA" value="250, 1000, 1000"/>
+		</medium>
+	</shape>
+
+	<shape type="obj">
+		<string name="filename" value="models/Mesh013.obj"/>
+		<transform name="toWorld">
+			<matrix value="1 0 0 0 0 1 0 0 0 0 1 0 0 0 0 1"/>
+		</transform>
+		<boolean name="faceNormals" value="true"/>
+
+		<ref id="Glass"/>
+
+		<medium name="interior" type="homogeneous">
+			<rgb name="sigmaS" value="0, 0, 0"/>
+			<rgb name="sigmaA" value="250, 1000, 1000"/>
+		</medium>
+	</shape>
+
+	<shape type="obj">
+		<string name="filename" value="models/Mesh021.obj"/>
+		<transform name="toWorld">
+			<matrix value="1 0 0 0 0 1 0 0 0 0 1 0 0 0 0 1"/>
+		</transform>
+		<boolean name="faceNormals" value="true"/>
+
+		<ref id="Glass"/>
+
+		<medium name="interior" type="homogeneous">
+			<rgb name="sigmaS" value="0, 0, 0"/>
+			<rgb name="sigmaA" value="250, 1000, 1000"/>
+		</medium>
+	</shape>
+
+	<shape type="obj">
+		<string name="filename" value="models/Mesh022.obj"/>
+		<transform name="toWorld">
+			<matrix value="1 0 0 0 0 1 0 0 0 0 1 0 0 0 0 1"/>
+		</transform>
+
+		<ref id="Glass"/>
+	</shape>
+
+	<shape type="obj">
+		<string name="filename" value="models/Mesh015.obj"/>
+		<transform name="toWorld">
+			<matrix value="1 0 0 0 0 1 0 0 0 0 1 0 0 0 0 1"/>
+		</transform>
+
+		<ref id="Glass"/>
+
+		<medium name="interior" type="homogeneous">
+			<rgb name="sigmaS" value="0, 0, 0"/>
+			<rgb name="sigmaA" value="250, 1000, 1000"/>
+		</medium>
+	</shape>
+
+	<shape type="obj">
+		<string name="filename" value="models/Mesh024.obj"/>
+		<transform name="toWorld">
+			<matrix value="1 0 0 0 0 1 0 0 0 0 1 0 0 0 0 1"/>
+		</transform>
+
+		<ref id="Vase"/>
+	</shape>
+
+	<shape type="obj">
+		<string name="filename" value="models/Mesh026.obj"/>
+		<transform name="toWorld">
+			<matrix value="1 0 0 0 0 1 0 0 0 0 1 0 0 0 0 1"/>
+		</transform>
+
+		<ref id="Vase"/>
+	</shape>
+
+	<shape type="obj">
+		<string name="filename" value="models/Mesh034.obj"/>
+		<transform name="toWorld">
+			<matrix value="1 0 0 0 0 1 0 0 0 0 1 0 0 0 0 1"/>
+		</transform>
+
+		<ref id="Twigs"/>
+	</shape>
+
+	<shape type="obj">
+		<string name="filename" value="models/Mesh029.obj"/>
+		<transform name="toWorld">
+			<matrix value="1 0 0 0 0 1 0 0 0 0 1 0 0 0 0 1"/>
+		</transform>
+		<boolean name="faceNormals" value="true"/>
+
+		<ref id="Fruits"/>
+	</shape>
+
+	<shape type="obj">
+		<string name="filename" value="models/Mesh018.obj"/>
+		<transform name="toWorld">
+			<matrix value="1 0 0 0 0 1 0 0 0 0 1 0 0 0 0 1"/>
+		</transform>
+
+		<ref id="Glass"/>
+
+		<medium name="interior" type="homogeneous">
+			<rgb name="sigmaS" value="0, 0, 0"/>
+			<rgb name="sigmaA" value="250, 1000, 1000"/>
+		</medium>
+	</shape>
+
+	<shape type="obj">
+		<string name="filename" value="models/Mesh032.obj"/>
+		<transform name="toWorld">
+			<matrix value="1 0 0 -0.502389 0 1 0 0 0 0 1 0 0 0 0 1"/>
+		</transform>
+		<boolean name="faceNormals" value="true"/>
+
+		<ref id="Picture"/>
+	</shape>
+
+	<shape type="obj">
+		<string name="filename" value="models/Mesh035.obj"/>
+		<transform name="toWorld">
+			<matrix value="1 0 0 0 0 1 0 0 0 0 1 0 0 0 0 1"/>
+		</transform>
+
+		<ref id="Glass"/>
+
+		<medium name="interior" type="homogeneous">
+			<rgb name="sigmaS" value="0, 0, 0"/>
+			<rgb name="sigmaA" value="250, 1000, 1000"/>
+		</medium>
+	</shape>
+
+	<shape type="obj">
+		<string name="filename" value="models/Mesh031.obj"/>
+		<transform name="toWorld">
+			<matrix value="1 0 0 0 0 1 0 0 0 0 1 0 0 0 0 1"/>
+		</transform>
+		<boolean name="faceNormals" value="true"/>
+
+		<ref id="WhitePaint"/>
+	</shape>
+
+	<shape type="obj">
+		<string name="filename" value="models/Mesh012.obj"/>
+		<transform name="toWorld">
+			<matrix value="1 0 0 0 0 1 0 0 0 0 1 0 0 0 0 1"/>
+		</transform>
+		<boolean name="faceNormals" value="true"/>
+
+		<ref id="WhitePaint"/>
+	</shape>
+
+	<shape type="obj">
+		<string name="filename" value="models/Mesh011.obj"/>
+		<transform name="toWorld">
+			<matrix value="1 0 0 0 0 1 0 0 0 0 1 0 0 0 0 1"/>
+		</transform>
+		<boolean name="faceNormals" value="true"/>
+
+		<ref id="WhitePaint"/>
+	</shape>
+
+	<shape type="obj">
+		<string name="filename" value="models/Mesh010.obj"/>
+		<transform name="toWorld">
+			<matrix value="1 0 0 0 0 1 0 0 0 0 1 0 0 0 0 1"/>
+		</transform>
+		<boolean name="faceNormals" value="true"/>
+
+		<ref id="WhitePaint"/>
+	</shape>
+
+	<shape type="obj">
+		<string name="filename" value="models/Mesh028.obj"/>
+		<transform name="toWorld">
+			<matrix value="1 0 0 0 0 1 0 0 0 0 1 0 0 0 0 1"/>
+		</transform>
+
+		<ref id="Sofa"/>
+	</shape>
+
+	<shape type="obj">
+		<string name="filename" value="models/Mesh009.obj"/>
+		<transform name="toWorld">
+			<matrix value="1 0 0 0 0 1 0 0 0 0 1 0 0 0 0 1"/>
+		</transform>
+
+		<ref id="Cushions"/>
+	</shape>
+
+	<shape type="obj">
+		<string name="filename" value="models/Mesh007.obj"/>
+		<transform name="toWorld">
+			<matrix value="1 0 0 0 0 1 0 0 0 0 1 0 0 0 0 1"/>
+		</transform>
+
+		<ref id="Cushions"/>
+	</shape>
+
+	<shape type="obj">
+		<string name="filename" value="models/Mesh006.obj"/>
+		<transform name="toWorld">
+			<matrix value="1 0 0 0 0 1 0 0 0 0 1 0 0 0 0 1"/>
+		</transform>
+
+		<ref id="Sofa"/>
+	</shape>
+
+	<shape type="obj">
+		<string name="filename" value="models/Mesh030.obj"/>
+		<transform name="toWorld">
+			<matrix value="1 0 0 0 0 1 0 0 0 0 1 0 0 0 0 1"/>
+		</transform>
+
+		<ref id="Sofa"/>
+	</shape>
+
+	<shape type="obj">
+		<string name="filename" value="models/Mesh005.obj"/>
+		<transform name="toWorld">
+			<matrix value="1 0 0 0 0 1 0 0 0 0 1 0 0 0 0 1"/>
+		</transform>
+
+		<ref id="Legs"/>
+	</shape>
+
+	<shape type="obj">
+		<string name="filename" value="models/Mesh004.obj"/>
+		<transform name="toWorld">
+			<matrix value="1 0 0 0 0 1 0 0 0 0 1 0 0 0 0 1"/>
+		</transform>
+
+		<ref id="Cushions"/>
+	</shape>
+
+	<shape type="obj">
+		<string name="filename" value="models/Mesh023.obj"/>
+		<transform name="toWorld">
+			<matrix value="1 0 0 0 0 1 0 0 0 0 1 0 0 0 0 1"/>
+		</transform>
+
+		<ref id="WhitePaint"/>
+	</shape>
+
+	<shape type="obj">
+		<string name="filename" value="models/Mesh002.obj"/>
+		<transform name="toWorld">
+			<matrix value="1 0 0 0 0 1 0 0 0 0 1 0 0 0 0 1"/>
+		</transform>
+
+		<ref id="Legs"/>
+	</shape>
+
+	<shape type="obj">
+		<string name="filename" value="models/Mesh008.obj"/>
+		<transform name="toWorld">
+			<matrix value="1 0 0 0 0 1 0 0 0 0 2.30893 0 0 0 0 1"/>
+		</transform>
+		<boolean name="faceNormals" value="true"/>
+
+		<ref id="Floor"/>
+	</shape>
+
+	<shape type="obj">
+		<string name="filename" value="models/Mesh027.obj"/>
+		<transform name="toWorld">
+			<matrix value="1 0 0 0 0 1 0 0 0 0 2.28402 0 0 0 0 1"/>
+		</transform>
+		<boolean name="faceNormals" value="true"/>
+
+		<ref id="Walls"/>
+	</shape>
+
+	<shape type="obj">
+		<string name="filename" value="models/Mesh003.obj"/>
+		<transform name="toWorld">
+			<matrix value="1 0 0 0 0 1 0 0 0 0 1 0 0 0 0 1"/>
+		</transform>
+		<boolean name="faceNormals" value="true"/>
+
+		<ref id="Rug"/>
+	</shape>
+
+	<shape type="obj">
+		<string name="filename" value="models/Mesh001.obj"/>
+		<transform name="toWorld">
+			<matrix value="1 0 0 0 0 1 0 0 0 0 1 0 0 0 0 1"/>
+		</transform>
+		<boolean name="faceNormals" value="true"/>
+
+		<ref id="WhitePaint"/>
+	</shape>
+
+	<shape type="sphere">
+		<float name="radius" value="0.164157"/>
+		<point name="center" x="-4.50891" y="1.81441" z="-3.77121"/>
+
+		<bsdf type="twosided">
+			<bsdf type="diffuse">
+				<rgb name="reflectance" value="0, 0, 0"/>
+			</bsdf>
+		</bsdf>
+
+		<emitter type="area">
+			<rgb name="radiance" value="112.799, 112.799, 112.799"/>
+		</emitter>
+	</shape>
+
+	<shape type="hair">
+		<float name="radius" value="0.00146576"/>
+		<string name="filename" value="models/.mitshair"/>
+
+		<bsdf type="diffuse">
+			<rgb name="reflectance" value="0.42, 0.007, 0.01"/>
+		</bsdf>
+	</shape>
+</scene>

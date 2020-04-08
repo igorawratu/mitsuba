@@ -1,0 +1,105 @@
+<?xml version='1.0' encoding='utf-8'?>
+<!--
+
+	Automatically converted from Wavefront OBJ
+
+-->
+
+<scene version="0.6.0">
+	<integrator type="manylights">
+		<integer name="max_depth" value="5" />
+		<boolean name="strictNormals" value="true" />
+
+		<!--GENERAL-->
+		<float name="clamping" value="0.1"/>
+		<integer name="clustering_strat" value="3"/>
+		<integer name="vsl" value="1"/>
+		<integer name="vpls" value="10000"/>
+
+		<!--BRUTE FORCE, STRAT 0-->
+
+		<!--LIGHTCUTS, STRAT 1-->
+		<integer name="lightcuts-num_clusters" value="3000"/>
+		<float name="lightcuts-error_threshold" value="0.02"/>
+
+		<!--MATRIX ROW COLUMN SAMPLING, STRAT 2-->
+		<integer name="rowcol-rows" value="1000"/>
+		<integer name="rowcol-num_clusters" value="1000"/>
+
+		<!--MATRIX COMPLETION, STRAT 3-->
+		<float name="completion-sample_perc" value="1"/>
+		<float name="completion-step_factor" value="1.5"/>
+		<float name="completion-tolerance" value="0.01"/>
+		<float name="completion-tau" value="0.05"/>
+		<integer name="completion-reconstruction_iterations" value="40"/>
+		<integer name="completion-slice_size" value="1024"/>
+		<integer name="completion-visibility_only" value="1"/>
+		<integer name="completion-adaptive_col_sampling" value="1"/>
+		<integer name="completion-adaptive_importance_sampling" value="0"/>
+		<integer name="completion-adaptive_force_resample" value="0"/>
+		<integer name="completion-adaptive_recover_transpose" value="0"/>
+		<integer name="completion-use_truncated" value="0"/>
+		<integer name="completion-show_slices" value="0"/>
+		<integer name="completion-show_stats" value="0"/>
+		<string name="completion-cluster_strat" value = "ls"/>
+
+		<!--MATRIX SEPARATION, STRAT 4-->
+		<float name="separation-sample_perc" value="0.05"/>
+		<float name="separation-prediction_error_thresh" value="0.02"/>
+		<float name="separation-density_thresh" value="0.2"/>
+		<integer name="separation-slice_size" value="1024"/>
+		<integer name="separation-prediction_iter" value="10"/>
+		<integer name="separation-separation_iter" value="40"/>
+		<integer name="separation-show_slices" value="0"/>
+		<integer name="separation-only_direct_samples" value="0"/>
+		<integer name="separation-separate" value="1"/>
+		<integer name="separation-show_error" value="0"/>
+		<integer name="separation-show_sparse" value="1"/>
+		<integer name="separation-predictor_mask" value="7"/>
+		<integer name="separation-show_rank" value="0"/>
+		<integer name="separation-show_predictors" value = "0"/> 
+		<float name="separation-rank_increase_threshold" value = "0.1"/>
+		<float name="separation-theta" value = "0.01"/>
+	</integrator>
+
+	<bsdf id="gallery_161122_HWY_Galleri_Material_u1_v1_material" type="diffuse">
+		<texture name="reflectance" id="gallery.jpg" type="bitmap">
+			<string name="filename" value="gallery.jpg"/>
+		</texture>
+	</bsdf>
+
+	<shape id="default_mesh" type="serialized">
+		<string name="filename" value="gallery.serialized"/>
+		<integer name="shapeIndex" value="0"/>
+
+		<ref name="bsdf" id="gallery_161122_HWY_Galleri_Material_u1_v1_material"/>
+	</shape>
+
+	<emitter type="sunsky">
+		<float name="turbidity" value="3"/>
+		<vector name="sunDirection" y="0.655031" z="-0.1" x="-0.1"/>
+		<float name="skyScale" value="15"/>
+		<float name="sunScale" value="20"/>
+		<float name="sunRadiusScale" value="37.9165"/>
+	</emitter>
+
+	<sensor type="perspective">
+		<float name="farClip" value="140.597"/>
+		<float name="focusDistance" value="7.00117"/>
+		<float name="fov" value="65"/>
+		<string name="fovAxis" value="x"/>
+		<float name="nearClip" value="0.135172"/>
+		<transform name="toWorld">
+
+			<lookat up="-0.00789863, 0.994421, -0.105187" target="-3.3511, 2.5533, 2.56368" origin="-4.13095, 2.61301, 3.18678"/>
+		</transform>
+
+		<sampler type="independent">
+			<integer name="sampleCount" value="1"/>
+		</sampler>
+
+		<film type="hdrfilm">
+			<rfilter type="gaussian"/>
+		</film>
+	</sensor>
+</scene>
