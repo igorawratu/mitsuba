@@ -58,7 +58,76 @@ const std::array<std::function<bool(const VPL&, const VPL&)>, 6> divider_sorter{
     }
 };
 
-void divideByGreatestDim(const std::vector<VPL>& vpls,
+void divideByGreatestDimLargest(const std::vector<VPL>& vpls, std::vector<VPL>& left, std::vector<VPL>& right, std::uint32_t min_size,
+	float norm_scale, EVPLType type){
+	left.clear();
+	right.clear();
+
+	float maxf = std::numeric_limits<float>::max();
+	Vector3f min_pos(maxf, maxf, maxf), max_pos(-maxf, -maxf, -maxf);
+	Vector3f min_normal(maxf, maxf, maxf), max_normal(-maxf, -maxf, -maxf);
+
+	float norm_factor = vpl_type != EPointEmitterVPL ? 1.f : 0.f;
+	float pos_factor = vpl_type != EDirectionalEmitterVPL ? 1.f : 0.f;
+
+	for(std::uint32_t i = 0; i < vpls.size(); ++i){
+		min_pos.x = std::min(vpls[i].its.p.x, min_pos.x);
+		min_pos.y = std::min(vpls[i].its.p.y, min_pos.y);
+		min_pos.z = std::min(vpls[i].its.p.z, min_pos.z);
+		max_pos.x = std::max(vpls[i].its.p.x, max_pos.x);
+		max_pos.y = std::max(vpls[i].its.p.y, max_pos.y);
+		max_pos.z = std::max(vpls[i].its.p.z, max_pos.z);
+
+		min_normal.x = std::min(vpls[i].its.shFrame.n.x, min_normal.x);
+		min_normal.y = std::min(vpls[i].its.shFrame.n.y, min_normal.y);
+		min_normal.z = std::min(vpls[i].its.shFrame.n.z, min_normal.z);
+		max_normal.x = std::max(vpls[i].its.shFrame.n.x, max_normal.x);
+		max_normal.y = std::max(vpls[i].its.shFrame.n.y, max_normal.y);
+		max_normal.z = std::max(vpls[i].its.shFrame.n.z, max_normal.z);
+	}
+
+	std::array<std::pair<std::uint8_t, float>, 6> ranges;
+	ranges[0] = std::make_pair(0, (max_pos.x - min_pos.x) * pos_factor);
+	ranges[1] = std::make_pair(1, (max_pos.y - min_pos.y) * pos_factor);
+	ranges[2] = std::make_pair(2, (max_pos.z - min_pos.z) * pos_factor);
+	ranges[3] = std::make_pair(3, (max_normal.x - min_normal.x) * norm_scale * norm_factor);
+	ranges[4] = std::make_pair(4, (max_normal.y - min_normal.y) * norm_scale * norm_factor);
+	ranges[5] = std::make_pair(5, (max_normal.z - min_normal.z) * norm_scale * norm_factor);
+
+	std::array<float, 6> midpoints;
+	midpoints[0] = (max_pos.x + min_pos.x) / 2.f;
+	midpoints[1] = (max_pos.y + min_pos.y) / 2.f;
+	midpoints[2] = (max_pos.z + min_pos.z) / 2.f;
+	midpoints[3] = (max_normal.x + min_normal.x) / 2.f;
+	midpoints[4] = (max_normal.y + min_normal.y) / 2.f;
+	midpoints[5] = (max_normal.z + min_normal.z) / 2.f;
+
+	std::sort(ranges.begin(), ranges.end(), 
+		[](const std::pair<std::uint8_t, float>& lhs, const std::pair<std::uint8_t, float>& rhs){
+			return lhs.second > rhs.second;
+		});
+
+	for(std::uint32_t i = 0; i < sample_indices.size(); ++i){
+		if(divider_comp[ranges[0].first](midpoints[ranges[0].first], vpls[i].its)){
+			right.push_back(vpls[i]);
+		}
+		else{
+			left.push_back(vpls[i]);
+		}
+	}
+
+	if(left.size() < min_size || right.size() < min_size){
+		auto vpl_sorted = vpls;
+		std::sort(vpl_sorted.begin(), vpl_sorted.end(), divider_sorter[ranges[0].first]);
+		left.clear();
+		right.clear();
+		std::uint32_t midpoint = vpl_sorted.size() / 2;
+		left.insert(left->sample_indices.end(), vpl_sorted.begin(), vpl_sorted.begin() + midpoint);
+		right.insert(right->sample_indices.end(), vpl_sorted.begin() + midpoint, vpl_sorted.end());
+	}
+}
+
+void divideByGreatestDimPA(const std::vector<VPL>& vpls,
 	std::vector<VPL>& left, std::vector<VPL>& right, std::uint32_t min_size,
 	float norm_scale, EVPLType vpl_type){
 	left.clear();
@@ -319,16 +388,21 @@ std::unique_ptr<LightTreeNode> createLightTree(const std::vector<VPL>& vpls, EVP
 }
 
 std::unique_ptr<LightTreeNode> tdCreateLightTree(const std::vector<VPL>& vpls, EVPLType vpl_type, float min_dist, std::uint32_t bottom_up_thresh, std::mt19937& rng){
-	if(vpls.size() <= bottom_up_thresh){
+	if(vpls.size() <= bottom_up_thresh, bool use_pa_div){
 		return createLightTree(vpls, vpl_type, min_dist, rng);
 	}
 
 	std::vector<VPL> left_vpls;
 	std::vector<VPL> right_vpls;
-	divideByGreatestDim(vpls, left_vpls, right_vpls, bottom_up_thresh, min_dist / 10.f, vpl_type);
+	if(use_pa_div){
+		divideByGreatestDim(vpls, left_vpls, right_vpls, bottom_up_thresh, min_dist / 10.f, vpl_type);
+	}
+	else{
+		divideByGreatestDimLargest(vpls, left_vpls, right_vpls, bottom_up_thresh, min_dist / 10.f, vpl_type)
+	}
 
-	auto lc = tdCreateLightTree(left_vpls, vpl_type, min_dist, bottom_up_thresh, rng);
-	auto rc = tdCreateLightTree(right_vpls, vpl_type, min_dist, bottom_up_thresh, rng);
+	auto lc = tdCreateLightTree(left_vpls, vpl_type, min_dist, bottom_up_thresh, rng, use_pa_div);
+	auto rc = tdCreateLightTree(right_vpls, vpl_type, min_dist, bottom_up_thresh, rng, use_pa_div);
 
 	std::uniform_real_distribution<float> gen(0, 1);
 
@@ -610,9 +684,9 @@ LightTree::LightTree(const std::vector<VPL>& vpls, float min_dist, std::uint32_t
 
 	std::mt19937 rng(std::chrono::high_resolution_clock::now().time_since_epoch().count());
 
-	point_tree_root_ = tdCreateLightTree(point_vpls_, EPointEmitterVPL, min_dist_, 1, rng);
-	oriented_tree_root_ = tdCreateLightTree(oriented_vpls_, ESurfaceVPL, min_dist_, 1, rng);
-	directional_tree_root_ = tdCreateLightTree(directional_vpls_, EDirectionalEmitterVPL, min_dist_, 1, rng);
+	point_tree_root_ = tdCreateLightTree(point_vpls_, EPointEmitterVPL, min_dist_, 1, rng, false);
+	oriented_tree_root_ = tdCreateLightTree(oriented_vpls_, ESurfaceVPL, min_dist_, 1, rng, false);
+	directional_tree_root_ = tdCreateLightTree(directional_vpls_, EDirectionalEmitterVPL, min_dist_, 1, rng, false);
 }
 
 LightTree::LightTree(const LightTree& other) : point_vpls_(other.point_vpls_), directional_vpls_(other.directional_vpls_),
