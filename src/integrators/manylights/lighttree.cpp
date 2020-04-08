@@ -396,10 +396,10 @@ std::unique_ptr<LightTreeNode> tdCreateLightTree(const std::vector<VPL>& vpls, E
 	std::vector<VPL> left_vpls;
 	std::vector<VPL> right_vpls;
 	if(use_pa_div){
-		divideByGreatestDim(vpls, left_vpls, right_vpls, bottom_up_thresh, min_dist / 10.f, vpl_type);
+		divideByGreatestDimPA(vpls, left_vpls, right_vpls, bottom_up_thresh, min_dist / 10.f, vpl_type);
 	}
 	else{
-		divideByGreatestDimLargest(vpls, left_vpls, right_vpls, bottom_up_thresh, min_dist / 10.f, vpl_type)
+		divideByGreatestDimLargest(vpls, left_vpls, right_vpls, bottom_up_thresh, min_dist / 10.f, vpl_type);
 	}
 
 	auto lc = tdCreateLightTree(left_vpls, vpl_type, min_dist, bottom_up_thresh, rng, use_pa_div);
