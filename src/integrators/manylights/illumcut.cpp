@@ -317,20 +317,10 @@ void computeUpperBounds(LightTree* lt, OctreeNode<IllumcutSample>* rt_root, Scen
     while(initial_pairs.size() < 64){
         IllumPair curr = initial_pairs.front();
         initial_pairs.pop_front();
-        if(refineLTree(curr)){
-            if(curr.first->left != nullptr){
-                initial_pairs.push_back(std::make_pair(curr.first->left.get(), curr.second));
-            }
-
-            if(curr.first->right != nullptr){
-                initial_pairs.push_back(std::make_pair(curr.first->right.get(), curr.second));
-            }
-        }
-        else{
-            for(std::uint8_t i = 0; i < curr.second->children.size(); ++i){
-                if(curr.second->children[i] != nullptr){
-                    initial_pairs.push_back(std::make_pair(curr.first, curr.second->children[i].get()));
-                }
+        
+        for(std::uint8_t i = 0; i < curr.second->children.size(); ++i){
+            if(curr.second->children[i] != nullptr){
+                initial_pairs.push_back(std::make_pair(curr.first, curr.second->children[i].get()));
             }
         }
     }
