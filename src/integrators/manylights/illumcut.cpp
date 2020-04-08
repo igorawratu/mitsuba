@@ -424,6 +424,7 @@ void copySamplesToBuffer(std::uint8_t* output_image, const std::vector<IllumcutS
     std::unordered_map<std::uint32_t, Spectrum> output;
     //#pragma omp parallel for
     for(std::uint32_t i = 0; i < samples.size(); ++i){
+        std::cout << samples[i].color.getLuminance() << std::endl;
         std::uint32_t buffer_pos = samples[i].image_x + samples[i].image_y * image_size.x;
         if(output.find(buffer_pos) != output.end()){
             output[buffer_pos] += samples[i].color;
