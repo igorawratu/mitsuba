@@ -158,12 +158,12 @@ bool refineUpper(const IllumPair& illum_pair){
 
     }
 
-    /*if(illum_pair.first->vpl.type != EPointEmitterVPL){
+    if(illum_pair.first->vpl.type != EPointEmitterVPL){
         costheta = illum_pair.first->bcone.GetAngleCos();
         refine |= illum_pair.first->bcone.GetAngleCos() < CONE_THRESH;
-    }*/
+    }
 
-    std::cout << (std::uint32_t)refine << " " << r1 << " " << r2 << " " << d << /*" " << costheta <<*/ " " << illum_pair.first->num_children << " " <<
+    std::cout << (std::uint32_t)refine << " " << r1 << " " << r2 << " " << d << " " << costheta << " " << illum_pair.first->num_children << " " <<
         illum_pair.second->sample_indices.size() << std::endl;
  
     return refine;   
