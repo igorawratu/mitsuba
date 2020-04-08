@@ -457,7 +457,7 @@ void renderIllumAwarePairs(const std::vector<IllumPair>& ilps, Scene* scene, flo
             vpl.P *= ilps[i].first->emission_scale;
 
             Spectrum col = sample(scene, sampler, curr_sample.its, curr_sample.ray, vpl, min_dist, 
-                false, 10, false, curr_sample.intersected_scene, true, false, samples_taken);
+                true, 10, false, curr_sample.intersected_scene, true, false, samples_taken);
 
             {
                 std::lock_guard<std::mutex> lock(render_mut);
