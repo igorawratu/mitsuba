@@ -346,6 +346,9 @@ void computeUpperBounds(LightTree* lt, OctreeNode<IllumcutSample>* rt_root, Scen
         else{
             IllumcutSample& curr_sample = curr.second->representative();
 
+            float estimated_error = LightTree::calculateClusterBounds(curr_sample.its.p, curr_sample.its.shFrame.n, curr.first, 
+                curr.first->vpl.type, min_dist);
+
             std::uint32_t samples_taken;
             Spectrum col = sample(scene, sampler, curr_sample.its, curr_sample.ray, curr.first->vpl, min_dist, 
                 true, 10, false, curr_sample.intersected_scene, true, false, samples_taken);
