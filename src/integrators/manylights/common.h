@@ -455,12 +455,25 @@ struct OctreeNode{
     OctreeNode& operator=(OctreeNode&& other) = delete;
 
     void updateUpperBound(float val){
-        upper_bound += val;
+        for(std::uint8_t i = 0; i < sample_indices.size(); ++i){
+            sample(i).upper_bound += val;
+        }
+    }
 
-        for(std::uint8_t i = 0; i < children.size(); ++i){
-            if(children[i] != nullptr){
-                children[i]->updateUpperBound(val);
+    void cacheMinUpper(){
+        if(sample_indices.size() == 1){
+            upper_bound = representative().upper_bound;
+            return;
+        }
+
+        upper_bound = std::numeric_limits<float>::max();
+        for(std::uint8_t i = 0; i < child_indices.size(); ++i){
+            if(child_indices[i].size() == 0){
+                continue;
             }
+
+            children[i]->cacheMinUpper();
+            upper_bound = std::min(upper_bound, children[i]->upper_bound);
         }
     }
 

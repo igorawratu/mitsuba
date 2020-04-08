@@ -16,11 +16,11 @@ struct IllumcutSample{
     }
 
     IllumcutSample(std::uint32_t x, std::uint32_t y, bool in_scene, Intersection intersection, const Ray& r) : 
-        image_x(x), image_y(y), intersected_scene(in_scene), its(intersection), ray(r), color(0.f){
+        image_x(x), image_y(y), intersected_scene(in_scene), its(intersection), ray(r), color(0.f), upper_bound(0.f){
     }
 
     IllumcutSample(IllumcutSample&& other) : image_x(other.image_x), image_y(other.image_y), 
-        intersected_scene(other.intersected_scene), its(other.its), ray(other.ray), color(other.color){
+        intersected_scene(other.intersected_scene), its(other.its), ray(other.ray), color(other.color), upper_bound(other.upper_bound){
     }
 
     IllumcutSample& operator = (IllumcutSample&& other){
@@ -31,6 +31,7 @@ struct IllumcutSample{
             its = other.its;
             ray = other.ray;
             color = other.color;
+            upper_bound = other.upper_bound;
         }
 
         return *this;
@@ -41,6 +42,8 @@ struct IllumcutSample{
     Intersection its;
     Ray ray;
     Spectrum color;
+
+    float upper_bound;
 };
 
 class IlluminationCutRenderer : public ManyLightsRenderer{

@@ -162,9 +162,6 @@ bool refineUpper(const IllumPair& illum_pair){
         costheta = illum_pair.first->bcone.GetAngleCos();
         refine |= illum_pair.first->bcone.GetAngleCos() < CONE_THRESH;
     }
-
-    //std::cout << (std::uint32_t)refine << " " << r1 << " " << r2 << " " << d << " " << costheta << " " << illum_pair.first->num_children << " " <<
-    //    illum_pair.second->sample_indices.size() << std::endl;
  
     return refine;   
 }
@@ -288,8 +285,6 @@ bool refineLTree(const IllumPair& illum_pair){
 
     float rheuristic = rm * rg;
 
-    //std::cout << lm << "-" << lg << " : " << rm << "-" << rg << " " << lheuristic << " " << rheuristic << std::endl;
-
     bool use_heuristics = std::abs(lheuristic - rheuristic) > 0.0001f;
 
     if(use_heuristics){
@@ -352,6 +347,8 @@ void computeUpperBounds(LightTree* lt, OctreeNode<IllumcutSample>* rt_root, Scen
             curr.second->updateUpperBound(estimated_error);
         }
     }
+
+    rt_root->cacheMinUpper();
 }
 
 std::vector<IllumPair> getIlluminationAwarePairs(LightTree* lt, OctreeNode<IllumcutSample>* rt_root, float min_dist, float error_thresh){
@@ -407,6 +404,9 @@ void renderIllumAwarePairs(const std::vector<IllumPair>& ilps, Scene* scene, flo
     sampler->configure();
     sampler->generate(Point2i(0));
 
+    std::mutex mutex;
+
+    #pragma omp parallel for
     for(std::uint32_t i = 0; i < ilps.size(); ++i){
         for(std::uint32_t j = 0; j < ilps[i].second->sample_indices.size(); ++j){
             IllumcutSample& curr_sample = ilps[i].second->sample(j);
@@ -418,7 +418,10 @@ void renderIllumAwarePairs(const std::vector<IllumPair>& ilps, Scene* scene, flo
             Spectrum col = sample(scene, sampler, curr_sample.its, curr_sample.ray, vpl, min_dist, 
                 true, 10, false, curr_sample.intersected_scene, true, false, samples_taken);
 
-            curr_sample.color += col;
+            {
+                std::lock_guard<mutex> lock;
+                curr_sample.color += col;
+            }
         }
     }
 
