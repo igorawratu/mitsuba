@@ -405,6 +405,7 @@ std::vector<IllumPair> getIlluminationAwarePairs(LightTree* lt, OctreeNode<Illum
     #pragma omp parallel for
     for(std::uint32_t i = 0; i < initial_pairs_vec.size(); ++i){
         std::stack<IllumPair> node_stack;
+        node_stack.push(initial_pairs_vec[i]);
         while(!node_stack.empty()){
             IllumPair curr = node_stack.top();
             node_stack.pop();
