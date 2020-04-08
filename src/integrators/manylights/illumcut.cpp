@@ -419,7 +419,7 @@ void renderIllumAwarePairs(const std::vector<IllumPair>& ilps, Scene* scene, flo
                 true, 10, false, curr_sample.intersected_scene, true, false, samples_taken);
 
             {
-                std::lock_guard<mutex> lock;
+                std::lock_guard<std::mutex> lock;
                 curr_sample.color += col;
             }
         }
