@@ -60,6 +60,9 @@
 		<integer name="separation-show_predictors" value = "0"/> 
 		<float name="separation-rank_increase_threshold" value = "0.1"/>
 		<float name="separation-theta" value = "0.01"/>
+
+		<!--ILLUMCUT, STRAT 5-->
+		<float name="illumcut-_error_thresh" value="$iet"/>
 	</integrator>
 
 	<sensor type="perspective">
