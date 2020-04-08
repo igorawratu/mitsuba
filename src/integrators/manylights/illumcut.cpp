@@ -163,8 +163,8 @@ bool refineUpper(const IllumPair& illum_pair){
         refine |= illum_pair.first->bcone.GetAngleCos() < CONE_THRESH;
     }
 
-    std::cout << (std::uint32_t)refine << " " << r1 << " " << r2 << " " << d << " " << costheta << " " << illum_pair.first->num_children << " " <<
-        illum_pair.second->sample_indices.size() << std::endl;
+    //std::cout << (std::uint32_t)refine << " " << r1 << " " << r2 << " " << d << " " << costheta << " " << illum_pair.first->num_children << " " <<
+    //    illum_pair.second->sample_indices.size() << std::endl;
  
     return refine;   
 }
