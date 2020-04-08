@@ -269,7 +269,7 @@ bool refineLTree(const IllumPair& illum_pair){
         lm *= (1.0f - illum_pair.first->bcone.GetAngleCos());
     }
     
-    float lheuristic = std::min(0.05f, lm) * lg;
+    float lheuristic = std::max(0.05f, lm) * lg;
 
     float rg = 1.f;
     if(illum_pair.first->vpl.type != EDirectionalEmitterVPL){
@@ -286,7 +286,7 @@ bool refineLTree(const IllumPair& illum_pair){
 
     float rm = (1.0f - illum_pair.second->bcone.GetAngleCos()) * rbb_extents.length() / sqrt(dsqr);
 
-    float rheuristic = std::min(0.05f, rm) * rg;
+    float rheuristic = std::max(0.05f, rm) * rg;
 
     //std::cout << lm << "-" << lg << " : " << rm << "-" << rg << " " << illum_pair.second->sample_indices.size() << std::endl;
 
