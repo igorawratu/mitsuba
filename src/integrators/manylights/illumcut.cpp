@@ -153,6 +153,10 @@ bool refineUpper(const IllumPair& illum_pair){
         float d = std::max(0.f, 0.1f * ((c1 - c2).length() - r1 - r2));
 
         refine |= std::max(r1, r2) > d;
+
+        if(refine){
+            std::cout << r1 << " " << r2 << " " << d << std::endl;
+        }
     }
 
     if(illum_pair.first->vpl.type != EPointEmitterVPL){
@@ -223,7 +227,6 @@ float distanceSqr(const std::pair<Vector3f, Vector3f>& a, const std::pair<Vector
 
 bool refineLTree(const IllumPair& illum_pair){
     if(illum_pair.first->left == nullptr || illum_pair.first->right == nullptr){
-        std::cout << "hit ltree root" << std::endl;
         return false;
     }
 
@@ -282,7 +285,7 @@ bool refineLTree(const IllumPair& illum_pair){
 
     float rheuristic = rm * rg;
 
-    std::cout << lm << "-" << lg << " : " << rm << "-" << rg << " " << illum_pair.second->sample_indices.size() << std::endl;
+    //std::cout << lm << "-" << lg << " : " << rm << "-" << rg << " " << illum_pair.second->sample_indices.size() << std::endl;
 
     return lheuristic > rheuristic;  
 }
