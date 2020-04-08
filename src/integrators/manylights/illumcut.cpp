@@ -412,8 +412,13 @@ void renderIllumAwarePairs(const std::vector<IllumPair>& ilps, Scene* scene, flo
             IllumcutSample& curr_sample = ilps[i].second->sample(j);
             std::uint32_t samples_taken;
 
-            curr_sample.color += sample(scene, sampler, curr_sample.its, curr_sample.ray, ilps[i].first->vpl, min_dist, 
+            VPL vpl = ilps[i].first->vpl;
+            vpl.P *= ilps[i].first->emission_scale;
+
+            Spectrum col = sample(scene, sampler, curr_sample.its, curr_sample.ray, vpl, min_dist, 
                 true, 10, false, curr_sample.intersected_scene, true, false, samples_taken);
+
+            curr_sample.color += col;
         }
     }
 
@@ -424,7 +429,6 @@ void copySamplesToBuffer(std::uint8_t* output_image, const std::vector<IllumcutS
     std::unordered_map<std::uint32_t, Spectrum> output;
     //#pragma omp parallel for
     for(std::uint32_t i = 0; i < samples.size(); ++i){
-        std::cout << samples[i].color.getLuminance() << std::endl;
         std::uint32_t buffer_pos = samples[i].image_x + samples[i].image_y * image_size.x;
         if(output.find(buffer_pos) != output.end()){
             output[buffer_pos] += samples[i].color;
