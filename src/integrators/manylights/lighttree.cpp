@@ -665,8 +665,8 @@ LightTree::LightTree() : point_tree_root_(nullptr), directional_tree_root_(nullp
 
 }
 
-LightTree::LightTree(const std::vector<VPL>& vpls, float min_dist, std::uint32_t max_lights, float error_threshold) : 
-	min_dist_(min_dist), max_lights_(max_lights), error_threshold_(error_threshold) {
+LightTree::LightTree(const std::vector<VPL>& vpls, float min_dist, std::uint32_t max_lights, float error_threshold, bool divbypa) : 
+	min_dist_(min_dist), max_lights_(max_lights), error_threshold_(error_threshold), divbypa_(divbypa) {
 	for (std::uint32_t i = 0; i < vpls.size(); ++i) {
 		switch (vpls[i].type) {
 			case EPointEmitterVPL:
@@ -685,9 +685,9 @@ LightTree::LightTree(const std::vector<VPL>& vpls, float min_dist, std::uint32_t
 
 	std::mt19937 rng(std::chrono::high_resolution_clock::now().time_since_epoch().count());
 
-	point_tree_root_ = tdCreateLightTree(point_vpls_, EPointEmitterVPL, min_dist_, 1, rng, false);
-	oriented_tree_root_ = tdCreateLightTree(oriented_vpls_, ESurfaceVPL, min_dist_, 1, rng, false);
-	directional_tree_root_ = tdCreateLightTree(directional_vpls_, EDirectionalEmitterVPL, min_dist_, 1, rng, false);
+	point_tree_root_ = tdCreateLightTree(point_vpls_, EPointEmitterVPL, min_dist_, 1, rng, divbypa_);
+	oriented_tree_root_ = tdCreateLightTree(oriented_vpls_, ESurfaceVPL, min_dist_, 1, rng, divbypa_);
+	directional_tree_root_ = tdCreateLightTree(directional_vpls_, EDirectionalEmitterVPL, min_dist_, 1, rng, divbypa_);
 }
 
 LightTree::LightTree(const LightTree& other) : point_vpls_(other.point_vpls_), directional_vpls_(other.directional_vpls_),

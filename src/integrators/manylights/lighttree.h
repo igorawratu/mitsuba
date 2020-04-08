@@ -72,7 +72,7 @@ struct LightTreeNode{
 class LightTree : public ManyLightsClusterer{
 public:
     LightTree();
-    LightTree(const std::vector<VPL>& vpls, float min_dist, std::uint32_t max_lights, float error_threshold);
+    LightTree(const std::vector<VPL>& vpls, float min_dist, std::uint32_t max_lights, float error_threshold, bool divbypa);
     LightTree(const LightTree& other);
     LightTree(LightTree&& other);
     LightTree& operator = (const LightTree& other);
@@ -95,6 +95,7 @@ private:
     float min_dist_;
     std::uint32_t max_lights_;
     float error_threshold_;
+    bool divbypa_;
     std::mutex mutex_;
 };
 

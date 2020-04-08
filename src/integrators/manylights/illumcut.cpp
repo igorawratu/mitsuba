@@ -9,6 +9,7 @@
 #include <random>
 #include <unordered_map>
 #include <iostream>
+#include <deque>
 
 #include "common.h"
 
@@ -299,51 +300,73 @@ void computeUpperBounds(LightTree* lt, OctreeNode<IllumcutSample>* rt_root, Scen
     sampler->configure();
     sampler->generate(Point2i(0));
 
-    std::stack<IllumPair> node_stack;
+    std::deque<IllumPair> initial_pairs;
 
-    if(lt->getPointTreeRoot()){
-        node_stack.push(std::make_pair(lt->getPointTreeRoot(), rt_root));
-    }
-    
-    if(lt->getDirectionalTreeRoot()){
-        node_stack.push(std::make_pair(lt->getDirectionalTreeRoot(), rt_root));
-    }
+    initial_pairs.push_back(std::make_pair(lt->getPointTreeRoot(), rt_root));
+    initial_pairs.push_back(std::make_pair(lt->getDirectionalTreeRoot(), rt_root));
+    initial_pairs.push_back(std::make_pair(lt->getOrientedTreeRoot(), rt_root));
 
-    if(lt->getOrientedTreeRoot()){
-        node_stack.push(std::make_pair(lt->getOrientedTreeRoot(), rt_root));
-    }
-
-    while(!node_stack.empty()){
-        IllumPair curr = node_stack.top();
-        node_stack.pop();
-
-        if(refineUpper(curr)){
-            if(refineLTree(curr)){
-                if(curr.first->left != nullptr){
-                    node_stack.push(std::make_pair(curr.first->left.get(), curr.second));
-                }
-
-                if(curr.first->right != nullptr){
-                    node_stack.push(std::make_pair(curr.first->right.get(), curr.second));
-                }
+    while(initial_pairs.size() < 64){
+        IllumPair curr = initial_pairs.front();
+        initial_pairs.pop_front();
+        if(refineLTree(curr)){
+            if(curr.first->left != nullptr){
+                initial_pairs.push_back(std::make_pair(curr.first->left.get(), curr.second));
             }
-            else{
-                for(std::uint8_t i = 0; i < curr.second->children.size(); ++i){
-                    if(curr.second->children[i] != nullptr){
-                        node_stack.push(std::make_pair(curr.first, curr.second->children[i].get()));
-                    }
-                }
+
+            if(curr.first->right != nullptr){
+                initial_pairs.push_back(std::make_pair(curr.first->right.get(), curr.second));
             }
         }
         else{
-            IllumcutSample& curr_sample = curr.second->representative();
-
-            float estimated_error = LightTree::calculateClusterBounds(curr_sample.its.p, curr_sample.its.shFrame.n, curr.first, 
-                curr.first->vpl.type, min_dist);
-
-            curr.second->updateUpperBound(estimated_error);
+            for(std::uint8_t i = 0; i < curr.second->children.size(); ++i){
+                if(curr.second->children[i] != nullptr){
+                    initial_pairs.push_back(std::make_pair(curr.first, curr.second->children[i].get()));
+                }
+            }
         }
     }
+
+    std::vector<IllumPair> initial_pairs_vec(initial_pairs.begin(), initial_pairs.end());
+
+    #pragma omp parallel for
+    for(std::uint32_t i = 0; i < initial_pairs_vec.size(); ++i){
+        std::stack<IllumPair> node_stack;
+        node_stack.push(initial_pairs_vec[i]);
+
+        while(!node_stack.empty()){
+            IllumPair curr = node_stack.top();
+            node_stack.pop();
+
+            if(refineUpper(curr)){
+                if(refineLTree(curr)){
+                    if(curr.first->left != nullptr){
+                        node_stack.push(std::make_pair(curr.first->left.get(), curr.second));
+                    }
+
+                    if(curr.first->right != nullptr){
+                        node_stack.push(std::make_pair(curr.first->right.get(), curr.second));
+                    }
+                }
+                else{
+                    for(std::uint8_t i = 0; i < curr.second->children.size(); ++i){
+                        if(curr.second->children[i] != nullptr){
+                            node_stack.push(std::make_pair(curr.first, curr.second->children[i].get()));
+                        }
+                    }
+                }
+            }
+            else{
+                IllumcutSample& curr_sample = curr.second->representative();
+
+                float estimated_error = LightTree::calculateClusterBounds(curr_sample.its.p, curr_sample.its.shFrame.n, curr.first, 
+                    curr.first->vpl.type, min_dist);
+
+                curr.second->updateUpperBound(estimated_error);
+            }
+        }
+    }
+    
 
     rt_root->cacheMinUpper();
 }
@@ -468,7 +491,7 @@ bool IlluminationCutRenderer::render(Scene* scene, std::uint32_t spp, const Rend
     std::uint8_t* output_image = output_bitmap->getUInt8Data();
     memset(output_image, 0, output_bitmap->getBytesPerPixel() * size.x * size.y);
 
-    std::unique_ptr<LightTree> light_tree(new LightTree(vpls_, min_dist_, 0, 0.f));
+    std::unique_ptr<LightTree> light_tree(new LightTree(vpls_, min_dist_, 0, 0.f, false));
     std::cout << "Created light tree" << std::endl;
 
     auto receiver_root = constructOctree(scene, samples_, min_dist_, spp);

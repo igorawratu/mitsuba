@@ -369,7 +369,7 @@ private:
 			{
 				int max_lights = props.getInteger("lightcuts-num_clusters", 64);
 				float error_threshold = props.getFloat("lightcuts-error_threshold", 0.02);
-				std::unique_ptr<ManyLightsClusterer> clusterer(new LightTree(vpls_, min_dist_, max_lights, error_threshold));
+				std::unique_ptr<ManyLightsClusterer> clusterer(new LightTree(vpls_, min_dist_, max_lights, error_threshold, true));
 				return std::unique_ptr<ManyLightsRenderer>(new LightClustererRenderer(std::move(clusterer), min_dist_, vsl, false));
 			}
 			case ROWCOLSAMPLING:
