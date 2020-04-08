@@ -317,7 +317,7 @@ void computeUpperBounds(LightTree* lt, OctreeNode<IllumcutSample>* rt_root, Scen
     while(initial_pairs.size() < 64){
         IllumPair curr = initial_pairs.front();
         initial_pairs.pop_front();
-        
+
         for(std::uint8_t i = 0; i < curr.second->children.size(); ++i){
             if(curr.second->children[i] != nullptr){
                 initial_pairs.push_back(std::make_pair(curr.first, curr.second->children[i].get()));
@@ -370,45 +370,67 @@ void computeUpperBounds(LightTree* lt, OctreeNode<IllumcutSample>* rt_root, Scen
 }
 
 std::vector<IllumPair> getIlluminationAwarePairs(LightTree* lt, OctreeNode<IllumcutSample>* rt_root, float min_dist, float error_thresh){
-    std::stack<IllumPair> node_stack;
+    
     std::vector<IllumPair> illum_aware_pairs;
 
-    if(lt->getPointTreeRoot()){
-        node_stack.push(std::make_pair(lt->getPointTreeRoot(), rt_root));
-    }
-    
-    if(lt->getDirectionalTreeRoot()){
-        node_stack.push(std::make_pair(lt->getDirectionalTreeRoot(), rt_root));
+    std::deque<IllumPair> initial_pairs;
+
+    if(lt->getPointTreeRoot() != nullptr){
+        initial_pairs.push_back(std::make_pair(lt->getPointTreeRoot(), rt_root));
     }
 
-    if(lt->getOrientedTreeRoot()){
-        node_stack.push(std::make_pair(lt->getOrientedTreeRoot(), rt_root));
+    if(lt->getDirectionalTreeRoot() != nullptr){
+        initial_pairs.push_back(std::make_pair(lt->getDirectionalTreeRoot(), rt_root));
     }
 
-    while(!node_stack.empty()){
-        IllumPair curr = node_stack.top();
-        node_stack.pop();
+    if(lt->getOrientedTreeRoot() != nullptr){
+        initial_pairs.push_back(std::make_pair(lt->getOrientedTreeRoot(), rt_root));
+    }
 
-        if(!isIllumAware(curr, min_dist, error_thresh)){
-            if(refineLTree(curr)){
-                if(curr.first->left != nullptr){
-                    node_stack.push(std::make_pair(curr.first->left.get(), curr.second));
-                }
-
-                if(curr.first->right != nullptr){
-                    node_stack.push(std::make_pair(curr.first->right.get(), curr.second));
-                }
+    while(initial_pairs.size() < 64){
+        IllumPair curr = initial_pairs.front();
+        initial_pairs.pop_front();
+        
+        for(std::uint8_t i = 0; i < curr.second->children.size(); ++i){
+            if(curr.second->children[i] != nullptr){
+                initial_pairs.push_back(std::make_pair(curr.first, curr.second->children[i].get()));
             }
-            else{
-                for(std::uint8_t i = 0; i < curr.second->children.size(); ++i){
-                    if(curr.second->children[i] != nullptr){
-                        node_stack.push(std::make_pair(curr.first, curr.second->children[i].get()));
+        }
+    }
+
+    std::vector<IllumPair> initial_pairs_vec(initial_pairs.begin(), initial_pairs.end());
+
+    std::mutex illum_aware_mutex;
+
+    #pragma omp parallel for
+    for(std::uint32_t i = 0; i < initial_pairs_vec.size(); ++i){
+        std::stack<IllumPair> node_stack;
+        while(!node_stack.empty()){
+            IllumPair curr = node_stack.top();
+            node_stack.pop();
+
+            if(!isIllumAware(curr, min_dist, error_thresh)){
+                if(refineLTree(curr)){
+                    if(curr.first->left != nullptr){
+                        node_stack.push(std::make_pair(curr.first->left.get(), curr.second));
+                    }
+
+                    if(curr.first->right != nullptr){
+                        node_stack.push(std::make_pair(curr.first->right.get(), curr.second));
+                    }
+                }
+                else{
+                    for(std::uint8_t i = 0; i < curr.second->children.size(); ++i){
+                        if(curr.second->children[i] != nullptr){
+                            node_stack.push(std::make_pair(curr.first, curr.second->children[i].get()));
+                        }
                     }
                 }
             }
-        }
-        else{
-            illum_aware_pairs.push_back(curr);
+            else{
+                std::lock_guard<std::mutex> lock(illum_aware_mutex);
+                illum_aware_pairs.push_back(curr);
+            }
         }
     }
 
