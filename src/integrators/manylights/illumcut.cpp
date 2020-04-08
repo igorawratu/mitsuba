@@ -245,8 +245,8 @@ bool refineLTree(const IllumPair& illum_pair){
     Vector3f rbb_extents = illum_pair.second->bb.second - illum_pair.second->bb.first;
 
     if(illum_pair.first->vpl.type != EDirectionalEmitterVPL &&
-        (lines_overlap(lightbb.first.x, lightbb.second.x, illum_pair.second->bb.first.x, illum_pair.second->bb.second.x) ||
-        lines_overlap(lightbb.first.y, lightbb.second.y, illum_pair.second->bb.first.y, illum_pair.second->bb.second.y) ||
+        (lines_overlap(lightbb.first.x, lightbb.second.x, illum_pair.second->bb.first.x, illum_pair.second->bb.second.x) &&
+        lines_overlap(lightbb.first.y, lightbb.second.y, illum_pair.second->bb.first.y, illum_pair.second->bb.second.y) &&
         lines_overlap(lightbb.first.z, lightbb.second.z, illum_pair.second->bb.first.z, illum_pair.second->bb.second.z))){
 
         return lbb_extents.lengthSquared() > rbb_extents.lengthSquared();
