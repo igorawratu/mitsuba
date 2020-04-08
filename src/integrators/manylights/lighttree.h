@@ -14,13 +14,13 @@ MTS_NAMESPACE_BEGIN
 
 struct LightTreeNode{
     LightTreeNode() : left(nullptr), right(nullptr), vpl(EPointEmitterVPL, Spectrum(0.f)), emission_scale(0.f), 
-        min_bounds(0.f), max_bounds(0.f){
+        min_bounds(0.f), max_bounds(0.f), num_children(0){
     }
 
     LightTreeNode(const LightTreeNode& other) : left(other.left == nullptr ? nullptr : new LightTreeNode(*other.left)),
         right(other.right == nullptr ? nullptr : new LightTreeNode(*other.right)),
         vpl(other.vpl), emission_scale(other.emission_scale), min_bounds(other.min_bounds), max_bounds(other.max_bounds), 
-        bcone(other.bcone){
+        bcone(other.bcone), num_children(other.num_children){
     }
 
     LightTreeNode(LightTreeNode&& other) : left(std::move(other.left)), right(std::move(other.right)),
@@ -37,6 +37,7 @@ struct LightTreeNode{
            min_bounds = other.min_bounds;
            max_bounds = other.max_bounds;
            bcone = other.bcone;
+           num_children = other.num_children;
        }
 
        return *this;
@@ -54,6 +55,7 @@ struct LightTreeNode{
 
            other.left = nullptr;
            other.right = nullptr;
+           num_children = other.num_children;
        }
 
        return *this;
@@ -64,6 +66,7 @@ struct LightTreeNode{
     float emission_scale;
     Point min_bounds, max_bounds;
     DirConef bcone;
+    std::uint32_t num_children;
 };
 
 class LightTree : public ManyLightsClusterer{

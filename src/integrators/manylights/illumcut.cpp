@@ -141,27 +141,30 @@ const float CONE_THRESH = cos(20.f / 180.f * M_PI);
 bool refineUpper(const IllumPair& illum_pair){
     bool refine = false;
 
+    float r1, r2, d, costheta;
+
     if(illum_pair.first->vpl.type != EDirectionalEmitterVPL){
         Vector3f c1 = Vector3f(illum_pair.first->min_bounds + illum_pair.first->max_bounds) / 2.f;
         Vector3f dim1 = Vector3f(illum_pair.first->max_bounds - illum_pair.first->min_bounds);
-        float r1 = std::max(dim1.x, std::max(dim1.y, dim1.z));
+        r1 = std::max(dim1.x, std::max(dim1.y, dim1.z));
 
         Vector3f c2 = (illum_pair.second->bb.first + illum_pair.second->bb.second) / 2.f;
         Vector3f dim2 = illum_pair.second->bb.second - illum_pair.second->bb.first;
-        float r2 = std::max(dim2.x, std::max(dim2.y, dim2.z));
+        r2 = std::max(dim2.x, std::max(dim2.y, dim2.z));
 
-        float d = std::max(0.f, 0.1f * ((c1 - c2).length() - r1 - r2));
+        d = std::max(0.f, 0.1f * ((c1 - c2).length() - r1 - r2));
 
         refine |= std::max(r1, r2) > d;
 
-        if(refine){
-            std::cout << r1 << " " << r2 << " " << d << std::endl;
-        }
     }
 
     if(illum_pair.first->vpl.type != EPointEmitterVPL){
+        costheta = illum_pair.first->bcone.GetAngleCos();
         refine |= illum_pair.first->bcone.GetAngleCos() < CONE_THRESH;
     }
+
+    std::cout << (std::uint32_t)refine << " " << r1 << " " << r2 << " " << d << " " << costheta << " " << illum_pair.first->num_children << " " <<
+        illum_pair.second->sample_indices.size() << std::endl;
  
     return refine;   
 }
@@ -333,7 +336,6 @@ void computeUpperBounds(LightTree* lt, OctreeNode<IllumcutSample>* rt_root, Scen
             }
         }
         else{
-            std::cout << "sampling upper bound " << curr.second->sample_indices.size() << std::endl;
             IllumcutSample& curr_sample = curr.second->representative();
 
             std::uint32_t samples_taken;

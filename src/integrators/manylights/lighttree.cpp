@@ -181,6 +181,7 @@ std::unique_ptr<LightTreeNode> createLightTree(const std::vector<VPL>& vpls, EVP
 		nodes[current_level][i]->vpl = vpls[i];
 		nodes[current_level][i]->emission_scale = nodes[current_level][i]->vpl.P.getLuminance();
 		nodes[current_level][i]->vpl.P /= nodes[current_level][i]->emission_scale;
+		nodes[current_level][i]->num_children = 0;
 	}
 
 	typedef std::tuple<float, std::uint32_t, std::uint32_t, DirConef> SimEntry;
@@ -299,6 +300,8 @@ std::unique_ptr<LightTreeNode> createLightTree(const std::vector<VPL>& vpls, EVP
 
 				nodes[next_level].back()->emission_scale = c1_intensity + c2_intensity;
 
+				nodes[next_level].back()->num_children = 2 + nodes[current_level][id1]->num_children + nodes[current_level][id2]->num_children;
+
 				nodes[next_level].back()->left = std::move(nodes[current_level][id1]);
 				nodes[next_level].back()->right = std::move(nodes[current_level][id2]);
 
@@ -368,6 +371,7 @@ std::unique_ptr<LightTreeNode> tdCreateLightTree(const std::vector<VPL>& vpls, E
 	//curr_node->vpl.P /= curr_node->vpl.P.getLuminance();
 
 	curr_node->emission_scale = lc_intensity + rc_intensity;
+	curr_node->num_children = 2 + lc->num_children + rc->num_children;
 
 	curr_node->left = std::move(lc);
 	curr_node->right = std::move(rc);
@@ -811,7 +815,7 @@ std::vector<VPL> LightTree::getClusteringForPoints(Scene* scene, const std::vect
 	}
 
 	lightcut.insert(lightcut.end(), lights.begin(), lights.end());
-	
+
 	return lightcut;
 }
 
