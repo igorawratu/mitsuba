@@ -457,7 +457,7 @@ struct OctreeNode{
     void updateUpperBound(float val){
         upper_bound += val;
 
-        for(std::uint8_t i = 0; i < sample_indices.size(); ++i){
+        for(std::uint8_t i = 0; i < children.size(); ++i){
             if(children[i] != nullptr){
                 children[i]->updateUpperBound(val);
             }
@@ -471,7 +471,7 @@ struct OctreeNode{
         
         upper_bound = std::numeric_limits<float>::max();
 
-        for(std::uint8_t i = 0; i < sample_indices.size(); ++i){
+        for(std::uint8_t i = 0; i < children.size(); ++i){
             if(children[i] != nullptr){
                 children[i]->cacheMinUpper();
                 upper_bound = std::min(children[i]->upper_bound, upper_bound);
