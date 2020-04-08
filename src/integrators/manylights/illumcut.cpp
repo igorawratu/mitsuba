@@ -152,7 +152,7 @@ bool refineUpper(const IllumPair& illum_pair){
         Vector3f dim2 = illum_pair.second->bb.second - illum_pair.second->bb.first;
         r2 = std::max(dim2.x, std::max(dim2.y, dim2.z));
 
-        d = std::max(0.f, 0.1f * ((c1 - c2).length() - r1 - r2));
+        d = std::max(0.f, 0.1f * ((c1 - c2).length()));
 
         refine |= std::max(r1, r2) > d;
 
