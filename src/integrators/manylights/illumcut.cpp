@@ -288,9 +288,17 @@ bool refineLTree(const IllumPair& illum_pair){
 
     float rheuristic = rm * rg;
 
-    std::cout << lm << "-" << lg << " : " << rm << "-" << rg << " " << lheuristic << " " << rheuristic << std::endl;
+    //std::cout << lm << "-" << lg << " : " << rm << "-" << rg << " " << lheuristic << " " << rheuristic << std::endl;
 
-    return lheuristic > rheuristic;  
+    bool use_heuristics = std::abs(lheuristic - rheuristic) > 0.0001f;
+
+    if(use_heuristics){
+        return lheuristic > rheuristic;
+    }
+    else{
+        return lbb_extents.lengthSquared() > rbb_extents.lengthSquared();
+    }
+      
 }
 
 void computeUpperBounds(LightTree* lt, OctreeNode<IllumcutSample>* rt_root, Scene* scene, float min_dist){
