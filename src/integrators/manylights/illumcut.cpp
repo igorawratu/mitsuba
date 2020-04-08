@@ -136,12 +136,12 @@ std::unique_ptr<OctreeNode<IllumcutSample>> constructOctree(Scene* scene, std::v
 }
 
 typedef std::pair<LightTreeNode*, OctreeNode<IllumcutSample>*> IllumPair;
-const float CONE_THRESH = 20.f / 180.f * M_PI;
+const float CONE_THRESH = cos(20.f / 180.f * M_PI);
 
 bool refineUpper(const IllumPair& illum_pair){
     bool refine = false;
 
-    float r1, r2, d, theta;
+    float r1, r2, d, costheta;
 
     if(illum_pair.first->vpl.type != EDirectionalEmitterVPL){
         Vector3f c1 = Vector3f(illum_pair.first->min_bounds + illum_pair.first->max_bounds) / 2.f;
@@ -158,12 +158,12 @@ bool refineUpper(const IllumPair& illum_pair){
 
     }
 
-    if(illum_pair.first->vpl.type != EPointEmitterVPL){
-        theta = acos(illum_pair.first->bcone.GetAngleCos()) * 2.f;
+    /*if(illum_pair.first->vpl.type != EPointEmitterVPL){
+        costheta = illum_pair.first->bcone.GetAngleCos();
         refine |= illum_pair.first->bcone.GetAngleCos() < CONE_THRESH;
-    }
+    }*/
 
-    std::cout << (std::uint32_t)refine << " " << r1 << " " << r2 << " " << d << " " << theta << " " << illum_pair.first->num_children << " " <<
+    std::cout << (std::uint32_t)refine << " " << r1 << " " << r2 << " " << d << /*" " << costheta <<*/ " " << illum_pair.first->num_children << " " <<
         illum_pair.second->sample_indices.size() << std::endl;
  
     return refine;   
@@ -269,7 +269,7 @@ bool refineLTree(const IllumPair& illum_pair){
         lm *= (1.0f - illum_pair.first->bcone.GetAngleCos());
     }
     
-    float lheuristic = lm * lg;
+    float lheuristic = std::min(0.05f, lm) * lg;
 
     float rg = 1.f;
     if(illum_pair.first->vpl.type != EDirectionalEmitterVPL){
@@ -286,7 +286,7 @@ bool refineLTree(const IllumPair& illum_pair){
 
     float rm = (1.0f - illum_pair.second->bcone.GetAngleCos()) * rbb_extents.length() / sqrt(dsqr);
 
-    float rheuristic = rm * rg;
+    float rheuristic = std::min(0.05f, rm) * rg;
 
     //std::cout << lm << "-" << lg << " : " << rm << "-" << rg << " " << illum_pair.second->sample_indices.size() << std::endl;
 
