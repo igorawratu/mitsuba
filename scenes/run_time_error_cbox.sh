@@ -3,9 +3,9 @@ set -x
 source_path="${BASH_SOURCE[0]}"
 source_dir=$(dirname "${source_path}")
 
-#rm "${source_dir}/cbox/cbox_"*
-rm "${source_dir}/cbox/timings"
-rm "${source_dir}/cbox/samplerates"
+rm "${source_dir}/cbox/cbox_"*
+rm "${source_dir}/cbox/timings"*
+rm "${source_dir}/cbox/samplerates"*
 
 
 #MDLC with matrix sep
