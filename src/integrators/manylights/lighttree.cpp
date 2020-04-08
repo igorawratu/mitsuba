@@ -59,7 +59,7 @@ const std::array<std::function<bool(const VPL&, const VPL&)>, 6> divider_sorter{
 };
 
 void divideByGreatestDimLargest(const std::vector<VPL>& vpls, std::vector<VPL>& left, std::vector<VPL>& right, std::uint32_t min_size,
-	float norm_scale, EVPLType type){
+	float norm_scale, EVPLType vpl_type){
 	left.clear();
 	right.clear();
 
@@ -107,7 +107,7 @@ void divideByGreatestDimLargest(const std::vector<VPL>& vpls, std::vector<VPL>& 
 			return lhs.second > rhs.second;
 		});
 
-	for(std::uint32_t i = 0; i < sample_indices.size(); ++i){
+	for(std::uint32_t i = 0; i < vpls.size(); ++i){
 		if(divider_comp[ranges[0].first](midpoints[ranges[0].first], vpls[i].its)){
 			right.push_back(vpls[i]);
 		}
@@ -122,8 +122,8 @@ void divideByGreatestDimLargest(const std::vector<VPL>& vpls, std::vector<VPL>& 
 		left.clear();
 		right.clear();
 		std::uint32_t midpoint = vpl_sorted.size() / 2;
-		left.insert(left->sample_indices.end(), vpl_sorted.begin(), vpl_sorted.begin() + midpoint);
-		right.insert(right->sample_indices.end(), vpl_sorted.begin() + midpoint, vpl_sorted.end());
+		left.insert(left.end(), vpl_sorted.begin(), vpl_sorted.begin() + midpoint);
+		right.insert(right.end(), vpl_sorted.begin() + midpoint, vpl_sorted.end());
 	}
 }
 
@@ -387,8 +387,9 @@ std::unique_ptr<LightTreeNode> createLightTree(const std::vector<VPL>& vpls, EVP
 	return std::move(nodes[current_level][0]);
 }
 
-std::unique_ptr<LightTreeNode> tdCreateLightTree(const std::vector<VPL>& vpls, EVPLType vpl_type, float min_dist, std::uint32_t bottom_up_thresh, std::mt19937& rng){
-	if(vpls.size() <= bottom_up_thresh, bool use_pa_div){
+std::unique_ptr<LightTreeNode> tdCreateLightTree(const std::vector<VPL>& vpls, EVPLType vpl_type, float min_dist, std::uint32_t bottom_up_thresh, 
+	std::mt19937& rng, bool use_pa_div){
+	if(vpls.size() <= bottom_up_thresh){
 		return createLightTree(vpls, vpl_type, min_dist, rng);
 	}
 
