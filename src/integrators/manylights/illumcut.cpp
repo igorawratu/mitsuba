@@ -302,9 +302,17 @@ void computeUpperBounds(LightTree* lt, OctreeNode<IllumcutSample>* rt_root, Scen
 
     std::deque<IllumPair> initial_pairs;
 
-    initial_pairs.push_back(std::make_pair(lt->getPointTreeRoot(), rt_root));
-    initial_pairs.push_back(std::make_pair(lt->getDirectionalTreeRoot(), rt_root));
-    initial_pairs.push_back(std::make_pair(lt->getOrientedTreeRoot(), rt_root));
+    if(std::make_pair(lt->getPointTreeRoot() != nullptr){
+        initial_pairs.push_back(std::make_pair(lt->getPointTreeRoot(), rt_root));
+    }
+
+    if(std::make_pair(lt->getDirectionalTreeRoot() != nullptr){
+        initial_pairs.push_back(std::make_pair(lt->getDirectionalTreeRoot(), rt_root));
+    }
+
+    if(std::make_pair(lt->getOrientedTreeRoot() != nullptr){
+        initial_pairs.push_back(std::make_pair(lt->getOrientedTreeRoot(), rt_root));
+    }
 
     while(initial_pairs.size() < 64){
         IllumPair curr = initial_pairs.front();
