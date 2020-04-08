@@ -467,8 +467,8 @@ struct OctreeNode{
         }
 
         upper_bound = std::numeric_limits<float>::max();
-        for(std::uint8_t i = 0; i < child_indices.size(); ++i){
-            if(child_indices[i].size() == 0){
+        for(std::uint8_t i = 0; i < children.size(); ++i){
+            if(children[i] == nullptr){
                 continue;
             }
 
