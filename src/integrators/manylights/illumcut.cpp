@@ -404,7 +404,7 @@ void renderIllumAwarePairs(const std::vector<IllumPair>& ilps, Scene* scene, flo
     sampler->configure();
     sampler->generate(Point2i(0));
 
-    std::mutex mutex;
+    std::mutex render_mut;
 
     #pragma omp parallel for
     for(std::uint32_t i = 0; i < ilps.size(); ++i){
@@ -419,7 +419,7 @@ void renderIllumAwarePairs(const std::vector<IllumPair>& ilps, Scene* scene, flo
                 true, 10, false, curr_sample.intersected_scene, true, false, samples_taken);
 
             {
-                std::lock_guard<std::mutex> lock;
+                std::lock_guard<std::mutex> lock(render_mut);
                 curr_sample.color += col;
             }
         }
