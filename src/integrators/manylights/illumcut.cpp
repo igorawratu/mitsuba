@@ -331,6 +331,8 @@ void computeUpperBounds(LightTree* lt, OctreeNode<IllumcutSample>* rt_root, Scen
 
     std::vector<IllumPair> initial_pairs_vec(initial_pairs.begin(), initial_pairs.end());
 
+    std::mutex mut;
+
     #pragma omp parallel for
     for(std::uint32_t i = 0; i < initial_pairs_vec.size(); ++i){
         std::stack<IllumPair> node_stack;
@@ -364,7 +366,11 @@ void computeUpperBounds(LightTree* lt, OctreeNode<IllumcutSample>* rt_root, Scen
                 float estimated_error = LightTree::calculateClusterBounds(curr_sample.its.p, curr_sample.its.shFrame.n, curr.first, 
                     curr.first->vpl.type, min_dist);
 
-                std::cout << estimated_error << std::endl;
+                {
+                    std::lock_guard<std::mutex> lock(mut);
+                    std::cout << estimated_error << " " << curr_sample.first->num_children << " " << curr_sample.second->sample_indices.size() << std::endl;
+                }
+                
 
                 curr.second->updateUpperBound(estimated_error);
             }
