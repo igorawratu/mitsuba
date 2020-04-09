@@ -155,7 +155,7 @@ bool refineUpper(const IllumPair& illum_pair){
         Vector3f dim2 = illum_pair.second->bb.second - illum_pair.second->bb.first;
         r2 = std::max(dim2.x, std::max(dim2.y, dim2.z));
 
-        d = std::max(0.f, 0.1f * ((c1 - c2).length()));
+        d = std::max(0.f, 0.4f * ((c1 - c2).length()));
 
         refine |= std::max(r1, r2) > d;
 
@@ -434,6 +434,7 @@ std::vector<IllumPair> getIlluminationAwarePairs(LightTree* lt, OctreeNode<Illum
             }
             else{
                 std::lock_guard<std::mutex> lock(illum_aware_mutex);
+                std::cout << curr.first->num_children << " " << curr.second.sample_indices.size() << std::endl;
                 illum_aware_pairs.push_back(curr);
             }
         }
