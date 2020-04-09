@@ -364,12 +364,12 @@ void computeUpperBounds(LightTree* lt, OctreeNode<IllumcutSample>* rt_root, Scen
                 float estimated_error = LightTree::calculateClusterBounds(curr_sample.its.p, curr_sample.its.shFrame.n, curr.first, 
                     curr.first->vpl.type, min_dist);
 
-                if(estimated_error < 0.00000001f){
+                /*if(estimated_error < 0.00000001f){
                     std::lock_guard<std::mutex> lock(printmut);
                     Vector3f axis = curr.first->bcone.GetAxis();
                     std::cout << curr_sample.its.shFrame.n.x << " " << curr_sample.its.shFrame.n.y << " " << curr_sample.its.shFrame.n.z << "-" <<
                         axis.x << " " << axis.y << " " << axis.z << std::endl;
-                }
+                }*/
 
                 curr.second->updateUpperBound(estimated_error);
             }
