@@ -204,11 +204,11 @@ size_t generateVPLs(const Scene *scene, size_t offset, size_t count, int max_dep
 			vpl.its.shFrame = point_sample.n.isZero() ? standard_frame : Frame(point_sample.n);
 			vpl.emitter = emitter;
 			vpl.psr = point_sample;
-			vpls.push_back(vpl);
-
 			if(vpl.its.wi.z < 0.f){
 				vpl.its.shFrame.n = -vpl.its.shFrame.n;
 			}
+
+			vpls.push_back(vpl);
 
 			if(type == ESurfaceVPL){
 				weight *= emitter->sampleDirection(direction_sample, point_sample, sampler->next2D());
