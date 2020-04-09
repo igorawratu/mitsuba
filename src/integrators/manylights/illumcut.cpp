@@ -171,11 +171,15 @@ bool refineUpper(const IllumPair& illum_pair, float upper_distance_thresh){
 }
 
 bool isIllumAware(const IllumPair& illum_pair, float min_dist, float error_thresh){
-    IllumcutSample& rep_sample = illum_pair.second->representative();
-    float estimated_error = LightTree::calculateClusterBounds(rep_sample.its.p, rep_sample.its.shFrame.n, illum_pair.first, 
-        illum_pair.first->vpl.type, min_dist);
+    float max_error = 0.f;
 
-    return estimated_error < error_thresh * illum_pair.second->upper_bound;
+    for(std::uint32_t i = 0; i < illum_pair.second->sample_indices.size(); ++i){
+        IllumcutSample& rep_sample = illum_pair.second->representative();
+        max_error = std::max(LightTree::calculateClusterBounds(rep_sample.its.p, rep_sample.its.shFrame.n, illum_pair.first, 
+            illum_pair.first->vpl.type, min_dist), max_error);
+    }
+
+    return max_error < error_thresh * illum_pair.second->upper_bound;
 }
 
 bool lines_overlap(float x1, float x2, float y1, float y2){
