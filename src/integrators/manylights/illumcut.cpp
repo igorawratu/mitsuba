@@ -15,10 +15,11 @@
 
 MTS_NAMESPACE_BEGIN
 
-IlluminationCutRenderer::IlluminationCutRenderer(const std::vector<VPL>& vpls, float error_thresh, float min_dist) :
+IlluminationCutRenderer::IlluminationCutRenderer(const std::vector<VPL>& vpls, float error_thresh, float min_dist, float upper_distance_thresh) :
     vpls_(vpls),
     error_threshold_(error_thresh),
-    min_dist_(min_dist){
+    min_dist_(min_dist),
+    upper_distance_thresh_(upper_distance_thresh){
 
 }
 
@@ -141,7 +142,7 @@ const float CONE_THRESH = cos(20.f / 180.f * M_PI);
 
 std::mutex printmut;
 
-bool refineUpper(const IllumPair& illum_pair){
+bool refineUpper(const IllumPair& illum_pair, float upper_distance_thresh){
     bool refine = false;
 
     float r1, r2, d;
@@ -155,7 +156,7 @@ bool refineUpper(const IllumPair& illum_pair){
         Vector3f dim2 = illum_pair.second->bb.second - illum_pair.second->bb.first;
         r2 = std::max(dim2.x, std::max(dim2.y, dim2.z));
 
-        d = std::max(0.f, 0.4f * ((c1 - c2).length()));
+        d = std::max(0.f, upper_distance_thresh * ((c1 - c2).length()));
 
         refine |= std::max(r1, r2) > d;
 
@@ -298,7 +299,7 @@ bool refineLTree(const IllumPair& illum_pair){
       
 }
 
-void computeUpperBounds(LightTree* lt, OctreeNode<IllumcutSample>* rt_root, Scene* scene, float min_dist){
+void computeUpperBounds(LightTree* lt, OctreeNode<IllumcutSample>* rt_root, Scene* scene, float min_dist, float upper_distance_thresh){
     Properties props("independent");
     ref<Sampler> sampler = static_cast<Sampler*>(PluginManager::getInstance()->createObject(MTS_CLASS(Sampler), props));
     sampler->configure();
@@ -340,7 +341,7 @@ void computeUpperBounds(LightTree* lt, OctreeNode<IllumcutSample>* rt_root, Scen
             IllumPair curr = node_stack.top();
             node_stack.pop();
 
-            if(refineUpper(curr)){
+            if(refineUpper(curr, upper_distance_thresh)){
                 if(refineLTree(curr)){
                     if(curr.first->left != nullptr){
                         node_stack.push(std::make_pair(curr.first->left.get(), curr.second));
@@ -532,18 +533,18 @@ void renderIllumAwarePairs(const std::vector<IllumPair>& ilps, Scene* scene, flo
         }
         std::unordered_map<std::uint32_t, bool> visibility;
         std::mt19937 rng(std::chrono::high_resolution_clock::now().time_since_epoch().count());
-        //adaptiveVisibilitySampling(scene, ilps[i].first, ilps[i].second, visibility, rng, min_dist);
+        adaptiveVisibilitySampling(scene, ilps[i].first, ilps[i].second, visibility, rng, min_dist);
 
         for(std::uint32_t j = 0; j < ilps[i].second->sample_indices.size(); ++j){
             IllumcutSample& curr_sample = ilps[i].second->sample(j);
             std::uint32_t samples_taken;
 
-            /*if(visibility[ilps[i].second->sample_indices[j]])*/{
+            if(visibility[ilps[i].second->sample_indices[j]]){
                 VPL vpl = ilps[i].first->vpl;
                 vpl.P *= ilps[i].first->emission_scale;
 
                 Spectrum col = sample(scene, sampler, curr_sample.its, curr_sample.ray, vpl, min_dist, 
-                    true, 10, false, curr_sample.intersected_scene, true, false, samples_taken);
+                    false, 10, false, curr_sample.intersected_scene, true, false, samples_taken);
 
                 {
                     std::lock_guard<std::mutex> lock(render_mut);
@@ -607,7 +608,7 @@ bool IlluminationCutRenderer::render(Scene* scene, std::uint32_t spp, const Rend
     auto receiver_root = constructOctree(scene, samples_, min_dist_, spp);
     std::cout << "Constructed octree" << std::endl;
 
-    computeUpperBounds(light_tree.get(), receiver_root.get(), scene, min_dist_);
+    computeUpperBounds(light_tree.get(), receiver_root.get(), scene, min_dist_, upper_distance_thresh_);
     std::cout << "Computed upper bounds" << std::endl;
 
     std::vector<IllumPair> illum_aware_pairs = getIlluminationAwarePairs(light_tree.get(), receiver_root.get(), min_dist_, error_threshold_);

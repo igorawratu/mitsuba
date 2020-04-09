@@ -65,6 +65,7 @@
 
 		<!--ILLUMCUT, STRAT 5-->
 		<float name="illumcut-_error_thresh" value="$iet"/>
+		<float name="illumcut-_error_upperbound_dist_thresh" value="0.1"/>
 	</integrator>
 
 	<sensor type="perspective" >

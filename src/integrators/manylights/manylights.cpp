@@ -453,8 +453,9 @@ private:
 			case ILLUMINATIONCUT:
 			{
 				float error_threshold = props.getFloat("illumcut-_error_thresh", 0.01);
+				float upper_distance_thresh = props.getFloat("illumcut-_error_upperbound_dist_thresh", 0.1);
 
-				return std::unique_ptr<ManyLightsRenderer>(new IlluminationCutRenderer(vpls_, error_threshold, min_dist_));
+				return std::unique_ptr<ManyLightsRenderer>(new IlluminationCutRenderer(vpls_, error_threshold, min_dist_, upper_distance_thresh));
 			}
 			default:
 				return nullptr;
