@@ -648,7 +648,7 @@ bool IlluminationCutRenderer::render(Scene* scene, std::uint32_t spp, const Rend
     std::uint8_t* output_image = output_bitmap->getUInt8Data();
     memset(output_image, 0, output_bitmap->getBytesPerPixel() * size.x * size.y);
 
-    std::unique_ptr<LightTree> light_tree(new LightTree(vpls_, min_dist_, 0, 0.f, false));
+    std::unique_ptr<LightTree> light_tree(new LightTree(vpls_, min_dist_, 0, 0.f, true));
     std::cout << "Created light tree" << std::endl;
 
     auto start = std::chrono::high_resolution_clock::now();
