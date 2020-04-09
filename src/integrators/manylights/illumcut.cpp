@@ -167,10 +167,10 @@ bool refineUpper(const IllumPair& illum_pair){
  
     if(refine){
         std::lock_guard<std::mutex> lock(printmut);
-        std::cout << illum_pair.first->num_children << " " << illum_pair.second->sample_indices.size() << "-" <<
-            illum_pair.first->min_bounds.x << " " << illum_pair.first->min_bounds.y << " " << illum_pair.first->min_bounds.z << "-" << 
-            illum_pair.first->max_bounds.x << " " << illum_pair.first->max_bounds.y << " " << illum_pair.first->max_bounds.z << "-" << 
-            illum_pair.second->bb.first.x << " " << illum_pair.second->bb.first.y << " " << illum_pair.second->bb.first.z << "-" <<
+        std::cout << illum_pair.first->num_children << " " << illum_pair.second->sample_indices.size() << ":" << r1 << ":" <<
+            illum_pair.first->min_bounds.x << " " << illum_pair.first->min_bounds.y << " " << illum_pair.first->min_bounds.z << ":" << 
+            illum_pair.first->max_bounds.x << " " << illum_pair.first->max_bounds.y << " " << illum_pair.first->max_bounds.z << ":" << r2 << ":" << 
+            illum_pair.second->bb.first.x << " " << illum_pair.second->bb.first.y << " " << illum_pair.second->bb.first.z << ":" <<
             illum_pair.second->bb.second.x << " " << illum_pair.second->bb.second.y << " " << illum_pair.second->bb.second.z << std::endl;
     }
 
