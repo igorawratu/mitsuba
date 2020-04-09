@@ -615,13 +615,13 @@ bool IlluminationCutRenderer::render(Scene* scene, std::uint32_t spp, const Rend
         OctreeNode<IllumcutSample>* curr = node_stack.top();
         node_stack.pop();
 
-        if(curr->sample_indices() == 1){
+        if(curr->sample_indices.size() == 1){
             curr->representative().color = Spectrum(curr->upper_bound);
         }
         else{
             for(std::uint8_t i = 0; i < curr->children.size(); ++i){
                 if(curr->children[i] != nullptr){
-                    node_stack.push(curr->children[i]);
+                    node_stack.push(curr->children[i].get());
                 }
             }
         }
