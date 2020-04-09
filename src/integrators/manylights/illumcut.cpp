@@ -155,7 +155,7 @@ bool refineUpper(const IllumPair& illum_pair){
         Vector3f dim2 = illum_pair.second->bb.second - illum_pair.second->bb.first;
         r2 = std::max(dim2.x, std::max(dim2.y, dim2.z));
 
-        d = std::max(0.f, 0.3f * ((c1 - c2).length()));
+        d = std::max(0.f, 0.1f * ((c1 - c2).length()));
 
         refine |= std::max(r1, r2) > d;
 
@@ -442,8 +442,66 @@ std::vector<IllumPair> getIlluminationAwarePairs(LightTree* lt, OctreeNode<Illum
     return illum_aware_pairs;
 }
 
-void adaptiveVisibilitySampling(LightTreeNode* light, OctreeNode<IllumcutSample>* curr_node, std::vector<bool>& visibility){
+void adaptiveVisibilitySampling(Scene* scene, LightTreeNode* light, OctreeNode<IllumcutSample>* curr_node, 
+        std::unordered_map<std::uint32_t, bool>& visibility, std::mt19937& rng, float min_dist){
+    if(curr_node->sample_indices.size() == 1){
+        visibility[curr_node->sample_indices[0]] = sampleVisibility(scene, curr_node->representative().its, light->vpl, min_dist);
+    }
 
+    std::uint32_t max_samples = std::min(16, curr_node->sample_indices.size());
+
+    std::vector<float> dist_vals(8, 0.f);
+
+    for(std::uint8_t i = 0; i < curr_node->children.size(); ++i){
+        if(curr_node->children[i] != nullptr){
+            dist[i] = float(curr_node->children[i]->sample_indices.size());
+        }
+    }
+
+    std::discrete_distribution<std::uint32_t> dist(dist_vals.begin(), dist_vals.end());
+
+    std::vector<std::uint32_t> selected_indices;
+
+    for(std::uint32_t i = 0; i < max_samples; ++i){
+        std::uint32_t child_idx = dist(rng);
+        std::uint32_t sample_idx = children[child_idx]->sample_indices[rand() % children[child_idx]->sample_indices.size()];
+        selected_indices.push_back(sample_idx);
+    }
+
+    bool all_vis = true;
+    bool not_all_invis = false;
+
+    for(std::uint32_t i = 0; i < selected_indices.size(); ++i){
+        bool vis;
+        if(visibility.find(selected_indices[i]) != visibility.end()){
+            vis = visibility[selected_indices[i]];
+        }
+        else{
+            vis = sampleVisibility(scene, (*(curr_node->samples))[selected_indices[i]].its, light->vpl, min_dist);
+            visibility[selected_indices[i]] = vis;
+        }
+
+        all_vis = all_vis && vis;
+        not_all_invis = not_all_invis || vis;
+    }
+
+    if(all_vis){
+        for(std::uint32_t i = 0; i < sample_indices.size(); ++i){
+            visibility[sample_indices[i]] = true;
+        }
+    }
+    else if(!not_all_invis){
+        for(std::uint32_t i = 0; i < sample_indices.size(); ++i){
+            visibility[sample_indices[i]] = false;
+        }
+    }
+    else{
+        for(std::uint8_t i = 0; i < curr_node->children.size(); ++i){
+            if(curr_node->children[i] != nullptr){
+                adaptiveVisibilitySampling(scene, light, curr_node->children[i], visibility, rng, min_dist);
+            }
+        }
+    }
 }
 
 //change to adaptive shadow sampling later
@@ -457,21 +515,24 @@ void renderIllumAwarePairs(const std::vector<IllumPair>& ilps, Scene* scene, flo
 
     #pragma omp parallel for
     for(std::uint32_t i = 0; i < ilps.size(); ++i){
-        std::vector<bool> visibility(ilps[i].second->sample_indices.size(), false);
+        std::unordered_map<std::uint32_t, bool> visibility;
+        std::mt19937 rng(std::chrono::high_resolution_clock::now().time_since_epoch().count());
 
         for(std::uint32_t j = 0; j < ilps[i].second->sample_indices.size(); ++j){
             IllumcutSample& curr_sample = ilps[i].second->sample(j);
             std::uint32_t samples_taken;
 
-            VPL vpl = ilps[i].first->vpl;
-            vpl.P *= ilps[i].first->emission_scale;
+            if(visibility[ilps[i]->second->sample_indices[i]]){
+                VPL vpl = ilps[i].first->vpl;
+                vpl.P *= ilps[i].first->emission_scale;
 
-            Spectrum col = sample(scene, sampler, curr_sample.its, curr_sample.ray, vpl, min_dist, 
-                true, 10, false, curr_sample.intersected_scene, true, false, samples_taken);
+                Spectrum col = sample(scene, sampler, curr_sample.its, curr_sample.ray, vpl, min_dist, 
+                    false, 10, false, curr_sample.intersected_scene, true, false, samples_taken);
 
-            {
-                std::lock_guard<std::mutex> lock(render_mut);
-                curr_sample.color += col;
+                {
+                    std::lock_guard<std::mutex> lock(render_mut);
+                    curr_sample.color += col;
+                }
             }
         }
     }
