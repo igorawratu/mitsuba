@@ -531,13 +531,12 @@ void renderIllumAwarePairs(const std::vector<IllumPair>& ilps, Scene* scene, flo
             IllumcutSample& curr_sample = ilps[i].second->sample(j);
             std::uint32_t samples_taken;
 
-            /*if(visibility[ilps[i].second->sample_indices[j]])*/{
+            if(visibility[ilps[i].second->sample_indices[j]]){
                 VPL vpl = ilps[i].first->vpl;
                 vpl.P *= ilps[i].first->emission_scale;
 
-                //Spectrum col = sample(scene, sampler, curr_sample.its, curr_sample.ray, vpl, min_dist, 
-                //    false, 10, false, curr_sample.intersected_scene, true, false, samples_taken);
-                Spectrum col(0.00001f);
+                Spectrum col = sample(scene, sampler, curr_sample.its, curr_sample.ray, vpl, min_dist, 
+                    false, 10, false, curr_sample.intersected_scene, true, false, samples_taken);
 
                 {
                     std::lock_guard<std::mutex> lock(render_mut);
@@ -608,7 +607,25 @@ bool IlluminationCutRenderer::render(Scene* scene, std::uint32_t spp, const Rend
     std::cout << "acquired " << illum_aware_pairs.size() << " illumination aware pairs" << std::endl;
 
     std::cout << "rendering..." << std::endl;
-    renderIllumAwarePairs(illum_aware_pairs, scene, min_dist_);
+    //renderIllumAwarePairs(illum_aware_pairs, scene, min_dist_);
+
+    std::stack<OctreeNode<IllumcutSampl>*> node_stack;
+    node_stack.push(receiver_root.get());
+    while(!node_stack.empty()){
+        OctreeNode<IllumcutSampl>* curr = node_stack.top();
+        node_stack.pop();
+
+        if(curr->sample_indices() == 1){
+            curr->representative().color = Spectrum(curr->upper_bound);
+        }
+        else{
+            for(std::uint8_t i = 0; i < curr->children.size(); ++i){
+                if(curr->children[i] != nullptr){
+                    node_stack.push(curr->children[i]);
+                }
+            }
+        }
+    }
 
     copySamplesToBuffer(output_image, samples_, size, spp);
     film->setBitmap(output_bitmap);
