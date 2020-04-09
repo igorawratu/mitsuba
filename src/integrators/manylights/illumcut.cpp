@@ -468,7 +468,7 @@ void adaptiveVisibilitySampling(Scene* scene, LightTreeNode* light, OctreeNode<I
             std::lock_guard<std::mutex> lock(printmut);
 
             for(std::uint8_t i = 0; i < curr_node->children.size(); ++i){
-                std::cout << dist_vals[i] << "-" << curr_node->children[child_idx] == nullptr ? 0 : curr_node->children[child_idx]->sample_indices.size() << " ";
+                std::cout << dist_vals[i] << "-" << (curr_node->children[child_idx] == nullptr ? 0 : curr_node->children[child_idx]->sample_indices.size());
             }
             std::cout << ":" << child_idx << " " << curr_node->sample_indices.size() << std::endl;
         }
