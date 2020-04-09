@@ -149,13 +149,13 @@ bool refineUpper(const IllumPair& illum_pair){
     if(illum_pair.first->vpl.type != EDirectionalEmitterVPL){
         Vector3f c1 = Vector3f(illum_pair.first->min_bounds + illum_pair.first->max_bounds) / 2.f;
         Vector3f dim1 = Vector3f(illum_pair.first->max_bounds - illum_pair.first->min_bounds);
-        float r1 = std::max(dim1.x, std::max(dim1.y, dim1.z));
+        r1 = std::max(dim1.x, std::max(dim1.y, dim1.z));
 
         Vector3f c2 = (illum_pair.second->bb.first + illum_pair.second->bb.second) / 2.f;
         Vector3f dim2 = illum_pair.second->bb.second - illum_pair.second->bb.first;
-        float r2 = std::max(dim2.x, std::max(dim2.y, dim2.z));
+        r2 = std::max(dim2.x, std::max(dim2.y, dim2.z));
 
-        float d = std::max(0.f, 0.1f * ((c1 - c2).length()));
+        d = std::max(0.f, 0.1f * ((c1 - c2).length()));
 
         refine |= std::max(r1, r2) > d;
 
@@ -167,12 +167,8 @@ bool refineUpper(const IllumPair& illum_pair){
  
     if(refine){
         std::lock_guard<std::mutex> lock(printmut);
-        std::cout << illum_pair.first->num_children << " " << illum_pair.second->sample_indices.size() << ":" << r1 << ":" <<
-            illum_pair.first->min_bounds.x << " " << illum_pair.first->min_bounds.y << " " << illum_pair.first->min_bounds.z << ":" << 
-            illum_pair.first->max_bounds.x << " " << illum_pair.first->max_bounds.y << " " << illum_pair.first->max_bounds.z << ":" << r2 << ":" << 
-            illum_pair.second->bb.first.x << " " << illum_pair.second->bb.first.y << " " << illum_pair.second->bb.first.z << ":" <<
-            illum_pair.second->bb.second.x << " " << illum_pair.second->bb.second.y << " " << illum_pair.second->bb.second.z << std::endl;
-    }
+        std::cout << illum_pair.first->num_children << " " << illum_pair.second->sample_indices.size() << illum_pair.first->bcone.GetAngleCos()
+            << r1 << " " << r2 << " " << d << std::endl;
 
     return refine;   
 }
