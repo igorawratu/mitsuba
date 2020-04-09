@@ -167,8 +167,11 @@ bool refineUpper(const IllumPair& illum_pair){
  
     if(refine){
         std::lock_guard<std::mutex> lock(printmut);
-        std::cout << illum_pair.first->num_children << " " << illum_pair.second->sample_indices.size() << " " <<
-            illum_pair.first->bcone.GetAngleCos() << " " << r1 << " " << r2 << " " << d << std::endl;
+        std::cout << illum_pair.first->num_children << " " << illum_pair.second->sample_indices.size() << "-" <<
+            illum_pair.first->min_bounds.x << " " << illum_pair.first->min_bounds.y << " " << illum_pair.first->min_bounds.z << "-" << 
+            illum_pair.first->max_bounds.x << " " << illum_pair.first->max_bounds.y << " " << illum_pair.first->max_bounds.z << "-" << 
+            illum_pair.second->bb.first.x << " " << illum_pair.second->bb.first.y << " " << illum_pair.second->bb.first.z << "-" <<
+            illum_pair.second->bb.second.x << " " << illum_pair.second->bb.second.y << " " << illum_pair.second->bb.second.z << std::endl;
     }
 
     return refine;   
@@ -336,7 +339,7 @@ void computeUpperBounds(LightTree* lt, OctreeNode<IllumcutSample>* rt_root, Scen
     }
 
     std::vector<IllumPair> initial_pairs_vec(initial_pairs.begin(), initial_pairs.end());
-    
+
     #pragma omp parallel for
     for(std::uint32_t i = 0; i < initial_pairs_vec.size(); ++i){
         std::stack<IllumPair> node_stack;
