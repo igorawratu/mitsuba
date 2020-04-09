@@ -139,7 +139,7 @@ std::unique_ptr<OctreeNode<IllumcutSample>> constructOctree(Scene* scene, std::v
 }
 
 typedef std::pair<LightTreeNode*, OctreeNode<IllumcutSample>*> IllumPair;
-const float CONE_THRESH = cos(45.f / 180.f * M_PI);
+const float CONE_THRESH = cos(90.f / 180.f * M_PI);
 
 std::mutex printmut;
 
@@ -656,8 +656,8 @@ bool IlluminationCutRenderer::render(Scene* scene, std::uint32_t spp, const Rend
     auto receiver_root = constructOctree(scene, samples_, min_dist_, spp);
     std::cout << "Constructed octree" << std::endl;
 
-    //computeUpperBounds(light_tree.get(), receiver_root.get(), scene, min_dist_, upper_distance_thresh_);
-    computeUpperBounds2(light_tree.get(), receiver_root.get(), min_dist_);
+    computeUpperBounds(light_tree.get(), receiver_root.get(), scene, min_dist_, upper_distance_thresh_);
+    //computeUpperBounds2(light_tree.get(), receiver_root.get(), min_dist_);
     std::cout << "Computed upper bounds" << std::endl;
 
     std::vector<IllumPair> illum_aware_pairs = getIlluminationAwarePairs(light_tree.get(), receiver_root.get(), min_dist_, error_threshold_);
