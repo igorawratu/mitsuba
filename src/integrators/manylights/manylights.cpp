@@ -206,6 +206,10 @@ size_t generateVPLs(const Scene *scene, size_t offset, size_t count, int max_dep
 			vpl.psr = point_sample;
 			vpls.push_back(vpl);
 
+			if(vpl.its.wi.z < 0.f){
+				vpl.its.shFrame.n = -vpl.its.shFrame.n;
+			}
+
 			if(type == ESurfaceVPL){
 				weight *= emitter->sampleDirection(direction_sample, point_sample, sampler->next2D());
 			}
@@ -258,6 +262,9 @@ size_t generateVPLs(const Scene *scene, size_t offset, size_t count, int max_dep
 
 			VPL vpl(ESurfaceVPL, weight);
 			vpl.its = its;
+			if(vpl.its.wi.z < 0.f){
+				vpl.its.shFrame.n = -vpl.its.shFrame.n;
+			}
 
 			if (BSDF::getMeasure(bsdf_sample.sampledType) == ESolidAngle) {
 				vpls.push_back(vpl);
