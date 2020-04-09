@@ -434,7 +434,6 @@ std::vector<IllumPair> getIlluminationAwarePairs(LightTree* lt, OctreeNode<Illum
             }
             else{
                 std::lock_guard<std::mutex> lock(illum_aware_mutex);
-                std::cout << curr.first->num_children << " " << curr.second->sample_indices.size() << std::endl;
                 illum_aware_pairs.push_back(curr);
             }
         }
@@ -526,12 +525,13 @@ void renderIllumAwarePairs(const std::vector<IllumPair>& ilps, Scene* scene, flo
             IllumcutSample& curr_sample = ilps[i].second->sample(j);
             std::uint32_t samples_taken;
 
-            if(visibility[ilps[i].second->sample_indices[j]]){
+            /*if(visibility[ilps[i].second->sample_indices[j]])*/{
                 VPL vpl = ilps[i].first->vpl;
                 vpl.P *= ilps[i].first->emission_scale;
 
-                Spectrum col = sample(scene, sampler, curr_sample.its, curr_sample.ray, vpl, min_dist, 
-                    false, 10, false, curr_sample.intersected_scene, true, false, samples_taken);
+                //Spectrum col = sample(scene, sampler, curr_sample.its, curr_sample.ray, vpl, min_dist, 
+                //    false, 10, false, curr_sample.intersected_scene, true, false, samples_taken);
+                col = Spectrum(0.00001f);
 
                 {
                     std::lock_guard<std::mutex> lock(render_mut);
