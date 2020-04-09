@@ -438,6 +438,10 @@ std::vector<IllumPair> getIlluminationAwarePairs(LightTree* lt, OctreeNode<Illum
     return illum_aware_pairs;
 }
 
+void adaptiveVisibilitySampling(LightTreeNode* light, OctreeNode<IllumcutSample>* curr_node, std::vector<bool>& visibility){
+
+}
+
 //change to adaptive shadow sampling later
 void renderIllumAwarePairs(const std::vector<IllumPair>& ilps, Scene* scene, float min_dist){
     Properties props("independent");
@@ -449,6 +453,10 @@ void renderIllumAwarePairs(const std::vector<IllumPair>& ilps, Scene* scene, flo
 
     #pragma omp parallel for
     for(std::uint32_t i = 0; i < ilps.size(); ++i){
+        std::vector<bool> visibility(ilps[i].second->sample_indices.size(), false);
+        std::cout << ilps[i].second->sample_indices.size() << " " << ilps[i].first->num_children << std::endl;
+
+
         for(std::uint32_t j = 0; j < ilps[i].second->sample_indices.size(); ++j){
             IllumcutSample& curr_sample = ilps[i].second->sample(j);
             std::uint32_t samples_taken;
