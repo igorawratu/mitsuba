@@ -342,7 +342,7 @@ void computeUpperBounds2Recurse(LightTree* lt, OctreeNode<IllumcutSample>* node,
         std::uint32_t num_added = 0;
         float bound = 0.f;
 
-        while((pqueue.size() + num_added < num_clusters){
+        while(pqueue.size() + num_added < num_clusters){
             ClusterAndScore entry = pqueue.top();
             pqueue.pop();
 
@@ -355,12 +355,12 @@ void computeUpperBounds2Recurse(LightTree* lt, OctreeNode<IllumcutSample>* node,
             }
 
             if(node->left.get() != nullptr){
-                float err = LightTree::calculateClusterBounds(its.p, its.shFrame.n, node->left.get(), node->left->vpl.type, min_dist);
+                float err = LightTree::calculateClusterBounds(curr_sample.its.p, curr_sample.its.shFrame.n, node->left.get(), node->left->vpl.type, min_dist);
                 pqueue.push(std::make_tuple(node->left.get(), err));
             }
 
             if(node->right.get() != nullptr){
-                float err = LightTree::calculateClusterBounds(its.p, its.shFrame.n, node->right.get(), node->right->vpl.type, min_dist);
+                float err = LightTree::calculateClusterBounds(curr_sample.its.p, curr_sample.its.shFrame.n, node->right.get(), node->right->vpl.type, min_dist);
                 pqueue.push(std::make_tuple(node->right.get(), err));
             }
         }
