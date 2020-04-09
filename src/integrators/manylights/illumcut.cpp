@@ -454,7 +454,7 @@ void adaptiveVisibilitySampling(Scene* scene, LightTreeNode* light, OctreeNode<I
 
     for(std::uint8_t i = 0; i < curr_node->children.size(); ++i){
         if(curr_node->children[i] != nullptr){
-            dist[i] = float(curr_node->children[i]->sample_indices.size());
+            dist_vals[i] = float(curr_node->children[i]->sample_indices.size());
         }
     }
 
@@ -464,7 +464,8 @@ void adaptiveVisibilitySampling(Scene* scene, LightTreeNode* light, OctreeNode<I
 
     for(std::uint32_t i = 0; i < max_samples; ++i){
         std::uint32_t child_idx = dist(rng);
-        std::uint32_t sample_idx = children[child_idx]->sample_indices[rand() % children[child_idx]->sample_indices.size()];
+        std::uint32_t selected_idx = rand() % curr_node->children[child_idx]->sample_indices.size();
+        std::uint32_t sample_idx = curr_node->children[child_idx]->sample_indices[selected_idx];
         selected_indices.push_back(sample_idx);
     }
 
@@ -486,19 +487,19 @@ void adaptiveVisibilitySampling(Scene* scene, LightTreeNode* light, OctreeNode<I
     }
 
     if(all_vis){
-        for(std::uint32_t i = 0; i < sample_indices.size(); ++i){
+        for(std::uint32_t i = 0; i < curr_node->sample_indices.size(); ++i){
             visibility[sample_indices[i]] = true;
         }
     }
     else if(!not_all_invis){
-        for(std::uint32_t i = 0; i < sample_indices.size(); ++i){
+        for(std::uint32_t i = 0; i < curr_node->sample_indices.size(); ++i){
             visibility[sample_indices[i]] = false;
         }
     }
     else{
         for(std::uint8_t i = 0; i < curr_node->children.size(); ++i){
             if(curr_node->children[i] != nullptr){
-                adaptiveVisibilitySampling(scene, light, curr_node->children[i], visibility, rng, min_dist);
+                adaptiveVisibilitySampling(scene, light, curr_node->children[i].get(), visibility, rng, min_dist);
             }
         }
     }
@@ -517,6 +518,7 @@ void renderIllumAwarePairs(const std::vector<IllumPair>& ilps, Scene* scene, flo
     for(std::uint32_t i = 0; i < ilps.size(); ++i){
         std::unordered_map<std::uint32_t, bool> visibility;
         std::mt19937 rng(std::chrono::high_resolution_clock::now().time_since_epoch().count());
+        adaptiveVisibilitySampling(scene, ilps[i].first, ilps[i].second, visibility, rng, min_dist);
 
         for(std::uint32_t j = 0; j < ilps[i].second->sample_indices.size(); ++j){
             IllumcutSample& curr_sample = ilps[i].second->sample(j);
