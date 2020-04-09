@@ -12,6 +12,7 @@
 #include <deque>
 
 #include "common.h"
+#include "filewriter.h"
 
 MTS_NAMESPACE_BEGIN
 
@@ -450,13 +451,14 @@ std::vector<IllumPair> getIlluminationAwarePairs(LightTree* lt, OctreeNode<Illum
     return illum_aware_pairs;
 }
 
-void adaptiveVisibilitySampling(Scene* scene, LightTreeNode* light, OctreeNode<IllumcutSample>* curr_node, 
+std::uint64_t adaptiveVisibilitySampling(Scene* scene, LightTreeNode* light, OctreeNode<IllumcutSample>* curr_node, 
         std::unordered_map<std::uint32_t, bool>& visibility, std::mt19937& rng, float min_dist){
     if(curr_node->sample_indices.size() == 1){
         visibility[curr_node->sample_indices[0]] = sampleVisibility(scene, curr_node->representative().its, light->vpl, min_dist);
-        return;
+        return 1;
     }
 
+    std::uint64_t taken_samples = 0;
     std::uint32_t max_samples = std::min(std::uint32_t(16), std::uint32_t(curr_node->sample_indices.size()));
 
     std::vector<float> dist_vals(8, 0.f);
@@ -488,6 +490,7 @@ void adaptiveVisibilitySampling(Scene* scene, LightTreeNode* light, OctreeNode<I
         }
         else{
             vis = sampleVisibility(scene, (*(curr_node->samples))[selected_indices[i]].its, light->vpl, min_dist);
+            taken_samples++;
             visibility[selected_indices[i]] = vis;
         }
 
@@ -508,14 +511,16 @@ void adaptiveVisibilitySampling(Scene* scene, LightTreeNode* light, OctreeNode<I
     else{
         for(std::uint8_t i = 0; i < curr_node->children.size(); ++i){
             if(curr_node->children[i] != nullptr){
-                adaptiveVisibilitySampling(scene, light, curr_node->children[i].get(), visibility, rng, min_dist);
+                taken_samples += adaptiveVisibilitySampling(scene, light, curr_node->children[i].get(), visibility, rng, min_dist);
             }
         }
     }
+
+    return taken_samples;
 }
 
 //change to adaptive shadow sampling later
-void renderIllumAwarePairs(const std::vector<IllumPair>& ilps, Scene* scene, float min_dist){
+float renderIllumAwarePairs(const std::vector<IllumPair>& ilps, Scene* scene, float min_dist){
     Properties props("independent");
     ref<Sampler> sampler = static_cast<Sampler*>(PluginManager::getInstance()->createObject(MTS_CLASS(Sampler), props));
     sampler->configure();
@@ -524,16 +529,19 @@ void renderIllumAwarePairs(const std::vector<IllumPair>& ilps, Scene* scene, flo
     std::mutex render_mut;
 
     std::uint64_t total_samples = 0;
+    std::uint64_t visibility_samples = 0;
 
     #pragma omp parallel for
     for(std::uint32_t i = 0; i < ilps.size(); ++i){
+        std::unordered_map<std::uint32_t, bool> visibility;
+        std::mt19937 rng(std::chrono::high_resolution_clock::now().time_since_epoch().count());
+        std::uint64_t vis_samples = adaptiveVisibilitySampling(scene, ilps[i].first, ilps[i].second, visibility, rng, min_dist);
+
         {
             std::lock_guard<std::mutex> lock(render_mut);
             total_samples += ilps[i].second->sample_indices.size();
+            visibility_samples += vis_samples;
         }
-        std::unordered_map<std::uint32_t, bool> visibility;
-        std::mt19937 rng(std::chrono::high_resolution_clock::now().time_since_epoch().count());
-        adaptiveVisibilitySampling(scene, ilps[i].first, ilps[i].second, visibility, rng, min_dist);
 
         for(std::uint32_t j = 0; j < ilps[i].second->sample_indices.size(); ++j){
             IllumcutSample& curr_sample = ilps[i].second->sample(j);
@@ -554,8 +562,7 @@ void renderIllumAwarePairs(const std::vector<IllumPair>& ilps, Scene* scene, flo
         }
     }
 
-    std::cout << "Total samples taken: " << total_samples << std::endl;
-
+    return float(visibility_samples) / total_samples;
 }
 
 void copySamplesToBuffer(std::uint8_t* output_image, const std::vector<IllumcutSample>& samples, Vector2i image_size,
@@ -590,6 +597,8 @@ void copySamplesToBuffer(std::uint8_t* output_image, const std::vector<IllumcutS
 }
 
 bool IlluminationCutRenderer::render(Scene* scene, std::uint32_t spp, const RenderJob *job){
+    srand(time(0));
+
     ref<Sensor> sensor = scene->getSensor();
     ref<Film> film = sensor->getFilm();
 
@@ -605,6 +614,8 @@ bool IlluminationCutRenderer::render(Scene* scene, std::uint32_t spp, const Rend
     std::unique_ptr<LightTree> light_tree(new LightTree(vpls_, min_dist_, 0, 0.f, false));
     std::cout << "Created light tree" << std::endl;
 
+    auto start = std::chrono::high_resolution_clock::now();
+
     auto receiver_root = constructOctree(scene, samples_, min_dist_, spp);
     std::cout << "Constructed octree" << std::endl;
 
@@ -615,7 +626,19 @@ bool IlluminationCutRenderer::render(Scene* scene, std::uint32_t spp, const Rend
     std::cout << "acquired " << illum_aware_pairs.size() << " illumination aware pairs" << std::endl;
 
     std::cout << "rendering..." << std::endl;
-    renderIllumAwarePairs(illum_aware_pairs, scene, min_dist_);
+    float samplerate = renderIllumAwarePairs(illum_aware_pairs, scene, min_dist_);
+
+    auto end = std::chrono::high_resolution_clock::now();
+
+    std::vector<float> timings;
+    std::vector<float samplerates;
+    timings.push_back(std::chrono::duration_cast<std::chrono::duration<float>>(end - start).count());
+    samplerates.push_back(samplerate);
+
+    writeOutputData(scene, "timings", false, timings, ',');
+    writeOutputData(scene, "samplerates", false, samplerates, ',');
+
+    std::cout << "Samplerate: " << samplerate << std::endl;
 
     /*std::stack<OctreeNode<IllumcutSample>*> node_stack;
     node_stack.push(receiver_root.get());
