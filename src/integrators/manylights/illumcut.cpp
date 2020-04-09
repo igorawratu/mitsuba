@@ -304,17 +304,17 @@ void computeUpperBounds2Recurse(LightTree* lt, OctreeNode<IllumcutSample>* node,
     if(node->sample_indices.size() == 1){
         IllumcutSample& curr_sample = node->representative();
         if(lt->getPointTreeRoot() != nullptr){
-            node->upper_bound += LightTree::calculateClusterBounds(curr_sample.its.p, curr_sample.its.shFrame.n, curr.first, 
+            node->upper_bound += LightTree::calculateClusterBounds(curr_sample.its.p, curr_sample.its.shFrame.n, lt->getPointTreeRoot(), 
                     lt->getPointTreeRoot()->vpl.type, min_dist);
         }
 
         if(lt->getDirectionalTreeRoot() != nullptr){
-            node->upper_bound += LightTree::calculateClusterBounds(curr_sample.its.p, curr_sample.its.shFrame.n, curr.first, 
+            node->upper_bound += LightTree::calculateClusterBounds(curr_sample.its.p, curr_sample.its.shFrame.n, lt->getDirectionalTreeRoot(), 
                     lt->getDirectionalTreeRoot()->vpl.type, min_dist);
         }
 
         if(lt->getOrientedTreeRoot() != nullptr){
-            node->upper_bound += LightTree::calculateClusterBounds(curr_sample.its.p, curr_sample.its.shFrame.n, curr.first, 
+            node->upper_bound += LightTree::calculateClusterBounds(curr_sample.its.p, curr_sample.its.shFrame.n, lt->getOrientedTreeRoot(), 
                     lt->getOrientedTreeRoot()->vpl.type, min_dist);
         }
     }
@@ -653,7 +653,7 @@ bool IlluminationCutRenderer::render(Scene* scene, std::uint32_t spp, const Rend
     std::cout << "Constructed octree" << std::endl;
 
     //computeUpperBounds(light_tree.get(), receiver_root.get(), scene, min_dist_, upper_distance_thresh_);
-    computeUpperBounds(light_tree.get(), receiver_root.get(), min_dist_);
+    computeUpperBounds2(light_tree.get(), receiver_root.get(), min_dist_);
     std::cout << "Computed upper bounds" << std::endl;
 
     std::vector<IllumPair> illum_aware_pairs = getIlluminationAwarePairs(light_tree.get(), receiver_root.get(), min_dist_, error_threshold_);
