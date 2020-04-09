@@ -609,10 +609,10 @@ bool IlluminationCutRenderer::render(Scene* scene, std::uint32_t spp, const Rend
     std::cout << "rendering..." << std::endl;
     //renderIllumAwarePairs(illum_aware_pairs, scene, min_dist_);
 
-    std::stack<OctreeNode<IllumcutSampl>*> node_stack;
+    std::stack<OctreeNode<IllumcutSample>*> node_stack;
     node_stack.push(receiver_root.get());
     while(!node_stack.empty()){
-        OctreeNode<IllumcutSampl>* curr = node_stack.top();
+        OctreeNode<IllumcutSample>* curr = node_stack.top();
         node_stack.pop();
 
         if(curr->sample_indices() == 1){
