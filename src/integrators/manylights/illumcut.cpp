@@ -309,14 +309,14 @@ bool refineLTree(const IllumPair& illum_pair){
 
 typedef std::tuple<LightTreeNode*, float> ClusterAndScore;
 
-void getAllLeaves(OctreeNode<IllumcutSample>* node, std::vector<OctreeNode<IllumcutSample>*> node& leaves){
+void getAllLeaves(OctreeNode<IllumcutSample>* node, std::vector<OctreeNode<IllumcutSample>*>& leaves){
     if(node->sample_indices.size() == 1){
         leaves.push_back(node);
     }
     else{
         for(std::uint32_t i = 0; i < node->children.size(); ++i){
             if(node->children[i] != nullptr){
-                getAllLeaves(lt, node->children[i].get(), leaves);
+                getAllLeaves(node->children[i].get(), leaves);
             }
         }
     }
