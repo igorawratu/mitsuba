@@ -366,7 +366,7 @@ void computeUpperBounds(LightTree* lt, OctreeNode<IllumcutSample>* rt_root, Scen
 
                 if(estimated_error < 0.00000001f){
                     Vector3f axis = curr.first->bcone.GetAxis();
-                    std::cout << curr_sample.its.shFrame.n.x << " " << curr_sample.its.shFrame.n << " " << curr_sample.its.shFrame.n << "-" <<
+                    std::cout << curr_sample.its.shFrame.n.x << " " << curr_sample.its.shFrame.n.y << " " << curr_sample.its.shFrame.n.z << "-" <<
                         axis.x << " " << axis.y << " " << axis.z << std::endl;
                 }
 
