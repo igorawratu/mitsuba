@@ -161,6 +161,10 @@ bool refineUpper(const IllumPair& illum_pair){
         refine |= illum_pair.first->bcone.GetAngleCos() < CONE_THRESH;
     }
  
+    /*if(!refine){
+        std::cout << illum_pair.first->num_children << " " << illum_pair.second->sample_indices.size() << std::endl;
+    }*/
+
     return refine;   
 }
 
@@ -359,6 +363,8 @@ void computeUpperBounds(LightTree* lt, OctreeNode<IllumcutSample>* rt_root, Scen
 
                 float estimated_error = LightTree::calculateClusterBounds(curr_sample.its.p, curr_sample.its.shFrame.n, curr.first, 
                     curr.first->vpl.type, min_dist);
+
+                std::cout << estimated_error << std::endl;
 
                 curr.second->updateUpperBound(estimated_error);
             }
