@@ -167,7 +167,7 @@ bool refineUpper(const IllumPair& illum_pair){
  
     if(refine){
         std::lock_guard<std::mutex> lock(printmut);
-        std::cout << illum_pair.first->num_children << " " << illum_pair.second->sample_indices.size() << illum_pair.first->bcone.GetAngleCos()
+        std::cout << illum_pair.first->num_children << " " << illum_pair.second->sample_indices.size() << " " << illum_pair.first->bcone.GetAngleCos()
             << r1 << " " << r2 << " " << d << std::endl;
     }
 
