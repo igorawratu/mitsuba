@@ -631,7 +631,7 @@ bool IlluminationCutRenderer::render(Scene* scene, std::uint32_t spp, const Rend
     auto end = std::chrono::high_resolution_clock::now();
 
     std::vector<float> timings;
-    std::vector<float samplerates;
+    std::vector<float> samplerates;
     timings.push_back(std::chrono::duration_cast<std::chrono::duration<float>>(end - start).count());
     samplerates.push_back(samplerate);
 
