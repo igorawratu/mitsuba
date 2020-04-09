@@ -364,6 +364,12 @@ void computeUpperBounds(LightTree* lt, OctreeNode<IllumcutSample>* rt_root, Scen
                 float estimated_error = LightTree::calculateClusterBounds(curr_sample.its.p, curr_sample.its.shFrame.n, curr.first, 
                     curr.first->vpl.type, min_dist);
 
+                if(estimated_error < 0.00000001f){
+                    Vector3f axis = curr.first->bcone.GetAxis();
+                    std::cout << curr_sample.its.shFrame.n.x << " " << curr_sample.its.shFrame.n << " " << curr_sample.its.shFrame.n << "-" <<
+                        axis.GetAxis().x << " " << axis.GetAxis().y << " " << axis.GetAxis().z << std::endl;
+                }
+
                 curr.second->updateUpperBound(estimated_error);
             }
         }
@@ -607,9 +613,9 @@ bool IlluminationCutRenderer::render(Scene* scene, std::uint32_t spp, const Rend
     std::cout << "acquired " << illum_aware_pairs.size() << " illumination aware pairs" << std::endl;
 
     std::cout << "rendering..." << std::endl;
-    //renderIllumAwarePairs(illum_aware_pairs, scene, min_dist_);
+    renderIllumAwarePairs(illum_aware_pairs, scene, min_dist_);
 
-    std::stack<OctreeNode<IllumcutSample>*> node_stack;
+    /*std::stack<OctreeNode<IllumcutSample>*> node_stack;
     node_stack.push(receiver_root.get());
     while(!node_stack.empty()){
         OctreeNode<IllumcutSample>* curr = node_stack.top();
@@ -625,7 +631,7 @@ bool IlluminationCutRenderer::render(Scene* scene, std::uint32_t spp, const Rend
                 }
             }
         }
-    }
+    }*/
 
     copySamplesToBuffer(output_image, samples_, size, spp);
     film->setBitmap(output_bitmap);
