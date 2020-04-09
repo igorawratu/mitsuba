@@ -365,6 +365,7 @@ void computeUpperBounds(LightTree* lt, OctreeNode<IllumcutSample>* rt_root, Scen
                     curr.first->vpl.type, min_dist);
 
                 if(estimated_error < 0.00000001f){
+                    std::lock_guard<std::mutex> lock(printmut);
                     Vector3f axis = curr.first->bcone.GetAxis();
                     std::cout << curr_sample.its.shFrame.n.x << " " << curr_sample.its.shFrame.n.y << " " << curr_sample.its.shFrame.n.z << "-" <<
                         axis.x << " " << axis.y << " " << axis.z << std::endl;
