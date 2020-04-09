@@ -139,8 +139,12 @@ std::unique_ptr<OctreeNode<IllumcutSample>> constructOctree(Scene* scene, std::v
 typedef std::pair<LightTreeNode*, OctreeNode<IllumcutSample>*> IllumPair;
 const float CONE_THRESH = cos(20.f / 180.f * M_PI);
 
+std::mutex printmut;
+
 bool refineUpper(const IllumPair& illum_pair){
     bool refine = false;
+
+    float r1, r2, d;
 
     if(illum_pair.first->vpl.type != EDirectionalEmitterVPL){
         Vector3f c1 = Vector3f(illum_pair.first->min_bounds + illum_pair.first->max_bounds) / 2.f;
@@ -161,9 +165,11 @@ bool refineUpper(const IllumPair& illum_pair){
         refine |= illum_pair.first->bcone.GetAngleCos() < CONE_THRESH;
     }
  
-    /*if(!refine){
-        std::cout << illum_pair.first->num_children << " " << illum_pair.second->sample_indices.size() << std::endl;
-    }*/
+    if(refine){
+        std::lock_guard<std::mutex> lock(printmut);
+        std::cout << illum_pair.first->num_children << " " << illum_pair.second->sample_indices.size() << " " <<
+            illum_pair.first->bcone.GetAngleCos() << " " << r1 << " " << r2 << " " << d << std::endl;
+    }
 
     return refine;   
 }
@@ -330,9 +336,7 @@ void computeUpperBounds(LightTree* lt, OctreeNode<IllumcutSample>* rt_root, Scen
     }
 
     std::vector<IllumPair> initial_pairs_vec(initial_pairs.begin(), initial_pairs.end());
-
-    std::mutex mut;
-
+    
     #pragma omp parallel for
     for(std::uint32_t i = 0; i < initial_pairs_vec.size(); ++i){
         std::stack<IllumPair> node_stack;
@@ -366,10 +370,10 @@ void computeUpperBounds(LightTree* lt, OctreeNode<IllumcutSample>* rt_root, Scen
                 float estimated_error = LightTree::calculateClusterBounds(curr_sample.its.p, curr_sample.its.shFrame.n, curr.first, 
                     curr.first->vpl.type, min_dist);
 
-                {
+                /*{
                     std::lock_guard<std::mutex> lock(mut);
                     std::cout << estimated_error << " " << curr.first->num_children << " " << curr.second->sample_indices.size() << std::endl;
-                }
+                }*/
                 
 
                 curr.second->updateUpperBound(estimated_error);
