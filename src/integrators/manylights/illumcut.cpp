@@ -448,7 +448,7 @@ void adaptiveVisibilitySampling(Scene* scene, LightTreeNode* light, OctreeNode<I
         visibility[curr_node->sample_indices[0]] = sampleVisibility(scene, curr_node->representative().its, light->vpl, min_dist);
     }
 
-    std::uint32_t max_samples = std::min(16, curr_node->sample_indices.size());
+    std::uint32_t max_samples = std::min(std::uint32_t(16), std::uint32_t(curr_node->sample_indices.size()));
 
     std::vector<float> dist_vals(8, 0.f);
 
@@ -488,12 +488,12 @@ void adaptiveVisibilitySampling(Scene* scene, LightTreeNode* light, OctreeNode<I
 
     if(all_vis){
         for(std::uint32_t i = 0; i < curr_node->sample_indices.size(); ++i){
-            visibility[sample_indices[i]] = true;
+            visibility[curr_node->sample_indices[i]] = true;
         }
     }
     else if(!not_all_invis){
         for(std::uint32_t i = 0; i < curr_node->sample_indices.size(); ++i){
-            visibility[sample_indices[i]] = false;
+            visibility[curr_node->sample_indices[i]] = false;
         }
     }
     else{
@@ -524,7 +524,7 @@ void renderIllumAwarePairs(const std::vector<IllumPair>& ilps, Scene* scene, flo
             IllumcutSample& curr_sample = ilps[i].second->sample(j);
             std::uint32_t samples_taken;
 
-            if(visibility[ilps[i]->second->sample_indices[i]]){
+            if(visibility[ilps[i].second->sample_indices[i]]){
                 VPL vpl = ilps[i].first->vpl;
                 vpl.P *= ilps[i].first->emission_scale;
 
