@@ -614,9 +614,9 @@ bool IlluminationCutRenderer::render(Scene* scene, std::uint32_t spp, const Rend
     std::cout << "acquired " << illum_aware_pairs.size() << " illumination aware pairs" << std::endl;
 
     std::cout << "rendering..." << std::endl;
-    renderIllumAwarePairs(illum_aware_pairs, scene, min_dist_);
+    //renderIllumAwarePairs(illum_aware_pairs, scene, min_dist_);
 
-    /*std::stack<OctreeNode<IllumcutSample>*> node_stack;
+    std::stack<OctreeNode<IllumcutSample>*> node_stack;
     node_stack.push(receiver_root.get());
     while(!node_stack.empty()){
         OctreeNode<IllumcutSample>* curr = node_stack.top();
@@ -632,7 +632,7 @@ bool IlluminationCutRenderer::render(Scene* scene, std::uint32_t spp, const Rend
                 }
             }
         }
-    }*/
+    }
 
     copySamplesToBuffer(output_image, samples_, size, spp);
     film->setBitmap(output_bitmap);
