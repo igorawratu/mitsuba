@@ -464,6 +464,12 @@ void adaptiveVisibilitySampling(Scene* scene, LightTreeNode* light, OctreeNode<I
 
     for(std::uint32_t i = 0; i < max_samples; ++i){
         std::uint32_t child_idx = dist(rng);
+        if(curr_node->children[child_idx] == nullptr){
+            for(std::uint8_t i = 0; i < curr_node->children.size(); ++i){
+                std::cout << dist_vals[i] << " ";
+            }
+            std::cout << "- " << child_idx << std::endl;
+        }
         std::uint32_t selected_idx = rand() % curr_node->children[child_idx]->sample_indices.size();
         std::uint32_t sample_idx = curr_node->children[child_idx]->sample_indices[selected_idx];
         selected_indices.push_back(sample_idx);
