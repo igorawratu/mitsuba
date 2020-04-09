@@ -368,7 +368,7 @@ void computeUpperBounds(LightTree* lt, OctreeNode<IllumcutSample>* rt_root, Scen
 
                 {
                     std::lock_guard<std::mutex> lock(mut);
-                    std::cout << estimated_error << " " << curr_sample.first->num_children << " " << curr_sample.second->sample_indices.size() << std::endl;
+                    std::cout << estimated_error << " " << curr.first->num_children << " " << curr.second->sample_indices.size() << std::endl;
                 }
                 
 
