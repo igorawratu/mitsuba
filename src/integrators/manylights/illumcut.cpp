@@ -520,13 +520,12 @@ void renderIllumAwarePairs(const std::vector<IllumPair>& ilps, Scene* scene, flo
         std::unordered_map<std::uint32_t, bool> visibility;
         std::mt19937 rng(std::chrono::high_resolution_clock::now().time_since_epoch().count());
         adaptiveVisibilitySampling(scene, ilps[i].first, ilps[i].second, visibility, rng, min_dist);
-        std::cout << visibility.size() << " " << ilps[i].second->sample_indices.size() << std::endl;
 
         for(std::uint32_t j = 0; j < ilps[i].second->sample_indices.size(); ++j){
             IllumcutSample& curr_sample = ilps[i].second->sample(j);
             std::uint32_t samples_taken;
 
-            if(visibility[ilps[i].second->sample_indices[i]]){
+            if(visibility[ilps[i].second->sample_indices[j]]){
                 VPL vpl = ilps[i].first->vpl;
                 vpl.P *= ilps[i].first->emission_scale;
 
