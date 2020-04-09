@@ -515,8 +515,14 @@ void renderIllumAwarePairs(const std::vector<IllumPair>& ilps, Scene* scene, flo
 
     std::mutex render_mut;
 
+    std::uint64_t total_samples = 0;
+
     #pragma omp parallel for
     for(std::uint32_t i = 0; i < ilps.size(); ++i){
+        {
+            std::lock_guard<std::mutex> lock(render_mut);
+            total_samples += ilps[i].second->sample_indices.size();
+        }
         std::unordered_map<std::uint32_t, bool> visibility;
         std::mt19937 rng(std::chrono::high_resolution_clock::now().time_since_epoch().count());
         adaptiveVisibilitySampling(scene, ilps[i].first, ilps[i].second, visibility, rng, min_dist);
@@ -540,6 +546,8 @@ void renderIllumAwarePairs(const std::vector<IllumPair>& ilps, Scene* scene, flo
             }
         }
     }
+
+    std::cout "Total samples taken: " << total_samples << std::endl;
 
 }
 
