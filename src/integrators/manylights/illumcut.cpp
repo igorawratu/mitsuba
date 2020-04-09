@@ -139,7 +139,7 @@ std::unique_ptr<OctreeNode<IllumcutSample>> constructOctree(Scene* scene, std::v
 }
 
 typedef std::pair<LightTreeNode*, OctreeNode<IllumcutSample>*> IllumPair;
-const float CONE_THRESH = cos(20.f / 180.f * M_PI);
+const float CONE_THRESH = cos(40.f / 180.f * M_PI);
 
 std::mutex printmut;
 
