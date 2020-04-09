@@ -308,18 +308,31 @@ bool refineLTree(const IllumPair& illum_pair){
 
 typedef std::tuple<LightTreeNode*, float> ClusterAndScore;
 
-
-
-void computeUpperBounds2Recurse(LightTree* lt, OctreeNode<IllumcutSample>* node, float min_dist, std::uint32_t num_clusters){
+void getAllLeaves(OctreeNode<IllumcutSample>* node, std::vector<OctreeNode<IllumcutSample>* node>& leaves){
     if(node->sample_indices.size() == 1){
-        //largest first, but front of the queue is last out
-        auto comparator = [](ClusterAndScore l, ClusterAndScore r){
-            return std::get<1>(l) < std::get<1>(r);
-        };
+        leaves.push_back(node);
+    }
+    else{
+        for(std::uint32_t i = 0; i < node->children.size(); ++i){
+            if(node->children[i] != nullptr){
+                getAllLeaves(lt, node->children[i].get(), leaves);
+            }
+        }
+    }
+}
 
+void computeUpperBounds2Recurse(LightTree* lt, std::vector<OctreeNode<IllumcutSample>*> leaves, float min_dist, std::uint32_t num_clusters){
+    auto comparator = [](ClusterAndScore l, ClusterAndScore r){
+        return std::get<1>(l) < std::get<1>(r);
+    };
+
+    #pragma omp parallel for
+    for(std::uint32_t i = 0; i < leaves.size(); ++i){
+        //largest first, but front of the queue is last out
+        
         std::priority_queue<ClusterAndScore, std::vector<ClusterAndScore>, decltype(comparator)> pqueue(comparator);
 
-        IllumcutSample& curr_sample = node->representative();
+        IllumcutSample& curr_sample = leaves[i]->representative();
 
         if(lt->getPointTreeRoot() != nullptr){
             float error = LightTree::calculateClusterBounds(curr_sample.its.p, curr_sample.its.shFrame.n, lt->getPointTreeRoot(), 
@@ -372,19 +385,15 @@ void computeUpperBounds2Recurse(LightTree* lt, OctreeNode<IllumcutSample>* node,
             bound += std::get<1>(entry);
         }
 
-        node->upper_bound = bound;
-    }
-    else{
-        for(std::uint32_t i = 0; i < node->children.size(); ++i){
-            if(node->children[i] != nullptr){
-                computeUpperBounds2Recurse(lt, node->children[i].get(), min_dist, num_clusters);
-            }
-        }
+        leaves[i]->upper_bound = bound;
     }
 }
 
 void computeUpperBounds2(LightTree* lt, OctreeNode<IllumcutSample>* rt_root, float min_dist, std::uint32_t num_clusters){
-    computeUpperBounds2Recurse(lt, rt_root, min_dist, num_clusters);
+    std::vector<OctreeNode<IllumcutSample>*> leaves;
+    getAllLeaves(rt_root, leaves);
+
+    computeUpperBounds2Helper(lt, leaves, min_dist, num_clusters);
 
     rt_root->cacheMinUpper();
 }
