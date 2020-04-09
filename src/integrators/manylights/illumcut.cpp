@@ -10,6 +10,7 @@
 #include <unordered_map>
 #include <iostream>
 #include <deque>
+#include <vector>
 
 #include "common.h"
 #include "filewriter.h"
@@ -308,7 +309,7 @@ bool refineLTree(const IllumPair& illum_pair){
 
 typedef std::tuple<LightTreeNode*, float> ClusterAndScore;
 
-void getAllLeaves(OctreeNode<IllumcutSample>* node, std::vector<OctreeNode<IllumcutSample>* node>& leaves){
+void getAllLeaves(OctreeNode<IllumcutSample>* node, std::vector<OctreeNode<IllumcutSample>*> node& leaves){
     if(node->sample_indices.size() == 1){
         leaves.push_back(node);
     }
@@ -321,7 +322,7 @@ void getAllLeaves(OctreeNode<IllumcutSample>* node, std::vector<OctreeNode<Illum
     }
 }
 
-void computeUpperBounds2Recurse(LightTree* lt, std::vector<OctreeNode<IllumcutSample>*> leaves, float min_dist, std::uint32_t num_clusters){
+void computeUpperBounds2Helper(LightTree* lt, std::vector<OctreeNode<IllumcutSample>*> leaves, float min_dist, std::uint32_t num_clusters){
     auto comparator = [](ClusterAndScore l, ClusterAndScore r){
         return std::get<1>(l) < std::get<1>(r);
     };
