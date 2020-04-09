@@ -321,7 +321,7 @@ void computeUpperBounds2Recurse(LightTree* lt, OctreeNode<IllumcutSample>* node,
     else{
         for(std::uint32_t i = 0; i < node->children.size(); ++i){
             if(node->children[i] != nullptr){
-                computeUpperBounds2Recurse(lt, node->children[i].get());
+                computeUpperBounds2Recurse(lt, node->children[i].get(), min_dist);
             }
         }
     }
