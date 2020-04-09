@@ -517,20 +517,20 @@ void renderIllumAwarePairs(const std::vector<IllumPair>& ilps, Scene* scene, flo
 
     #pragma omp parallel for
     for(std::uint32_t i = 0; i < ilps.size(); ++i){
-        /*std::unordered_map<std::uint32_t, bool> visibility;
+        std::unordered_map<std::uint32_t, bool> visibility;
         std::mt19937 rng(std::chrono::high_resolution_clock::now().time_since_epoch().count());
-        adaptiveVisibilitySampling(scene, ilps[i].first, ilps[i].second, visibility, rng, min_dist);*/
+        adaptiveVisibilitySampling(scene, ilps[i].first, ilps[i].second, visibility, rng, min_dist);
 
         for(std::uint32_t j = 0; j < ilps[i].second->sample_indices.size(); ++j){
             IllumcutSample& curr_sample = ilps[i].second->sample(j);
             std::uint32_t samples_taken;
 
-            /*if(visibility[ilps[i].second->sample_indices[j]])*/{
+            if(visibility[ilps[i].second->sample_indices[j]]){
                 VPL vpl = ilps[i].first->vpl;
                 vpl.P *= ilps[i].first->emission_scale;
 
                 Spectrum col = sample(scene, sampler, curr_sample.its, curr_sample.ray, vpl, min_dist, 
-                    true, 10, false, curr_sample.intersected_scene, true, false, samples_taken);
+                    false, 10, false, curr_sample.intersected_scene, true, false, samples_taken);
 
                 {
                     std::lock_guard<std::mutex> lock(render_mut);
