@@ -16,11 +16,13 @@
 
 MTS_NAMESPACE_BEGIN
 
-IlluminationCutRenderer::IlluminationCutRenderer(const std::vector<VPL>& vpls, float error_thresh, float min_dist, float upper_distance_thresh) :
+IlluminationCutRenderer::IlluminationCutRenderer(const std::vector<VPL>& vpls, float error_thresh, float min_dist, float upper_distance_thresh,
+    std::uint32_t num_clusters) :
     vpls_(vpls),
     error_threshold_(error_thresh),
     min_dist_(min_dist),
-    upper_distance_thresh_(upper_distance_thresh){
+    upper_distance_thresh_(upper_distance_thresh),
+    num_clusters_(num_clusters){
 
 }
 
@@ -304,35 +306,85 @@ bool refineLTree(const IllumPair& illum_pair){
       
 }
 
-void computeUpperBounds2Recurse(LightTree* lt, OctreeNode<IllumcutSample>* node, float min_dist){
-    if(node->sample_indices.size() == 1){
-        IllumcutSample& curr_sample = node->representative();
-        if(lt->getPointTreeRoot() != nullptr){
-            node->upper_bound += LightTree::calculateClusterBounds(curr_sample.its.p, curr_sample.its.shFrame.n, lt->getPointTreeRoot(), 
-                    lt->getPointTreeRoot()->vpl.type, min_dist);
-        }
+typedef std::tuple<LightTreeNode*, float> ClusterAndScore;
 
-        if(lt->getDirectionalTreeRoot() != nullptr){
-            node->upper_bound += LightTree::calculateClusterBounds(curr_sample.its.p, curr_sample.its.shFrame.n, lt->getDirectionalTreeRoot(), 
-                    lt->getDirectionalTreeRoot()->vpl.type, min_dist);
+
+
+void computeUpperBounds2Recurse(LightTree* lt, OctreeNode<IllumcutSample>* node, float min_dist, std::uint32_t num_clusters){
+    if(node->sample_indices.size() == 1){
+        //largest first, but front of the queue is last out
+        auto comparator = [](ClusterAndScore l, ClusterAndScore r){
+            return std::get<1>(l) < std::get<1>(r);
+        };
+
+        std::priority_queue<ClusterAndScore, std::vector<ClusterAndScore>, decltype(comparator)> pqueue(comparator);
+
+        IllumcutSample& curr_sample = node->representative();
+
+        if(lt->getPointTreeRoot() != nullptr){
+            float error = LightTree::calculateClusterBounds(curr_sample.its.p, curr_sample.its.shFrame.n, lt->getPointTreeRoot(), 
+                    lt->getPointTreeRoot()->vpl.type, min_dist);
+            pqueue.push(std::make_tuple(lt->getPointTreeRoot(), error));
         }
 
         if(lt->getOrientedTreeRoot() != nullptr){
-            node->upper_bound += LightTree::calculateClusterBounds(curr_sample.its.p, curr_sample.its.shFrame.n, lt->getOrientedTreeRoot(), 
+            float error = LightTree::calculateClusterBounds(curr_sample.its.p, curr_sample.its.shFrame.n, lt->getOrientedTreeRoot(), 
                     lt->getOrientedTreeRoot()->vpl.type, min_dist);
+            pqueue.push(std::make_tuple(lt->getOrientedTreeRoot(), error));
         }
+
+        if(lt->getDirectionalTreeRoot() != nullptr){
+            float error = LightTree::calculateClusterBounds(curr_sample.its.p, curr_sample.its.shFrame.n, lt->getDirectionalTreeRoot(), 
+                    lt->getDirectionalTreeRoot()->vpl.type, min_dist);
+            pqueue.push(std::make_tuple(lt->getDirectionalTreeRoot(), error));
+        }
+
+        std::uint32_t num_added = 0;
+        float bound = 0.f;
+
+        while((pqueue.size() + num_added < num_clusters){
+            ClusterAndScore entry = pqueue.top();
+            pqueue.pop();
+
+            LightTreeNode* node = std::get<0>(entry);
+            
+            if(node->left == nullptr && node->right == nullptr){
+                num_added++;
+                bound += std::get<1>(entry);
+                continue;
+            }
+
+            if(node->left.get() != nullptr){
+                float err = LightTree::calculateClusterBounds(its.p, its.shFrame.n, node->left.get(), node->left->vpl.type, min_dist);
+                pqueue.push(std::make_tuple(node->left.get(), err));
+            }
+
+            if(node->right.get() != nullptr){
+                float err = LightTree::calculateClusterBounds(its.p, its.shFrame.n, node->right.get(), node->right->vpl.type, min_dist);
+                pqueue.push(std::make_tuple(node->right.get(), err));
+            }
+        }
+
+        while(pqueue.size() > 0){
+            auto entry = pqueue.top();
+            pqueue.pop();
+
+            bound += std::get<1>(entry);
+        }
+
+        node->upper_bound = bound;
     }
     else{
         for(std::uint32_t i = 0; i < node->children.size(); ++i){
             if(node->children[i] != nullptr){
-                computeUpperBounds2Recurse(lt, node->children[i].get(), min_dist);
+                computeUpperBounds2Recurse(lt, node->children[i].get(), min_dist, num_clusters);
             }
         }
     }
 }
 
-void computeUpperBounds2(LightTree* lt, OctreeNode<IllumcutSample>* rt_root, float min_dist){
-    computeUpperBounds2Recurse(lt, rt_root, min_dist);
+void computeUpperBounds2(LightTree* lt, OctreeNode<IllumcutSample>* rt_root, float min_dist, std::uint32_t num_clusters){
+    computeUpperBounds2Recurse(lt, rt_root, min_dist, num_clusters);
 
     rt_root->cacheMinUpper();
 }
@@ -657,7 +709,7 @@ bool IlluminationCutRenderer::render(Scene* scene, std::uint32_t spp, const Rend
     std::cout << "Constructed octree" << std::endl;
 
     //computeUpperBounds(light_tree.get(), receiver_root.get(), scene, min_dist_, upper_distance_thresh_);
-    computeUpperBounds2(light_tree.get(), receiver_root.get(), min_dist_);
+    computeUpperBounds2(light_tree.get(), receiver_root.get(), min_dist_, num_clusters_);
     std::cout << "Computed upper bounds" << std::endl;
 
     std::vector<IllumPair> illum_aware_pairs = getIlluminationAwarePairs(light_tree.get(), receiver_root.get(), min_dist_, error_threshold_);

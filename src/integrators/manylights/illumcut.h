@@ -48,7 +48,8 @@ struct IllumcutSample{
 
 class IlluminationCutRenderer : public ManyLightsRenderer{
 public:
-    IlluminationCutRenderer(const std::vector<VPL>& vpls, float error_thresh, float min_dist, float upper_distance_thresh);
+    IlluminationCutRenderer(const std::vector<VPL>& vpls, float error_thresh, float min_dist, float upper_distance_thresh,
+        std::uint32_t num_clusters);
     IlluminationCutRenderer(const IlluminationCutRenderer& other) = delete;
     IlluminationCutRenderer(IlluminationCutRenderer&& other) = delete;
     IlluminationCutRenderer& operator = (const IlluminationCutRenderer& other) = delete;
@@ -63,6 +64,7 @@ private:
     float error_threshold_, min_dist_;
     std::vector<IllumcutSample> samples_;
     float upper_distance_thresh_;
+    std::uint32_t num_clusters_;
 };
 
 MTS_NAMESPACE_END

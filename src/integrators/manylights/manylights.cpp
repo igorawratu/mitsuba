@@ -454,8 +454,10 @@ private:
 			{
 				float error_threshold = props.getFloat("illumcut-_error_thresh", 0.01);
 				float upper_distance_thresh = props.getFloat("illumcut-_error_upperbound_dist_thresh", 0.1);
+				std::uint32_t num_clusters = props.getInteger("illumcut-num_upperbound_clusters", 100);
 
-				return std::unique_ptr<ManyLightsRenderer>(new IlluminationCutRenderer(vpls_, error_threshold, min_dist_, upper_distance_thresh));
+				return std::unique_ptr<ManyLightsRenderer>(new IlluminationCutRenderer(vpls_, error_threshold, min_dist_, upper_distance_thresh,
+					num_clusters));
 			}
 			default:
 				return nullptr;
