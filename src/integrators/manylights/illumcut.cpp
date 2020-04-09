@@ -434,7 +434,6 @@ std::vector<IllumPair> getIlluminationAwarePairs(LightTree* lt, OctreeNode<Illum
             }
             else{
                 std::lock_guard<std::mutex> lock(illum_aware_mutex);
-                std::cout << curr.second->sample_indices.size() << " " << curr.first->num_children << std::endl;
                 illum_aware_pairs.push_back(curr);
             }
         }
