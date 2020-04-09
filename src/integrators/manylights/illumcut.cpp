@@ -547,7 +547,7 @@ void renderIllumAwarePairs(const std::vector<IllumPair>& ilps, Scene* scene, flo
         }
     }
 
-    std::cout "Total samples taken: " << total_samples << std::endl;
+    std::cout << "Total samples taken: " << total_samples << std::endl;
 
 }
 
