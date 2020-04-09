@@ -446,6 +446,7 @@ void adaptiveVisibilitySampling(Scene* scene, LightTreeNode* light, OctreeNode<I
         std::unordered_map<std::uint32_t, bool>& visibility, std::mt19937& rng, float min_dist){
     if(curr_node->sample_indices.size() == 1){
         visibility[curr_node->sample_indices[0]] = sampleVisibility(scene, curr_node->representative().its, light->vpl, min_dist);
+        return;
     }
 
     std::uint32_t max_samples = std::min(std::uint32_t(16), std::uint32_t(curr_node->sample_indices.size()));
@@ -464,14 +465,6 @@ void adaptiveVisibilitySampling(Scene* scene, LightTreeNode* light, OctreeNode<I
 
     for(std::uint32_t i = 0; i < max_samples; ++i){
         std::uint32_t child_idx = dist(rng);
-        if(curr_node->children[child_idx] == nullptr){
-            std::lock_guard<std::mutex> lock(printmut);
-
-            for(std::uint8_t i = 0; i < curr_node->children.size(); ++i){
-                std::cout << dist_vals[i] << "-" << (curr_node->children[child_idx] == nullptr ? 0 : curr_node->children[child_idx]->sample_indices.size());
-            }
-            std::cout << ":" << child_idx << " " << curr_node->sample_indices.size() << std::endl;
-        }
         std::uint32_t selected_idx = rand() % curr_node->children[child_idx]->sample_indices.size();
         std::uint32_t sample_idx = curr_node->children[child_idx]->sample_indices[selected_idx];
         selected_indices.push_back(sample_idx);
