@@ -3,9 +3,9 @@ set -x
 source_path="${BASH_SOURCE[0]}"
 source_dir=$(dirname "${source_path}")
 
-rm "${source_dir}/bathroom/bathroom/scene_"*
-rm "${source_dir}/bathroom/bathroom/timings"
-rm "${source_dir}/bathroom/bathroom/samplerates"
+# rm "${source_dir}/bathroom/bathroom/scene_"*
+# rm "${source_dir}/bathroom/bathroom/timings"
+# rm "${source_dir}/bathroom/bathroom/samplerates"
 
 #MDLC with matrix sep
 for i in {1..5}
