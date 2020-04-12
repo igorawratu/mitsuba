@@ -135,42 +135,42 @@ mv "${source_dir}/living_room_3/living-room-3/samplerates" "${source_dir}/living
 
 
 #ILLUMINATIONCUT
-for i in {1..5}
-do
-	mitsuba "${source_dir}/living_room_3/living-room-3/scene.xml" -Dcstrat=5 -Dsamplerate=1 -Dcompcstrat=ls -Dcps=250 -Dsps=10 -Dspp=4 -Dslice=5000 -Dis=1 -Dbv=1 -Dvp=0.025 -Diet=0.1
-	python3 "${source_dir}/../compare_err.py" "${source_dir}/living_room_3/living-room-3/scene.exr" "${source_dir}/living_room_3/living-room-3/groundtruth.exr" "${source_dir}/living_room_3/living-room-3/scene_ic_01"
-done
-mv "${source_dir}/living_room_3/living-room-3/timings" "${source_dir}/living_room_3/living-room-3/timings_ic_01"
-mv "${source_dir}/living_room_3/living-room-3/samplerates" "${source_dir}/living_room_3/living-room-3/samplerates_ic_01"
+# for i in {1..5}
+# do
+# 	mitsuba "${source_dir}/living_room_3/living-room-3/scene.xml" -Dcstrat=5 -Dsamplerate=1 -Dcompcstrat=ls -Dcps=250 -Dsps=10 -Dspp=4 -Dslice=5000 -Dis=1 -Dbv=1 -Dvp=0.025 -Diet=0.1
+# 	python3 "${source_dir}/../compare_err.py" "${source_dir}/living_room_3/living-room-3/scene.exr" "${source_dir}/living_room_3/living-room-3/groundtruth.exr" "${source_dir}/living_room_3/living-room-3/scene_ic_01"
+# done
+# mv "${source_dir}/living_room_3/living-room-3/timings" "${source_dir}/living_room_3/living-room-3/timings_ic_01"
+# mv "${source_dir}/living_room_3/living-room-3/samplerates" "${source_dir}/living_room_3/living-room-3/samplerates_ic_01"
 
-for i in {1..5}
-do
-	mitsuba "${source_dir}/living_room_3/living-room-3/scene.xml" -Dcstrat=5 -Dsamplerate=1 -Dcompcstrat=ls -Dcps=500 -Dsps=10 -Dspp=4 -Dslice=5000 -Dis=1 -Dbv=1 -Dvp=0.025 -Diet=0.05
-	python3 "${source_dir}/../compare_err.py" "${source_dir}/living_room_3/living-room-3/scene.exr" "${source_dir}/living_room_3/living-room-3/groundtruth.exr" "${source_dir}/living_room_3/living-room-3/scene_ic_005"
-done
-mv "${source_dir}/living_room_3/living-room-3/timings" "${source_dir}/living_room_3/living-room-3/timings_ic_005"
-mv "${source_dir}/living_room_3/living-room-3/samplerates" "${source_dir}/living_room_3/living-room-3/samplerates_ic_005"
+# for i in {1..5}
+# do
+# 	mitsuba "${source_dir}/living_room_3/living-room-3/scene.xml" -Dcstrat=5 -Dsamplerate=1 -Dcompcstrat=ls -Dcps=500 -Dsps=10 -Dspp=4 -Dslice=5000 -Dis=1 -Dbv=1 -Dvp=0.025 -Diet=0.05
+# 	python3 "${source_dir}/../compare_err.py" "${source_dir}/living_room_3/living-room-3/scene.exr" "${source_dir}/living_room_3/living-room-3/groundtruth.exr" "${source_dir}/living_room_3/living-room-3/scene_ic_005"
+# done
+# mv "${source_dir}/living_room_3/living-room-3/timings" "${source_dir}/living_room_3/living-room-3/timings_ic_005"
+# mv "${source_dir}/living_room_3/living-room-3/samplerates" "${source_dir}/living_room_3/living-room-3/samplerates_ic_005"
 
-for i in {1..5}
-do
-	mitsuba "${source_dir}/living_room_3/living-room-3/scene.xml" -Dcstrat=5 -Dsamplerate=1 -Dcompcstrat=ls -Dcps=1000 -Dsps=10 -Dspp=4 -Dslice=5000 -Dis=1 -Dbv=1 -Dvp=0.025 -Diet=0.02
-	python3 "${source_dir}/../compare_err.py" "${source_dir}/living_room_3/living-room-3/scene.exr" "${source_dir}/living_room_3/living-room-3/groundtruth.exr" "${source_dir}/living_room_3/living-room-3/scene_ic_002"
-done
-mv "${source_dir}/living_room_3/living-room-3/timings" "${source_dir}/living_room_3/living-room-3/timings_ic_002"
-mv "${source_dir}/living_room_3/living-room-3/samplerates" "${source_dir}/living_room_3/living-room-3/samplerates_ic_002"
+# for i in {1..5}
+# do
+# 	mitsuba "${source_dir}/living_room_3/living-room-3/scene.xml" -Dcstrat=5 -Dsamplerate=1 -Dcompcstrat=ls -Dcps=1000 -Dsps=10 -Dspp=4 -Dslice=5000 -Dis=1 -Dbv=1 -Dvp=0.025 -Diet=0.02
+# 	python3 "${source_dir}/../compare_err.py" "${source_dir}/living_room_3/living-room-3/scene.exr" "${source_dir}/living_room_3/living-room-3/groundtruth.exr" "${source_dir}/living_room_3/living-room-3/scene_ic_002"
+# done
+# mv "${source_dir}/living_room_3/living-room-3/timings" "${source_dir}/living_room_3/living-room-3/timings_ic_002"
+# mv "${source_dir}/living_room_3/living-room-3/samplerates" "${source_dir}/living_room_3/living-room-3/samplerates_ic_002"
 
-for i in {1..5}
-do
-	mitsuba "${source_dir}/living_room_3/living-room-3/scene.xml" -Dcstrat=5 -Dsamplerate=1 -Dcompcstrat=ls -Dcps=2000 -Dsps=10 -Dspp=4 -Dslice=5000 -Dis=1 -Dbv=1 -Dvp=0.025 -Diet=0.01
-	python3 "${source_dir}/../compare_err.py" "${source_dir}/living_room_3/living-room-3/scene.exr" "${source_dir}/living_room_3/living-room-3/groundtruth.exr" "${source_dir}/living_room_3/living-room-3/scene_ic_001"
-done
-mv "${source_dir}/living_room_3/living-room-3/timings" "${source_dir}/living_room_3/living-room-3/timings_ic_001"
-mv "${source_dir}/living_room_3/living-room-3/samplerates" "${source_dir}/living_room_3/living-room-3/samplerates_ic_001"
+# for i in {1..5}
+# do
+# 	mitsuba "${source_dir}/living_room_3/living-room-3/scene.xml" -Dcstrat=5 -Dsamplerate=1 -Dcompcstrat=ls -Dcps=2000 -Dsps=10 -Dspp=4 -Dslice=5000 -Dis=1 -Dbv=1 -Dvp=0.025 -Diet=0.01
+# 	python3 "${source_dir}/../compare_err.py" "${source_dir}/living_room_3/living-room-3/scene.exr" "${source_dir}/living_room_3/living-room-3/groundtruth.exr" "${source_dir}/living_room_3/living-room-3/scene_ic_001"
+# done
+# mv "${source_dir}/living_room_3/living-room-3/timings" "${source_dir}/living_room_3/living-room-3/timings_ic_001"
+# mv "${source_dir}/living_room_3/living-room-3/samplerates" "${source_dir}/living_room_3/living-room-3/samplerates_ic_001"
 
-for i in {1..5}
-do
-	mitsuba "${source_dir}/living_room_3/living-room-3/scene.xml" -Dcstrat=5 -Dsamplerate=1 -Dcompcstrat=ls -Dcps=4000 -Dsps=10 -Dspp=4 -Dslice=5000 -Dis=1 -Dbv=1 -Dvp=0.025 -Diet=0.005
-	python3 "${source_dir}/../compare_err.py" "${source_dir}/living_room_3/living-room-3/scene.exr" "${source_dir}/living_room_3/living-room-3/groundtruth.exr" "${source_dir}/living_room_3/living-room-3/scene_ic_0005"
-done
-mv "${source_dir}/living_room_3/living-room-3/timings" "${source_dir}/living_room_3/living-room-3/timings_ic_0005"
-mv "${source_dir}/living_room_3/living-room-3/samplerates" "${source_dir}/living_room_3/living-room-3/samplerates_ic_0005"
+# for i in {1..5}
+# do
+# 	mitsuba "${source_dir}/living_room_3/living-room-3/scene.xml" -Dcstrat=5 -Dsamplerate=1 -Dcompcstrat=ls -Dcps=4000 -Dsps=10 -Dspp=4 -Dslice=5000 -Dis=1 -Dbv=1 -Dvp=0.025 -Diet=0.005
+# 	python3 "${source_dir}/../compare_err.py" "${source_dir}/living_room_3/living-room-3/scene.exr" "${source_dir}/living_room_3/living-room-3/groundtruth.exr" "${source_dir}/living_room_3/living-room-3/scene_ic_0005"
+# done
+# mv "${source_dir}/living_room_3/living-room-3/timings" "${source_dir}/living_room_3/living-room-3/timings_ic_0005"
+# mv "${source_dir}/living_room_3/living-room-3/samplerates" "${source_dir}/living_room_3/living-room-3/samplerates_ic_0005"
