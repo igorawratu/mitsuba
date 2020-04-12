@@ -395,7 +395,7 @@ void HWShader::renderSlices(const std::vector<KDTNode<ReconstructionSample>*>& s
                 light_for_slice.light_surface_type = 0;
             }
             else{
-                n = vpl.its.wi.z > 0.f ? n : -n;
+                //n = vpl.its.wi.z > 0.f ? n : -n;
                 light_for_slice.type = 2;
                 Vector light_wi = vpl.its.toWorld(vpl.its.wi);
 
@@ -722,7 +722,7 @@ void HWShader::renderHWBF(std::vector<HWBFPix>& receivers, const std::vector<VPL
         }
         else{
             light_for_slice.type = 2;
-            n = vpl.its.wi.z > 0.f ? n : -n;
+            //n = vpl.its.wi.z > 0.f ? n : -n;
             
             Vector light_wi = vpl.its.toWorld(vpl.its.wi);
 
