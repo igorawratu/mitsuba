@@ -77,8 +77,8 @@
 		</sampler>
 
 		<film type="hdrfilm">
-			<integer name="width" value="2560"/>
-			<integer name="height" value="1440"/>
+			<integer name="width" value="1280"/>
+			<integer name="height" value="720"/>
 			<string name="fileFormat" value="openexr"/>
 			<string name="pixelFormat" value="rgb"/>
 			<float name="gamma" value="2.2"/>
