@@ -1802,7 +1802,7 @@ void sliceWorkerMDLC(std::vector<std::int32_t>& work, std::uint32_t thread_id, s
         }
 
         auto vpls = light_tree->getClusteringForPoints(scene, slice_points);
-        updateVPLRadii(vpls, general_params.min_dist);
+        //updateVPLRadii(vpls, general_params.min_dist);
 
         auto cluster_t = std::chrono::high_resolution_clock::now();
 
@@ -2082,7 +2082,7 @@ void clusterWorkerMDLC(BlockingQueue<HWWorkUnit>& input, BlockingQueue<HWWorkUni
 
         vpls[work_unit.second] = light_tree->getClusteringForPoints(scene, slice_points);
         //not sure if this should change to a radius union approach instead
-        updateVPLRadii(vpls[work_unit.second], min_dist);
+        //updateVPLRadii(vpls[work_unit.second], min_dist);
 
         std::uint64_t slice_samples, num_slice_sampled;
         std::tie(slice_samples, num_slice_sampled) = recoverHW(work_unit.first, vpls[work_unit.second], scene, gather_stats, show_svd, sample_perc,
@@ -2136,7 +2136,7 @@ void clusterWorkerLS(BlockingQueue<HWWorkUnit>& input, BlockingQueue<HWWorkUnit>
         std::vector<std::vector<std::uint32_t>> cbsplit = 
             clusterVPLsBySplitting(cbsamp, contribs, nn[work_unit.second], split_num_clusters, rng);
         vpls[work_unit.second] = sampleRepresentatives(contribs, total_vpls, cbsplit, rng, min_dist);
-        updateVPLRadii(vpls[work_unit.second], min_dist);
+        //updateVPLRadii(vpls[work_unit.second], min_dist);
 
         std::uint64_t slice_samples, num_slice_sampled;
         std::tie(slice_samples, num_slice_sampled) = recoverHW(work_unit.first, vpls[work_unit.second], scene, gather_stats, show_svd, sample_perc,
