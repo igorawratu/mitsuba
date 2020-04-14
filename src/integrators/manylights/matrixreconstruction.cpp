@@ -423,7 +423,7 @@ std::vector<float> getClusterRadii(const std::vector<std::vector<std::uint32_t>>
         if(clusters[i].size() == 0){
             continue;
         }
-        
+
         float total_rad = 0.f;
         Vector3f bb_min(std::numeric_limits<float>::max());
         Vector3f bb_max(-std::numeric_limits<float>::max());
@@ -2175,10 +2175,10 @@ void clusterWorkerLS(BlockingQueue<HWWorkUnit>& input, BlockingQueue<HWWorkUnit>
             clusterVPLsBySplitting(cbsamp, contribs, nn[work_unit.second], split_num_clusters, rng);
         vpls[work_unit.second] = sampleRepresentatives(contribs, total_vpls, cbsplit, rng, min_dist);
         std::vector<float> radii = getClusterRadii(cbsplit, total_vpls);
-        assert(radii.size() == vpls.size());
+        assert(radii.size() == vpls[work_unit.second].size());
 
         for(std::uint32_t i = 0; i < radii.size(); ++i){
-            vpls[i].radius = radii[i];
+            vpls[work_unit.second][i].radius = radii[i];
         }
 
         //updateVPLRadii(vpls[work_unit.second], min_dist);
