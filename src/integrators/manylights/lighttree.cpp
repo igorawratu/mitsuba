@@ -380,6 +380,8 @@ std::unique_ptr<LightTreeNode> createLightTree(const std::vector<VPL>& vpls, EVP
 					nodes[next_level].back()->left->vpl.radius + nodes[next_level].back()->right->vpl.radius,
 					d / 2 + std::max(nodes[next_level].back()->left->vpl.radius, nodes[next_level].back()->right->vpl.radius));
 
+				nodes[next_level].back()->vpl.radius = sqrt(nodes[next_level].back()->vpl.radius);
+
 				nodes[current_level][id1] = nullptr;
 				nodes[current_level][id2] = nullptr;
 
@@ -462,6 +464,8 @@ std::unique_ptr<LightTreeNode> tdCreateLightTree(const std::vector<VPL>& vpls, E
 	curr_node->vpl.radius = std::min(
 		curr_node->left->vpl.radius + curr_node->right->vpl.radius,
 		d / 2 + std::max(curr_node->left->vpl.radius, curr_node->right->vpl.radius));
+
+	curr_node->vpl.radius = sqrt(curr_node->vpl.radius);
 
 	return curr_node;
 }
