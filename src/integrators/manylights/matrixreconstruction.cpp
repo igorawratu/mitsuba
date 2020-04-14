@@ -416,37 +416,6 @@ std::vector<std::vector<std::uint32_t>> clusterVPLsBySplitting(const std::vector
     return splitting_clusters;
 }
 
-std::vector<float> getClusterRadii(const std::vector<std::vector<std::uint32_t>>& clusters, const std::vector<VPL>& vpls){
-    std::vector<float> radii;
-
-    for(std::uint32_t i = 0; i < clusters.size(); ++i){
-        if(clusters[i].size() == 0){
-            continue;
-        }
-
-        float total_rad = 0.f;
-        Vector3f bb_min(std::numeric_limits<float>::max());
-        Vector3f bb_max(-std::numeric_limits<float>::max());
-
-        for(std::uint32_t j = 0; j < clusters[i].size(); ++j){
-            const VPL& vpl = vpls[clusters[i][j]];
-            total_rad += vpl.radius;
-
-            bb_min.x = std::min(bb_min.x, vpl.its.p.x);
-            bb_min.x = std::min(bb_min.y, vpl.its.p.y);
-            bb_min.x = std::min(bb_min.z, vpl.its.p.z);
-
-            bb_max.x = std::max(bb_max.x, vpl.its.p.x);
-            bb_max.x = std::max(bb_max.y, vpl.its.p.y);
-            bb_max.x = std::max(bb_max.z, vpl.its.p.z);
-        }
-
-        radii.push_back(std::min((bb_max - bb_min).length() / 2.f, total_rad));
-    }
-
-    return radii;
-}
-
 std::vector<VPL> sampleRepresentatives(const Eigen::MatrixXf& contributions, const std::vector<VPL>& vpls, 
     const std::vector<std::vector<std::uint32_t>>& clusters, std::mt19937& rng, float min_dist){
     
@@ -462,7 +431,6 @@ std::vector<VPL> sampleRepresentatives(const Eigen::MatrixXf& contributions, con
         float total_vpl_power = 0.f;
         for(std::uint32_t j = 0; j < clusters[i].size(); ++j){
             cluster_dist[j] = contributions.col(clusters[i][j]).norm();
-            //total_vpl_power += contributions.col(clusters[i][j]).norm();
             total_vpl_power += vpls[clusters[i][j]].P.getLuminance();
         }
 
@@ -479,25 +447,9 @@ std::vector<VPL> sampleRepresentatives(const Eigen::MatrixXf& contributions, con
             representatives.push_back(vpls[clusters[i][0]]);
             representatives.back().P = Spectrum(0.f);
         }
-
-        /*float selected_norm = 0.f;
-
-        for(std::uint32_t j = 0; j < clusters[i].size(); ++j){
-            float curr_norm = contributions.col(clusters[i][j]).norm();
-            if(curr_norm > selected_norm){
-                selected_norm = curr_norm;
-                rep_idx = j;
-            }
-        }
-
-        representatives.push_back(vpls[clusters[i][rep_idx]]);
-        float r, g, b;
-        representatives.back().P.toLinearRGB(r, g, b);
-        float rep_power = sqrt(r * r + g * g + b * b);*/
-        
     }
 
-    //updateVPLRadii(representatives, min_dist);
+    updateVPLRadii(representatives, min_dist);
 
     return representatives;
 }
@@ -1775,13 +1727,6 @@ void sliceWorkerLS(std::vector<std::int32_t>& work, std::uint32_t thread_id, std
 
         std::vector<std::vector<std::uint32_t>> cbsplit = clusterVPLsBySplitting(cbsamp, contribs, nn[slice_id], split_num_clusters, rng);
         auto vpls = sampleRepresentatives(contribs, total_vpls, cbsplit, rng, general_params.min_dist);
-        
-        std::vector<float> radii = getClusterRadii(cbsplit, total_vpls);
-        assert(radii.size() == vpls.size());
-
-        for(std::uint32_t i = 0; i < radii.size(); ++i){
-            vpls[i].radius = radii[i];
-        }
 
         auto cluster_t = std::chrono::high_resolution_clock::now();
 
@@ -1840,7 +1785,7 @@ void sliceWorkerMDLC(std::vector<std::int32_t>& work, std::uint32_t thread_id, s
         }
 
         auto vpls = light_tree->getClusteringForPoints(scene, slice_points);
-        //updateVPLRadii(vpls, general_params.min_dist);
+        updateVPLRadii(vpls, general_params.min_dist);
 
         auto cluster_t = std::chrono::high_resolution_clock::now();
 
@@ -2120,7 +2065,7 @@ void clusterWorkerMDLC(BlockingQueue<HWWorkUnit>& input, BlockingQueue<HWWorkUni
 
         vpls[work_unit.second] = light_tree->getClusteringForPoints(scene, slice_points);
         //not sure if this should change to a radius union approach instead
-        //updateVPLRadii(vpls[work_unit.second], min_dist);
+        updateVPLRadii(vpls[work_unit.second], min_dist);
 
         std::uint64_t slice_samples, num_slice_sampled;
         std::tie(slice_samples, num_slice_sampled) = recoverHW(work_unit.first, vpls[work_unit.second], scene, gather_stats, show_svd, sample_perc,
@@ -2174,14 +2119,6 @@ void clusterWorkerLS(BlockingQueue<HWWorkUnit>& input, BlockingQueue<HWWorkUnit>
         std::vector<std::vector<std::uint32_t>> cbsplit = 
             clusterVPLsBySplitting(cbsamp, contribs, nn[work_unit.second], split_num_clusters, rng);
         vpls[work_unit.second] = sampleRepresentatives(contribs, total_vpls, cbsplit, rng, min_dist);
-        std::vector<float> radii = getClusterRadii(cbsplit, total_vpls);
-        assert(radii.size() == vpls[work_unit.second].size());
-
-        for(std::uint32_t i = 0; i < radii.size(); ++i){
-            vpls[work_unit.second][i].radius = radii[i];
-        }
-
-        //updateVPLRadii(vpls[work_unit.second], min_dist);
 
         std::uint64_t slice_samples, num_slice_sampled;
         std::tie(slice_samples, num_slice_sampled) = recoverHW(work_unit.first, vpls[work_unit.second], scene, gather_stats, show_svd, sample_perc,
