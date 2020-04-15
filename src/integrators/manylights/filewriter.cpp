@@ -11,6 +11,7 @@ ref<Film> createFilm(std::uint32_t width, std::uint32_t height, bool hdr){
     props.setInteger("width", width);
     props.setInteger("height", height);
     props.setFloat("gamma", 2.2);
+    props.setBoolean("banner", false);
 
     ref<Film> film = static_cast<Film*> (PluginManager::getInstance()->createObject(MTS_CLASS(Film), props));
 

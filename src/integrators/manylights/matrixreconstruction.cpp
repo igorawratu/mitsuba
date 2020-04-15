@@ -1951,6 +1951,11 @@ std::tuple<std::uint64_t, std::uint64_t> recoverHW(KDTNode<ReconstructionSample>
             total_performed_samples += samples;
             slice->rank_ratio[i] = float(basis_rank) / std::min(slice->sample_indices.size(), quadranted_vpls[i].size());
 
+            Properties props("independent");
+            ref<Sampler> sampler = static_cast<Sampler*>(PluginManager::getInstance()->createObject(MTS_CLASS(Sampler), props));
+            sampler->configure();
+            sampler->generate(Point2i(0));
+
             for(std::uint32_t j = 0; j < actual_vpl_index[i].size(); ++j){
                 for(std::uint32_t k = 0; k < slice->sample_indices.size(); ++k){
                     std::uint32_t idx = actual_vpl_index[i][j] * slice->sample_indices.size() + k;
@@ -1964,7 +1969,20 @@ std::tuple<std::uint64_t, std::uint64_t> recoverHW(KDTNode<ReconstructionSample>
                         if(actual_visible != bv[bin_vis_idx]){
                             slice->sample(k).visibility_errors++;
                         }
-                        
+
+                        if(slice->sample(k).its.isEmitter()){
+                            Spectrum emitter_col = slice->sample(k).its.Le(-slice->sample(i).ray.d);
+                            slice->sample(k).fully_sampled_color = emitter_col;
+                        }
+                        else{
+                            std::uint32_t num_samples;
+
+                            if(actual_visible){
+                                slice->sample(k).fully_sampled_color += sample(scene, sampler, 
+                                slice->sample(k).its, slice->sample(k).ray, vpls[actual_vpl_index[i][j]], min_dist, 
+                                false, 5, false, slice->sample(k).intersected_scene, false, false, num_samples);
+                            }
+                        }
                     }
                 }
             }
