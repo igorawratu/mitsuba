@@ -116,8 +116,6 @@ for config_title, config_codes in configurations.items():
 		stats[config_title].append((config_code, total_timings, time_standard_dev, total_errors, error_standard_dev, total_samplerates, samplerates_standard_dev))
 
 output_str = ""
-output_str += "\\begin{figure}\n"
-output_str += "\\centering\n"
 output_str += "\\begin{tikzpicture}\n"
 output_str += "\\begin{axis}[\n"
 output_str += "title={" + scene_name + "},\n"
@@ -148,7 +146,6 @@ for config_title, ccc in coords.items():
 
 output_str += "\\end{axis}\n"
 output_str += "\\end{tikzpicture}\n"
-output_str += "\\end{figure}\n"
 
 output_table_str = ""
 for config_title, ccc in stats.items():
