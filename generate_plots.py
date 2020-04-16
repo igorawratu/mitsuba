@@ -13,30 +13,30 @@ styles = {}
 
 if material == "diffuse":
 	configurations = {
-		"AMC" : ["amr_500", "amr_1000", "amr_2000", "amr_4000", "amr_8000"],
-		"MDLC" : ["mdlc_250", "mdlc_500", "mdlc_1000", "mdlc_2000", "mdlc_4000"],
+		"Our Method" : ["amr_500", "amr_1000", "amr_2000", "amr_4000", "amr_8000"],
+		"Our Method (Cluster Only)" : ["mdlc_250", "mdlc_500", "mdlc_1000", "mdlc_2000", "mdlc_4000"],
 		"LS" : ["ls_250", "ls_500", "ls_1000", "ls_2000", "ls_4000"],
-		"Mat Sep" : ["matsep_500", "matsep_1000", "matsep_2000", "matsep_4000", "matsep_8000"],
-		"IllumCut" : ["ic_01", "ic_005", "ic_002", "ic_001", "ic_0005"]
+		"Matrix Separation" : ["matsep_500", "matsep_1000", "matsep_2000", "matsep_4000", "matsep_8000"],
+		"IlluminationCut" : ["ic_01", "ic_005", "ic_002", "ic_001", "ic_0005"]
 	}
 
 	styles = {
-		"AMC" : ("blue", "square"),
-		"MDLC" : ("red", "square"),
+		"Our Method" : ("blue", "square"),
+		"Our Method (Cluster Only)" : ("red", "square"),
 		"LS" : ("green", "square"),
-		"Mat Sep" : ("black", "square"),
-		"IllumCut" : ("teal", "square")
+		"Matrix Separation" : ("black", "square"),
+		"IlluminationCut" : ("teal", "square")
 	}
 else:
 	configurations = {
-		"AMC" : ["amr_500", "amr_1000", "amr_2000", "amr_4000", "amr_8000"],
-		"MDLC" : ["mdlc_250", "mdlc_500", "mdlc_1000", "mdlc_2000", "mdlc_4000"],
+		"Our Method" : ["amr_500", "amr_1000", "amr_2000", "amr_4000", "amr_8000"],
+		"Our Method (Cluster Only)" : ["mdlc_250", "mdlc_500", "mdlc_1000", "mdlc_2000", "mdlc_4000"],
 		"LS" : ["ls_250", "ls_500", "ls_1000", "ls_2000", "ls_4000"]
 	}
 
 	styles = {
-		"AMC" : ("blue", "square"),
-		"MDLC" : ("red", "square"),
+		"Our Method" : ("blue", "square"),
+		"Our Method (Cluster Only)" : ("red", "square"),
 		"LS" : ("green", "square")
 	}
 
@@ -121,8 +121,8 @@ output_str += "\\centering\n"
 output_str += "\\begin{tikzpicture}\n"
 output_str += "\\begin{axis}[\n"
 output_str += "title={" + scene_name + "},\n"
-output_str += "xlabel={Time [s]},\n"
-output_str += "ylabel={Error [rmse]},\n"
+output_str += "xlabel={Time (s)},\n"
+output_str += "ylabel={Error (rmse)},\n"
 output_str += "xmin=0, xmax=" + str(max_x) + ",\n"
 output_str += "ymin=0, ymax=" + str(max_y) + ",\n"
 output_str += "legend pos=north east,\n"
@@ -131,12 +131,13 @@ output_str += "error bars/y dir      = both,\n"
 output_str += "error bars/y explicit = true,\n"
 output_str += "error bars/x dir      = both,\n"
 output_str += "error bars/x explicit = true,\n"
+output_str += "error bars/error bar style={line width=1.5pt},\n"
+output_str += "line width=1pt,\n"
 output_str += "]\n\n"
 
 for config_title, ccc in coords.items():
 	output_str += "\\addplot[\n"
 	output_str += "color=" + styles[config_title][0] + ",\n"
-	output_str += "mark=" + styles[config_title][1] + ",\n"
 	output_str += "]\n"
 	output_str += "coordinates {\n"
 	for cc in ccc:
