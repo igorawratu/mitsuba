@@ -1129,7 +1129,7 @@ std::vector<std::pair<std::uint32_t, bool>> getMatchingCols(const std::vector<st
         bool matching = true;
         bool opposite = true;
 
-        for(auto iter = sampled_vals.begin(); iter != sampled_vals.end(); ++iter){{
+        for(auto iter = sampled_vals.begin(); iter != sampled_vals.end(); ++iter){
             if(iter->second == cols[i][iter->first]){
                 opposite = false;
             }
