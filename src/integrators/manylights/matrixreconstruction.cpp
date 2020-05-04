@@ -888,7 +888,7 @@ std::vector<std::uint32_t> sampleCol(Scene* scene, KDTNode<ReconstructionSample>
 
 std::vector<std::uint32_t> sampleColB(Scene* scene, KDTNode<ReconstructionSample>* slice, 
     const std::vector<VPL>& vpls, std::uint32_t col, float min_dist, std::uint32_t num_samples, 
-    std::mt19937& rng, std::vector<std::uint8_t>& sample, const std::vector<float>& probabilities, 
+    std::mt19937& rng, std::unordered_map<std::uint32_t, std::uint8_t>& sampled_vals, const std::vector<float>& probabilities, 
     const std::vector<std::uint32_t>& sample_set, bool resample){
 
     std::uint32_t max_samples = slice->sample_indices.size();
@@ -900,7 +900,9 @@ std::vector<std::uint32_t> sampleColB(Scene* scene, KDTNode<ReconstructionSample
         const VPL& vpl = vpls[col];
         ReconstructionSample& scene_sample = slice->sample(sampled_indices[i]);
 
-        sample[i] = sampleVisibility(scene, scene_sample.its, vpl, min_dist) ? 1 : 0;
+        if(sampled_vals.find(sampled_indices[i]) == sampled_vals.end()){
+            sampled_vals[sampled_indices[i]] = sampleVisibility(scene, scene_sample.its, vpl, min_dist) ? 1 : 0;    
+        }
     }
 
     return sampled_indices;
@@ -1119,15 +1121,14 @@ std::tuple<std::uint32_t, float, float, float, float> adaptiveMatrixReconstructi
     return std::make_tuple(total_samples, time_for_svd, time_for_reconstruct, time_for_sampling, time_other);
 }
 
-std::vector<std::pair<std::uint32_t, bool>> getMatchingCols(const std::vector<std::vector<std::uint8_t>>& cols,
-    const std::vector<std::uint32_t>& sampled_indices, const std::vector<std::uint8_t>& sampled_vals){
+std::vector<std::pair<std::uint32_t, bool>> getMatchingCols(const std::vector<std::vector<std::uint8_t>>& cols, const std::vector<std::uint8_t>& sampled_vals){
     std::vector<std::pair<std::uint32_t, bool>> matching_cols;
     for(std::uint32_t i = 0; i < cols.size(); ++i){
         bool matching = true;
         bool opposite = true;
 
-        for(std::uint32_t j = 0; j < sampled_indices.size(); ++j){
-            if(sampled_vals[j] == cols[i][sampled_indices[j]]){
+        for(auto iter = sampled_vals.begin(); iter != sampled_vals.end(); ++iter){{
+            if(iter.second == cols[i][iter.first]){
                 opposite = false;
             }
             else{
@@ -1182,7 +1183,7 @@ std::uint32_t adaptiveMatrixReconstructionB(
     std::uniform_real_distribution<float> gen(0.f, 1.f);
     std::vector<float> probabilities(num_rows, 1.f / num_rows);
 
-    std::vector<std::uint8_t> sample_omega(num_samples);
+    std::unordered_map<std::uint32_t, std::uint8_t> sample_omega;
     std::vector<std::uint8_t> col_to_add(num_rows);
     bool full_col_sampled = false;
 
@@ -1190,6 +1191,7 @@ std::uint32_t adaptiveMatrixReconstructionB(
 
     //The actual adaptive matrix recovery algorithm
     for(std::uint32_t i = 0; i < order.size(); ++i){
+        sample_omega.clear();
         std::uint32_t samples_for_col = 0;
 
        if(basis.size() > 0){
@@ -1202,10 +1204,12 @@ std::uint32_t adaptiveMatrixReconstructionB(
             std::vector<std::pair<std::uint32_t, bool>> matching_cols;
 
             if(sample_omega.size() == col_to_add.size()){
-                col_to_add = sample_omega;
+                for(std::uint32_t j = 0; j < sampled.size(); ++j){
+                    col_to_add[sampled[j]] = sample_omega[sampled[j]];   
+                }
             }
             else{
-                matching_cols = getMatchingCols(basis, sampled, sample_omega);
+                matching_cols = getMatchingCols(basis, sample_omega);
 
                 if(matching_cols.size() > 0){
                     std::uniform_int_distribution<std::uint32_t> select_col(0, matching_cols.size() - 1);
@@ -1221,23 +1225,21 @@ std::uint32_t adaptiveMatrixReconstructionB(
 
                     if(num_verification_samples > 0){
                         std::vector<std::uint32_t> ver_indices;
-                        std::unordered_set<std::uint32_t> current_set(sampled.begin(), sampled.end());
 
                         std::uniform_int_distribution<std::uint32_t> gen_row(0, num_rows - 1);
                         while(ver_indices.size() < num_verification_samples){
                             std::uint32_t row = gen_row(rng);
-                            if(current_set.find(row) == current_set.end()){
+                            if(sample_omega.find(row) == sample_omega.end()){
                                 ver_indices.push_back(row);
                             }
                         }
 
-                        std::vector<std::uint8_t> ver_samples(ver_indices.size());
-                        sampleColB(scene, slice, vpls, order[i], min_dist, num_verification_samples, rng, ver_samples, 
+                        sampleColB(scene, slice, vpls, order[i], min_dist, num_verification_samples, rng, sample_omega, 
                             probabilities, ver_indices, false);
 
                         bool correct = true;
-                        for(std::uint32_t j = 0; j < ver_samples.size(); ++j){
-                            if(ver_samples[j] != col_to_add[ver_indices[j]]){
+                        for(std::uint32_t j = 0; j < ver_indices.size(); ++j){
+                            if(sample_omega[ver_indices[j]] != col_to_add[ver_indices[j]]){
                                 correct = false;
                                 break;
                             }
@@ -1246,11 +1248,15 @@ std::uint32_t adaptiveMatrixReconstructionB(
                         if(!correct){
                             sample_perc = std::min(max_sample_perc, sample_perc + verification_inc);
                             num_samples = num_rows * sample_perc + 0.5f;
-                            sample_omega.resize(num_samples);
 
-                            sampleColB(scene, slice, vpls, order[i], min_dist, num_rows, rng, col_to_add, 
+                            sampleColB(scene, slice, vpls, order[i], min_dist, num_rows, rng, sample_omega, 
                                 probabilities, sampled, true);
                             samples_for_col = num_rows;
+
+                            for(std::uint32_t j = 0; j < col_to_add.size(); ++j){
+                                col_to_add[sampled[j]] = sample_omega[j];   
+                            }
+
                             basis.push_back(col_to_add);
                             
                             full_col_sampled = true;
@@ -1258,9 +1264,13 @@ std::uint32_t adaptiveMatrixReconstructionB(
                     }
                 }
                 else{
-                    sampleColB(scene, slice, vpls, order[i], min_dist, num_rows, rng, col_to_add, 
+                    sampleColB(scene, slice, vpls, order[i], min_dist, num_rows, rng, sample_omega, 
                         probabilities, sampled, true);
                     samples_for_col = num_rows;
+
+                    for(std::uint32_t j = 0; j < col_to_add.size(); ++j){
+                        col_to_add[sampled[j]] = sample_omega[j];   
+                    }
     
                     basis.push_back(col_to_add);
                     
@@ -1269,9 +1279,13 @@ std::uint32_t adaptiveMatrixReconstructionB(
             }
         }
         else{
-            sampled = sampleColB(scene, slice, vpls, order[i], min_dist, num_rows, rng, col_to_add, 
+            sampled = sampleColB(scene, slice, vpls, order[i], min_dist, num_rows, rng, sample_omega, 
                 probabilities, sampled, true);
             samples_for_col = num_rows;
+
+            for(std::uint32_t j = 0; j < col_to_add.size(); ++j){
+                col_to_add[sampled[j]] = sample_omega[j];   
+            }
 
             basis.push_back(col_to_add);
             
