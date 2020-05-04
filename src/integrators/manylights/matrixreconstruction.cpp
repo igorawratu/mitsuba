@@ -1255,7 +1255,7 @@ std::uint32_t adaptiveMatrixReconstructionB(
                                 probabilities, sampled, true);
                             samples_for_col = num_rows;
 
-                            std::cout << col_to_add.size() << " " << sampled.size() << std::endl;
+                            std::cout << col_to_add.size() << " " << sampled.size() << " " << num_rows << " " << sampled[0] << std::endl;
 
                             for(std::uint32_t j = 0; j < col_to_add.size(); ++j){
                                 col_to_add[sampled[j]] = sample_omega[j];   
