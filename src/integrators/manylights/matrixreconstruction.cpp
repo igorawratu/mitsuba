@@ -892,7 +892,7 @@ std::vector<std::uint32_t> sampleColB(Scene* scene, KDTNode<ReconstructionSample
     const std::vector<std::uint32_t>& sample_set, bool resample){
 
     std::uint32_t max_samples = slice->sample_indices.size();
-    assert(sample.size() == num_samples && num_samples <= max_samples);
+    assert(num_samples <= max_samples);
 
     std::vector<std::uint32_t> sampled_indices = resample ? importanceSample(num_samples, rng, probabilities) : sample_set;
 
@@ -1121,7 +1121,9 @@ std::tuple<std::uint32_t, float, float, float, float> adaptiveMatrixReconstructi
     return std::make_tuple(total_samples, time_for_svd, time_for_reconstruct, time_for_sampling, time_other);
 }
 
-std::vector<std::pair<std::uint32_t, bool>> getMatchingCols(const std::vector<std::vector<std::uint8_t>>& cols, const std::vector<std::uint8_t>& sampled_vals){
+std::vector<std::pair<std::uint32_t, bool>> getMatchingCols(const std::vector<std::vector<std::uint8_t>>& cols, 
+    const std::unordered_map<std::uint32_t, std::uint8_t>& sampled_vals){
+    
     std::vector<std::pair<std::uint32_t, bool>> matching_cols;
     for(std::uint32_t i = 0; i < cols.size(); ++i){
         bool matching = true;
