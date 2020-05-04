@@ -1206,8 +1206,8 @@ std::uint32_t adaptiveMatrixReconstructionB(
             std::vector<std::pair<std::uint32_t, bool>> matching_cols;
 
             if(sample_omega.size() == col_to_add.size()){
-                for(std::uint32_t j = 0; j < sampled.size(); ++j){
-                    col_to_add[sampled[j]] = sample_omega[sampled[j]];   
+                for(std::uint32_t j = 0; j < col_to_add.size(); ++j){
+                    col_to_add[j] = sample_omega[j];   
                 }
             }
             else{
@@ -1255,10 +1255,8 @@ std::uint32_t adaptiveMatrixReconstructionB(
                                 probabilities, sampled, true);
                             samples_for_col = num_rows;
 
-                            std::cout << col_to_add.size() << " " << sampled.size() << " " << num_rows << " " << sampled[0] << std::endl;
-
                             for(std::uint32_t j = 0; j < col_to_add.size(); ++j){
-                                col_to_add[sampled[j]] = sample_omega[j];   
+                                col_to_add[j] = sample_omega[j];   
                             }
 
                             basis.push_back(col_to_add);
@@ -1273,7 +1271,7 @@ std::uint32_t adaptiveMatrixReconstructionB(
                     samples_for_col = num_rows;
 
                     for(std::uint32_t j = 0; j < col_to_add.size(); ++j){
-                        col_to_add[sampled[j]] = sample_omega[j];   
+                        col_to_add[j] = sample_omega[j];   
                     }
     
                     basis.push_back(col_to_add);
@@ -1288,7 +1286,7 @@ std::uint32_t adaptiveMatrixReconstructionB(
             samples_for_col = num_rows;
 
             for(std::uint32_t j = 0; j < col_to_add.size(); ++j){
-                col_to_add[sampled[j]] = sample_omega[j];   
+                col_to_add[j] = sample_omega[j];   
             }
 
             basis.push_back(col_to_add);
