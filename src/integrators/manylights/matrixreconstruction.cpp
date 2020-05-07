@@ -1168,7 +1168,7 @@ std::uint32_t recursiveComplete(Scene* scene, KDTNode<ReconstructionSample>* sli
 
         return 0;
     }
-    else{
+   /* else{
         std::uint32_t samples_taken = 0;
         for(std::uint32_t i = 0; i < curr_octreenode->sample_indices.size(); ++i){
             std::uint32_t idx = curr_octreenode->sample_indices[i];
@@ -1181,9 +1181,9 @@ std::uint32_t recursiveComplete(Scene* scene, KDTNode<ReconstructionSample>* sli
         }
 
         return samples_taken;
-    }
+    }*/
 
-    /*std::uint32_t num_children = 0;
+    std::uint32_t num_children = 0;
     for(std::uint32_t i = 0; i < curr_octreenode->children.size(); ++i){
         if(curr_octreenode->children[i] != nullptr){
             num_children++;
@@ -1228,7 +1228,7 @@ std::uint32_t recursiveComplete(Scene* scene, KDTNode<ReconstructionSample>* sli
         }
     }
 
-    return samples_taken;*/
+    return samples_taken;
     
 }
 
