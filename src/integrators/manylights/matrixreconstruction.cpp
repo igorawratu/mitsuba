@@ -1157,7 +1157,7 @@ std::vector<std::pair<std::int32_t, std::vector<std::uint32_t>>> computeMinHammi
 std::uint32_t recursiveComplete(Scene* scene, KDTNode<ReconstructionSample>* slice, float min_dist, const VPL& vpl, 
     OTN<ReconstructionSample>* curr_octreenode, std::unordered_map<std::uint32_t, std::uint8_t>& sample_omega, 
     const std::vector<std::uint8_t>& basis_col, bool flip_basis, const std::vector<std::uint32_t>& incorrect_indices){
-
+    std::cout << incorrect_indices.size() << std::endl;
     //no error in subsection
     if(incorrect_indices.size() == 0){
         for(std::uint32_t i = 0; i < curr_octreenode->sample_indices.size(); ++i){
@@ -1288,10 +1288,8 @@ std::uint32_t adaptiveMatrixReconstructionBRecursive(
                 bool flip = herrs[sel].first < 0;
                 std::uint32_t basis_idx = std::abs(herrs[sel].first) - 1;
 
-                std::cout << "recursively completing" << std::endl;
                 samples_for_col += recursiveComplete(scene, slice, min_dist, vpls[order[i]], slice->octree_root.get(), sample_omega, 
                     basis[basis_idx], flip, herrs[sel].second);
-                std::cout << "finished recursive completion" << std::endl;
 
                 for(std::uint32_t j = 0; j < col_to_add.size(); ++j){
                     col_to_add[j] = sample_omega[j];   
