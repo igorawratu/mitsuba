@@ -1288,6 +1288,11 @@ std::uint32_t adaptiveMatrixReconstructionBRecursive(
                 std::uint32_t basis_idx = std::abs(herrs[sel].first) - 1;
 
                 std::cout << "recursive complete" << std::endl;
+                std::unordered_set<std::uint32_t> sampled_indices;
+                for(auto iter = sample_omega.begin(); iter != sample_omega.end(); ++iter){
+                    sampled_indices.insert(iter.first);
+                }
+                
                 samples_for_col += recursiveComplete(scene, slice, min_dist, vpls[order[i]], slice->octree_root.get(), sample_omega, 
                     basis[basis_idx], flip, herrs[sel].second);
 
@@ -1304,7 +1309,7 @@ std::uint32_t adaptiveMatrixReconstructionBRecursive(
                         std::uniform_int_distribution<std::uint32_t> gen_row(0, num_rows - 1);
                         while(ver_indices.size() < num_verification_samples){
                             std::uint32_t row = gen_row(rng);
-                            if(sample_omega.find(row) == sample_omega.end()){
+                            if(sampled_indices.find(row) == sampled_indices.end()){
                                 ver_indices.push_back(row);
                             }
                         }
