@@ -200,14 +200,14 @@ struct OTN{
                 child_indices[child_idx].push_back(sample_indices[i]);
             }
 
-            std::uint32_t num_children = 0;
+            /*std::uint32_t num_children = 0;
             for(std::uint32_t i = 0; i < 8; ++i){
                 if(child_indices[i].size() > 0){
                     num_children++;
                 }
-            }
+            }*/
 
-            if(num_children > 1){
+            /*if(num_children > 1)*/{
                 for(std::uint8_t i = 0; i < child_indices.size(); ++i){
                     if(child_indices[i].size() == 0){
                         continue;
@@ -261,8 +261,8 @@ private:
         std::vector<std::pair<Vector3f, Vector3f>> children_bbs(8);
         for(std::uint32_t i = 0; i < 8; ++i){
             children_bbs[i] = std::make_pair(
-                Vector3f(std::min(corners[i].x, midpoint.x), std::min(corners[i].x, midpoint.x), std::min(corners[i].x, midpoint.x)),
-                Vector3f(std::max(corners[i].x, midpoint.x), std::max(corners[i].x, midpoint.x), std::max(corners[i].x, midpoint.x))
+                Vector3f(std::min(corners[i].x, midpoint.x), std::min(corners[i].y, midpoint.y), std::min(corners[i].x, midpoint.z)),
+                Vector3f(std::max(corners[i].x, midpoint.x), std::max(corners[i].y, midpoint.y), std::max(corners[i].x, midpoint.z))
             );
         }
 
