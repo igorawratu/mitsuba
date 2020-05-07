@@ -1296,48 +1296,46 @@ std::uint32_t adaptiveMatrixReconstructionBRecursive(
                     col_to_add[j] = sample_omega[j];   
                 }
 
-                if(herrs[sel].second.size() == 0){
-                    if(num_verification_samples > 0){
-                        std::vector<std::uint32_t> ver_indices;
+                if(num_verification_samples > 0){
+                    std::vector<std::uint32_t> ver_indices;
 
-                        std::uniform_int_distribution<std::uint32_t> gen_row(0, num_rows - 1);
-                        while(ver_indices.size() < num_verification_samples){
-                            std::uint32_t row = gen_row(rng);
-                            if(sampled_indices.find(row) == sampled_indices.end()){
-                                ver_indices.push_back(row);
-                            }
-                        }
-
-                        sampleColB(scene, slice, vpls, order[i], min_dist, num_verification_samples, rng, sample_omega, 
-                            probabilities, ver_indices, false);
-
-                        bool correct = true;
-                        for(std::uint32_t j = 0; j < ver_indices.size(); ++j){
-                            if(sample_omega[ver_indices[j]] != col_to_add[ver_indices[j]]){
-                                correct = false;
-                                break;
-                            }
-                        }
-
-                        if(!correct){
-                            sample_perc = std::min(max_sample_perc, sample_perc + verification_inc);
-                            num_samples = num_rows * sample_perc + 0.5f;
-
-                            sampleColB(scene, slice, vpls, order[i], min_dist, num_rows, rng, sample_omega, 
-                                probabilities, sampled, true);
-                            samples_for_col = num_rows;
-
-                            for(std::uint32_t j = 0; j < col_to_add.size(); ++j){
-                                col_to_add[j] = sample_omega[j];   
-                            }
-
-                            basis.push_back(col_to_add);
-                            
-                            full_col_sampled = true;
+                    std::uniform_int_distribution<std::uint32_t> gen_row(0, num_rows - 1);
+                    while(ver_indices.size() < num_verification_samples){
+                        std::uint32_t row = gen_row(rng);
+                        if(sampled_indices.find(row) == sampled_indices.end()){
+                            ver_indices.push_back(row);
                         }
                     }
+
+                    sampleColB(scene, slice, vpls, order[i], min_dist, num_verification_samples, rng, sample_omega, 
+                        probabilities, ver_indices, false);
+
+                    bool correct = true;
+                    for(std::uint32_t j = 0; j < ver_indices.size(); ++j){
+                        if(sample_omega[ver_indices[j]] != col_to_add[ver_indices[j]]){
+                            correct = false;
+                            break;
+                        }
+                    }
+
+                    if(!correct){
+                        sample_perc = std::min(max_sample_perc, sample_perc + verification_inc);
+                        num_samples = num_rows * sample_perc + 0.5f;
+
+                        sampleColB(scene, slice, vpls, order[i], min_dist, num_rows, rng, sample_omega, 
+                            probabilities, sampled, true);
+                        samples_for_col = num_rows;
+
+                        for(std::uint32_t j = 0; j < col_to_add.size(); ++j){
+                            col_to_add[j] = sample_omega[j];   
+                        }
+
+                        basis.push_back(col_to_add);
+                        
+                        full_col_sampled = true;
+                    }
                 }
-                else{
+                else if(herrs[sel].second.size() > 0){
                     basis.push_back(col_to_add);
                     full_col_sampled = true;
                 }
