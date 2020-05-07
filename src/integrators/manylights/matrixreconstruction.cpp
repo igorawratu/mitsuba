@@ -1157,17 +1157,17 @@ std::vector<std::pair<std::int32_t, std::vector<std::uint32_t>>> computeMinHammi
 std::uint32_t recursiveComplete(Scene* scene, KDTNode<ReconstructionSample>* slice, float min_dist, const VPL& vpl, 
     OTN<ReconstructionSample>* curr_octreenode, std::unordered_map<std::uint32_t, std::uint8_t>& sample_omega, 
     const std::vector<std::uint8_t>& basis_col, bool flip_basis, const std::vector<std::uint32_t>& incorrect_indices){
+    std::cout << "start" << std::endl;
     //no error in subsection
     if(incorrect_indices.size() == 0){
         for(std::uint32_t i = 0; i < curr_octreenode->sample_indices.size(); ++i){
             std::uint32_t idx = curr_octreenode->sample_indices[i];
-            std::cout << idx << " " << basis_col.size() << std::endl;
-            sample_omega[idx] = flip_basis ? (basis_col[idx] + 1) % 2 : basis_col[idx];
         }
 
         return 0;
     }
 
+    std::cout << "a" << std::endl;
     std::uint32_t num_children = 0;
     for(std::uint32_t i = 0; i < curr_octreenode->children.size(); ++i){
         if(curr_octreenode->children[i] != nullptr){
@@ -1177,6 +1177,7 @@ std::uint32_t recursiveComplete(Scene* scene, KDTNode<ReconstructionSample>* sli
 
     std::uint32_t samples_taken = 0;
 
+    std::cout << "b" << std::endl;
     //recurse if has children
     if(num_children > 0){
         std::vector<std::vector<std::uint32_t>> children_incorrect_indices(8); 
@@ -1212,6 +1213,8 @@ std::uint32_t recursiveComplete(Scene* scene, KDTNode<ReconstructionSample>* sli
             }
         }
     }
+
+    std::cout << "c" << std::endl;
 
     return samples_taken;
     
@@ -2632,7 +2635,7 @@ std::tuple<std::uint64_t, std::uint64_t> MatrixReconstructionRenderer::renderHW(
     std::vector<float>& timings, const std::vector<KDTNode<ReconstructionSample>*>& slices, 
     std::uint32_t samples_per_slice, std::uint32_t slice_size){
     auto start = std::chrono::high_resolution_clock::now();
-    std::uint32_t num_workers = 15;//std::max(size_t(1), std::min(slices.size(), size_t(std::thread::hardware_concurrency() / 2)));
+    std::uint32_t num_workers = 1;//std::max(size_t(1), std::min(slices.size(), size_t(std::thread::hardware_concurrency() / 2)));
     std::uint32_t batch_size = 500 / (std::max(slice_size / 1000u, 1u) * std::max(1u, num_clusters_ / 4000));//std::max(num_workers * 2, 64u);
 
     BlockingQueue<HWWorkUnit> to_cluster;
