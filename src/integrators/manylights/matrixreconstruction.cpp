@@ -1278,7 +1278,6 @@ std::uint32_t adaptiveMatrixReconstructionBRecursive(
                 }
             }
             else{
-                std::cout << "computing hamming errs" << std::endl;
                 std::vector<std::pair<std::int32_t, std::vector<std::uint32_t>>> herrs = computeMinHammingErrs(basis, sample_omega);
 
                 std::uniform_int_distribution<std::uint32_t> select_col(0, herrs.size() - 1);
@@ -1286,23 +1285,19 @@ std::uint32_t adaptiveMatrixReconstructionBRecursive(
                 
                 bool flip = herrs[sel].first < 0;
                 std::uint32_t basis_idx = std::abs(herrs[sel].first) - 1;
-
-                std::cout << "recursive complete" << std::endl;
                 std::unordered_set<std::uint32_t> sampled_indices;
                 for(auto iter = sample_omega.begin(); iter != sample_omega.end(); ++iter){
-                    sampled_indices.insert(iter.first);
+                    sampled_indices.insert(iter->first);
                 }
-                
+
                 samples_for_col += recursiveComplete(scene, slice, min_dist, vpls[order[i]], slice->octree_root.get(), sample_omega, 
                     basis[basis_idx], flip, herrs[sel].second);
 
-                std::cout << "assigning to column to be added" << std::endl;
                 for(std::uint32_t j = 0; j < col_to_add.size(); ++j){
                     col_to_add[j] = sample_omega[j];   
                 }
 
                 if(herrs[sel].second.size() == 0){
-                    std::cout << "no errors, checking for verification" << std::endl;
                     if(num_verification_samples > 0){
                         std::vector<std::uint32_t> ver_indices;
 
@@ -1344,14 +1339,12 @@ std::uint32_t adaptiveMatrixReconstructionBRecursive(
                     }
                 }
                 else{
-                    std::cout << "errors, adding col" << std::endl;
                     basis.push_back(col_to_add);
                     full_col_sampled = true;
                 }
             }
         }
         else{
-            std::cout << "basis empty, adding full sample" << std::endl;
             sampled = sampleColB(scene, slice, vpls, order[i], min_dist, num_rows, rng, sample_omega, 
                 probabilities, sampled, true);
             samples_for_col = num_rows;
@@ -1367,7 +1360,6 @@ std::uint32_t adaptiveMatrixReconstructionBRecursive(
 
         //probability update for importance sampling.
         if(full_col_sampled){
-            std::cout << "updating prob" << std::endl;
             std::vector<std::uint32_t> buckets;
             std::uint8_t last_sign = 2;
             for(std::uint32_t j = 0; j < col_to_add.size(); ++j){
