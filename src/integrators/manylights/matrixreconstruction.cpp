@@ -1158,10 +1158,10 @@ std::uint32_t recursiveComplete(Scene* scene, KDTNode<ReconstructionSample>* sli
     OTN<ReconstructionSample>* curr_octreenode, std::unordered_map<std::uint32_t, std::uint8_t>& sample_omega, 
     const std::vector<std::uint8_t>& basis_col, bool flip_basis, const std::vector<std::uint32_t>& incorrect_indices){
     //no error in subsection
-    std::cout << incorrect_indices.size() << std::endl;
     if(incorrect_indices.size() == 0){
         for(std::uint32_t i = 0; i < curr_octreenode->sample_indices.size(); ++i){
             std::uint32_t idx = curr_octreenode->sample_indices[i];
+            std::cout << idx << std::endl;
             sample_omega[idx] = flip_basis ? (basis_col[idx] + 1) % 2 : basis_col[idx];
         }
 
