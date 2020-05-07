@@ -1183,7 +1183,7 @@ std::uint32_t recursiveComplete(Scene* scene, KDTNode<ReconstructionSample>* sli
         Vector3f midpoint = (curr_octreenode->bb.first + curr_octreenode->bb.second) / 2.f;
 
         for(std::uint32_t i = 0; i < incorrect_indices.size(); ++i){
-            Vector3f p(slice->sample(incorrect_indices[i]));
+            Vector3f p(slice->sample(incorrect_indices[i]).its.p);
             std::uint32_t child_idx = curr_octreenode->getChildIndex(p, midpoint);
             children_incorrect_indices[child_idx].push_back(incorrect_indices[i]);
         }

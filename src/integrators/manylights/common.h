@@ -415,7 +415,7 @@ struct KDTNode{
         std::pair<Vector3f, Vector3f> bb(Vector3f(std::numeric_limits<float>::max()), Vector3f(-std::numeric_limits<float>::max()));
 
         for(std::uint32_t i = 0; i < sample_indices.size(); ++i){
-            Vector3f p = sample(i).its.p;
+            Vector3f p(sample(i).its.p);
             expandBB(bb, p);
         }
 
