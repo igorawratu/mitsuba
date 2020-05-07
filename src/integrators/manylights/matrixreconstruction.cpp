@@ -1159,7 +1159,6 @@ std::uint32_t recursiveComplete(Scene* scene, KDTNode<ReconstructionSample>* sli
     const std::vector<std::uint8_t>& basis_col, bool flip_basis, const std::vector<std::uint32_t>& incorrect_indices){
     //no error in subsection
     if(incorrect_indices.size() == 0){
-        std::cout << curr_octreenode->sample_indices.size() << std::endl;
         for(std::uint32_t i = 0; i < curr_octreenode->sample_indices.size(); ++i){
             std::uint32_t idx = curr_octreenode->sample_indices[i];
             sample_omega[idx] = flip_basis ? (basis_col[idx] + 1) % 2 : basis_col[idx];
@@ -1202,10 +1201,9 @@ std::uint32_t recursiveComplete(Scene* scene, KDTNode<ReconstructionSample>* sli
     }
     //no children but has errors, fully sample
     else{
-        std::vector<ReconstructionSample>* samples = slice->samples;;
         for(std::uint32_t i = 0; i < curr_octreenode->sample_indices.size(); ++i){
             std::uint32_t idx = curr_octreenode->sample_indices[i];
-            ReconstructionSample& scene_sample = (*samples)[idx];
+            ReconstructionSample& scene_sample = slice->sample(idx);
 
             if(sample_omega.find(idx) == sample_omega.end()){
                 sample_omega[idx] = sampleVisibility(scene, scene_sample.its, vpl, min_dist) ? 1 : 0;

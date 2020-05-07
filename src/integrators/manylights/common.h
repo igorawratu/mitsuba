@@ -177,7 +177,8 @@ struct OTN{
 
     OTN() = delete;
 
-    OTN(std::vector<Sample>* sample_set, const std::vector<std::uint32_t>& indices, const std::pair<Vector3f, Vector3f>& bounding_box, std::uint32_t min_size) : 
+    OTN(std::vector<Sample>* sample_set, const std::vector<std::uint32_t>& indices, const std::vector<std::uint32_t>& actual_indices, 
+        const std::pair<Vector3f, Vector3f>& bounding_box, std::uint32_t min_size) : 
         sample_indices(indices),
         children(8),
         bb(bounding_box){
@@ -190,7 +191,8 @@ struct OTN{
             std::vector<std::vector<std::uint32_t>> child_indices(8);
 
             for(std::uint32_t i = 0; i < sample_indices.size(); ++i){
-                Sample& curr_sample = (*sample_set)[sample_indices[i]];
+                std::uint32_t idx = actual_indices[sample_indices[i]];
+                Sample& curr_sample = (*sample_set)[idx];
 
                 Vector3f p(curr_sample.its.p);
 
@@ -204,7 +206,7 @@ struct OTN{
                 }
 
                 children[i] = std::move(std::unique_ptr<OTN>(new OTN(sample_set, 
-                    child_indices[i], child_bbs[i], min_size)));
+                    child_indices[i], actual_indices, child_bbs[i], min_size)));
             }
         }
     }
@@ -454,7 +456,9 @@ void splitKDTree(KDTNode<Sample>* node, std::uint32_t size_threshold, std::uint3
     if(node == nullptr || node->sample_indices.size() < size_threshold){
         if(node != nullptr){
             std::pair<Vector3f, Vector3f> bb = node->getBB();
-            node->octree_root = std::unique_ptr<OTN<Sample>>(new OTN<Sample>(node->samples, node->sample_indices, bb, 16));
+            std::vector<std::uint32_t> indices(node->sample_indices.size());
+            std::iota(indices.begin(), indices.end(), 0);
+            node->octree_root = std::unique_ptr<OTN<Sample>>(new OTN<Sample>(node->samples, indices, node->sample_indices, bb, 16));
         }
         return;
     }
@@ -468,6 +472,8 @@ void splitKDTree(KDTNode<Sample>* node, std::uint32_t size_threshold, std::uint3
         }
         else{
             std::pair<Vector3f, Vector3f> bb = node->getBB();
+            std::vector<std::uint32_t> indices(node->sample_indices.size());
+            std::iota(indices.begin(), indices.end(), 0);
             node->octree_root = std::unique_ptr<OTN<Sample>>(new OTN<Sample>(node->samples, node->sample_indices, bb, 16));
         }
     }
