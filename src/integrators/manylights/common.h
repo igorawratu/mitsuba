@@ -183,6 +183,8 @@ struct OTN{
         bb(bounding_box){
         assert(sample_indices.size() > 0);
 
+        std::cout << sample_indices.size() << std::endl;
+
         if(sample_indices.size() > min_size){
             Vector3f midpoint = (bounding_box.first + bounding_box.second) / 2.f;
 
