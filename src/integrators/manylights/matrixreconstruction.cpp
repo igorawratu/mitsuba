@@ -1157,17 +1157,15 @@ std::vector<std::pair<std::int32_t, std::vector<std::uint32_t>>> computeMinHammi
 std::uint32_t recursiveComplete(Scene* scene, KDTNode<ReconstructionSample>* slice, float min_dist, const VPL& vpl, 
     OTN<ReconstructionSample>* curr_octreenode, std::unordered_map<std::uint32_t, std::uint8_t>& sample_omega, 
     const std::vector<std::uint8_t>& basis_col, bool flip_basis, const std::vector<std::uint32_t>& incorrect_indices){
-    std::cout << "start" << std::endl;
     //no error in subsection
     if(incorrect_indices.size() == 0){
         for(std::uint32_t i = 0; i < curr_octreenode->sample_indices.size(); ++i){
             std::uint32_t idx = curr_octreenode->sample_indices[i];
         }
-        std::cout << "retstart" << std::endl;
+
         return 0;
     }
 
-    std::cout << "a" << std::endl;
     std::uint32_t num_children = 0;
     for(std::uint32_t i = 0; i < curr_octreenode->children.size(); ++i){
         if(curr_octreenode->children[i] != nullptr){
@@ -1177,7 +1175,6 @@ std::uint32_t recursiveComplete(Scene* scene, KDTNode<ReconstructionSample>* sli
 
     std::uint32_t samples_taken = 0;
 
-    std::cout << "b" << std::endl;
     //recurse if has children
     if(num_children > 0){
         std::vector<std::vector<std::uint32_t>> children_incorrect_indices(8); 
@@ -1213,8 +1210,6 @@ std::uint32_t recursiveComplete(Scene* scene, KDTNode<ReconstructionSample>* sli
             }
         }
     }
-
-    std::cout << "c" << std::endl;
 
     return samples_taken;
     
@@ -1266,6 +1261,7 @@ std::uint32_t adaptiveMatrixReconstructionBRecursive(
 
     //The actual adaptive matrix recovery algorithm
     for(std::uint32_t i = 0; i < order.size(); ++i){
+        std::cout << i << std::endl;
         sample_omega.clear();
         std::uint32_t samples_for_col = 0;
 
