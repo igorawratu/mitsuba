@@ -200,13 +200,22 @@ struct OTN{
                 child_indices[child_idx].push_back(sample_indices[i]);
             }
 
-            for(std::uint8_t i = 0; i < child_indices.size(); ++i){
-                if(child_indices[i].size() == 0){
-                    continue;
+            std::uint32_t num_children = 0;
+            for(std::uint32_t i = 0; i < 8; ++i){
+                if(child_indices[i].size() > 0){
+                    num_children++;
                 }
+            }
 
-                children[i] = std::move(std::unique_ptr<OTN>(new OTN(sample_set, 
-                    child_indices[i], child_bbs[i], min_size)));
+            if(num_children > 1){
+                for(std::uint8_t i = 0; i < child_indices.size(); ++i){
+                    if(child_indices[i].size() == 0){
+                        continue;
+                    }
+
+                    children[i] = std::move(std::unique_ptr<OTN>(new OTN(sample_set, 
+                        child_indices[i], child_bbs[i], min_size)));
+                }
             }
         }
     }
