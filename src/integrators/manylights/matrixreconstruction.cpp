@@ -2217,9 +2217,17 @@ std::tuple<std::uint64_t, std::uint64_t> recoverHW(KDTNode<ReconstructionSample>
 
         if(bin_vis){
             std::vector<std::uint8_t> bv(slice->sample_indices.size() * quadranted_vpls[i].size(), 0);
-            samples = adaptiveMatrixReconstructionB(bv, scene, slice, 
-                quadranted_vpls[i], min_dist, sample_perc, max_sample_perc, sample_inc, rng, 
-                basis_rank, cluster_contribs);
+            if(true){
+                samples = adaptiveMatrixReconstructionBRecursive(bin_vis, scene, slice,
+                    quadranted_vpls[i], general_params.min_dist, general_params.sample_perc, 
+                    general_params.max_sample_perc, general_params.sample_inc, rng, 
+                    basis_rank, cluster_contribs);
+            }
+            else{
+                samples = adaptiveMatrixReconstructionB(bv, scene, slice, 
+                    quadranted_vpls[i], min_dist, sample_perc, max_sample_perc, sample_inc, rng, 
+                    basis_rank, cluster_contribs);
+            }
 
             total_performed_samples += samples;
             slice->rank_ratio[i] = float(basis_rank) / std::min(slice->sample_indices.size(), quadranted_vpls[i].size());
