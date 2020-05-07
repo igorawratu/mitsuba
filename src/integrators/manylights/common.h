@@ -203,13 +203,9 @@ struct OTN{
                     continue;
                 }
 
-                children[i] = std::move(std::unique_ptr<OctreeNode>(new OctreeNode(sample_set, 
+                children[i] = std::move(std::unique_ptr<OTN>(new OTN(sample_set, 
                     child_indices[i], child_bbs[i], min_size)));
             }
-        }
-        else{
-            Vector3f cone_axis(representative().its.shFrame.n);
-            bcone = DirConef(cone_axis);
         }
     }
 
@@ -239,17 +235,17 @@ struct OTN{
 private:
     std::vector<std::pair<Vector3f, Vector3f>> getChildBBs(){
         std::vector<Vector3f> corners(8);
-        corners[0] = bounding_box.first;
-        corners[1] = Vector3f(bounding_box.second.x, bounding_box.first.y, bounding_box.first.z);
-        corners[2] = Vector3f(bounding_box.first.x, bounding_box.second.y, bounding_box.first.z);
-        corners[3] = Vector3f(bounding_box.second.x, bounding_box.second.y, bounding_box.first.z);
-        corners[4] = Vector3f(bounding_box.first.x, bounding_box.first.y, bounding_box.second.z);
-        corners[5] = Vector3f(bounding_box.second.x, bounding_box.first.y, bounding_box.second.z);
-        corners[6] = Vector3f(bounding_box.first.x, bounding_box.second.y, bounding_box.second.z);
-        corners[7] = bounding_box.second;
+        corners[0] = bb.first;
+        corners[1] = Vector3f(bb.second.x, bb.first.y, bb.first.z);
+        corners[2] = Vector3f(bb.first.x, bb.second.y, bb.first.z);
+        corners[3] = Vector3f(bb.second.x, bb.second.y, bb.first.z);
+        corners[4] = Vector3f(bb.first.x, bb.first.y, bb.second.z);
+        corners[5] = Vector3f(bb.second.x, bb.first.y, bb.second.z);
+        corners[6] = Vector3f(bb.first.x, bb.second.y, bb.second.z);
+        corners[7] = bb.second;
         
 
-        Vector3f midpoint = (bounding_box.first + bounding_box.second) / 2.f;
+        Vector3f midpoint = (bb.first + bb.second) / 2.f;
 
         std::vector<std::pair<Vector3f, Vector3f>> children_bbs(8);
         for(std::uint32_t i = 0; i < 8; ++i){
