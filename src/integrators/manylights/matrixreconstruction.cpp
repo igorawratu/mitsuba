@@ -1161,7 +1161,7 @@ std::uint32_t recursiveComplete(Scene* scene, KDTNode<ReconstructionSample>* sli
     if(incorrect_indices.size() == 0){
         for(std::uint32_t i = 0; i < curr_octreenode->sample_indices.size(); ++i){
             std::uint32_t idx = curr_octreenode->sample_indices[i];
-            std::cout << idx << std::endl;
+            std::cout << idx << " " << basis_col.size() << std::endl;
             sample_omega[idx] = flip_basis ? (basis_col[idx] + 1) % 2 : basis_col[idx];
         }
 
