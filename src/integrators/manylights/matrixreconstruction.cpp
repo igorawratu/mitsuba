@@ -228,29 +228,6 @@ double computeCost(const Eigen::MatrixXf& contrib_mat, const std::vector<int>& n
     }
     
     return std::max(0., (nsum * nsum) - vsum);
-    
-    /*float total = 0.f;
-    for(std::uint32_t i = 0; i < cluster.size(); ++i){
-        for(std::uint32_t j = i; j < cluster.size(); ++j){
-            total += (contrib_mat.col(cluster[j]) - contrib_mat.col(cluster[i])).norm() * norm_cache[cluster[i]] * 
-                norm_cache[cluster[j]];
-        }
-    }
-    return total;*/
-
-    /*float total_norm = 0.f;
-    Eigen::MatrixXf variance = Eigen::MatrixXf::Zero(contrib_mat.rows(), 1);
-    Eigen::MatrixXf mean = Eigen::MatrixXf::Zero(contrib_mat.rows(), 1);
-    for(std::uint32_t i = 0; i < cluster.size(); ++i){
-        total_norm += norm_cache[cluster[i]];
-        Eigen::MatrixXf old_mean = mean;
-        mean = mean + (contrib_mat.col(cluster[i]) - mean) / float(i + 1);
-        variance = variance + 
-            (contrib_mat.col(cluster[i]) - mean).cwiseProduct((contrib_mat.col(cluster[i]) - old_mean));
-    }
-    variance /= float(cluster.size() - 1);
-    return variance.norm() * total_norm;*/
-
 }
 
 std::vector<std::vector<std::uint32_t>> clusterVPLsBySplitting(const std::vector<std::vector<std::uint32_t>>& sampling_clusters, 
@@ -366,16 +343,6 @@ std::vector<std::vector<std::uint32_t>> clusterVPLsBySplitting(const std::vector
 
         std::vector<std::uint32_t> new_cluster1;
         std::vector<std::uint32_t> new_cluster2;
-
-        /*float midpoint = (max_d + min_d) / 2.f;
-        for(std::uint32_t i = 0; i < vpl_projection_distances.size(); ++i){
-            if(vpl_projection_distances[i].second < midpoint){
-                new_cluster1.push_back(vpl_projection_distances[i].first);
-            }
-            else{
-                new_cluster2.push_back(vpl_projection_distances[i].first);
-            }
-        }*/
 
         std::sort(vpl_projection_distances.begin(), vpl_projection_distances.end(),
             [](const std::pair<std::uint32_t, float>& lhs, const std::pair<std::uint32_t, float>& rhs){
@@ -1146,6 +1113,285 @@ std::vector<std::pair<std::uint32_t, bool>> getMatchingCols(const std::vector<st
     return matching_cols;
 }
 
+std::vector<std::pair<std::int32_t, std::vector<std::uint32_t>>> computeMinHammingErrs(const std::vector<std::vector<std::uint8_t>>& cols, 
+    const std::unordered_map<std::uint32_t, std::uint8_t>& sampled_vals){
+    
+    std::vector<std::pair<std::int32_t, std::vector<std::uint32_t>>> min_hamming_distances;
+    std::uint32_t min_dist = std::numeric_limits<std::uint32_t>::max();
+
+    for(std::uint32_t i = 0; i < cols.size(); ++i){
+        std::vector<std::uint32_t> herr;
+        std::vector<std::uint32_t> oerr;
+
+        for(auto iter = sampled_vals.begin(); iter != sampled_vals.end(); ++iter){
+            if(iter->second == cols[i][iter->first]){
+                oerr.push_back(iter->first);
+            }
+            else{
+                herr.push_back(iter->first);
+            }
+        }
+
+        if(herr.size() <= min_dist){
+            if(herr.size() < min_dist){
+                min_dist = herr.size();
+                min_hamming_distances.clear();
+            }           
+
+            min_hamming_distances.push_back(std::make_pair(i + 1, herr));
+        }
+
+        if(oerr.size() <= min_dist){
+            if(oerr.size() < min_dist){
+                min_dist = oerr.size();
+                min_hamming_distances.clear();
+            }           
+
+            min_hamming_distances.push_back(std::make_pair(-(i + 1), oerr));
+        }
+    }
+
+    return min_hamming_distances;
+}
+
+std::uint32_t recursiveComplete(Scene* scene, KDTNode<ReconstructionSample>* slice, float min_dist, const VPL& vpl, 
+    OTN<ReconstructionSample>* curr_octreenode, std::unordered_map<std::uint32_t, std::uint8_t>& sample_omega, 
+    const std::vector<std::uint8_t>& basis_col, bool flip_basis, const std::vector<std::uint32_t>& incorrect_indices){
+
+    //no error in subsection
+    if(incorrect_indices.size() == 0){
+        for(std::uint32_t i = 0; i < curr_octreenode->sample_indices.size(); ++i){
+            std::uint32_t idx = curr_octreenode->sample_indices[i];
+            sample_omega[idx] = flip_basis ? (basis_col[idx] + 1) % 2 : basis_col[idx];
+        }
+
+        return 0;
+    }
+
+    std::uint32_t num_children = 0;
+    for(std::uint32_t i = 0; i < curr_octreenode->children.size(); ++i){
+        if(curr_octreenode->children[i] != nullptr){
+            num_children++;
+        }
+    }
+
+    std::uint32_t samples_taken = 0;
+
+    //recurse if has children
+    if(num_children > 0){
+        std::vector<std::vector<std::uint32_t>> children_incorrect_indices(8); 
+        Vector3f midpoint = (curr_octreenode->bb.first + curr_octreenode->bb.second) / 2.f;
+
+        for(std::uint32_t i = 0; i < incorrect_indices.size(); ++i){
+            Vector3f p(slice->sample(incorrect_indices[i]))
+            std::uint32_t child_idx = curr_octreenode->getChildIndex(p, midpoint);
+            children_incorrect_indices[child_idx].push_back(incorrect_indices[i]);
+        }
+
+        for(std::uint32_t i = 0; i < 8; ++i){
+            if(curr_octreenode->children[i] != nullptr){
+                samples_taken += recursiveComplete(scene, slice, min_dist, vpl, 
+                    curr_octreenode->children[i].get(), sample_omega, basis_col, flip_basis, children_incorrect_indices[i]);
+            }
+            else{
+                if(children_incorrect_indices[i].size() > 0){
+                    std::cout << "This should never happen" << std::endl;
+                }
+            }
+        }
+    }
+    //no children but has errors, fully sample
+    else{
+        for(std::uint32_t i = 0; i < curr_octreenode->sample_indices.size(); ++i){
+            std::uint32_t idx = curr_octreenode->sample_indices[i];
+            ReconstructionSample& scene_sample = slice->sample(idx);
+
+            if(sample_omega.find(idx) == sample_omega.end()){
+                sample_omega[idx] = sampleVisibility(scene, scene_sample.its, vpl, min_dist) ? 1 : 0;
+                samples_taken++;
+            }
+        }
+    }
+
+    return samples_taken;
+    
+}
+
+std::uint32_t adaptiveMatrixReconstructionBRecursive(
+    std::vector<std::uint8_t>& mat, Scene* scene, KDTNode<ReconstructionSample>* slice, 
+    const std::vector<VPL>& vpls, float min_dist, float sample_perc, float max_sample_perc, float verification_inc, 
+    std::mt19937& rng, std::uint32_t& basis_rank, const std::vector<float>& col_estimations){
+
+    assert(sample_perc > 0.f && slice->sample_indices.size() > 0 && vpls.size() > 0);
+
+    std::uint32_t num_rows = slice->sample_indices.size();
+    std::uint32_t num_cols = vpls.size();
+    
+    //re-allocate matrix if it is of the incorrect size
+    if(mat.size() != slice->sample_indices.size() * vpls.size()){
+        mat.resize(slice->sample_indices.size() * vpls.size(), 0);
+    }
+
+    std::uint32_t num_samples = num_rows * sample_perc + 0.5f;
+    std::uint32_t num_verification_samples = verification_inc < std::numeric_limits<float>::epsilon() ? 
+        0 : std::max(1, int(num_rows * verification_inc + 0.5f));
+    //just in case, this shouldn't ever really happen
+    if(num_samples == 0){
+        num_samples = slice->sample_indices.size();
+    }
+
+    //we recover from the brightest to least bright because there will be more full samples initially, allow for better coverage of
+    //higher energy sections
+    std::vector<std::uint32_t> order(num_cols);
+    std::iota(order.begin(), order.end(), 0);
+    std::sort(order.begin(), order.end(), 
+        [&col_estimations](const std::uint32_t& lhs, const std::uint32_t& rhs){
+            return col_estimations[lhs] > col_estimations[rhs];
+        });
+
+    std::vector<std::vector<std::uint8_t>> basis;
+
+    std::uint32_t total_samples = 0;
+    std::uniform_real_distribution<float> gen(0.f, 1.f);
+    std::vector<float> probabilities(num_rows, 1.f / num_rows);
+
+    std::unordered_map<std::uint32_t, std::uint8_t> sample_omega;
+    std::vector<std::uint8_t> col_to_add(num_rows);
+    bool full_col_sampled = false;
+
+    std::vector<std::uint32_t> sampled;
+
+    //The actual adaptive matrix recovery algorithm
+    for(std::uint32_t i = 0; i < order.size(); ++i){
+        sample_omega.clear();
+        std::uint32_t samples_for_col = 0;
+
+       if(basis.size() > 0){
+            sampled = sampleColB(scene, slice, vpls, order[i], min_dist, num_samples, rng, sample_omega, 
+                probabilities, sampled, true);
+            full_col_sampled = false;
+
+            samples_for_col = num_samples;
+
+            if(sample_omega.size() == col_to_add.size()){
+                for(std::uint32_t j = 0; j < col_to_add.size(); ++j){
+                    col_to_add[j] = sample_omega[j];   
+                }
+            }
+            else{
+                std::vector<std::pair<std::int32_t, std::vector<std::uint32_t>>> herrs = computeMinHammingErrs(basis, sample_omega);
+
+                std::uniform_int_distribution<std::uint32_t> select_col(0, herrs.size() - 1);
+                std::uint32_t sel = select_col(rng);
+                
+                bool flip = herrs[sel].first < 0;
+                std::uint32_t basis_idx = std::abs(herrs[sel].first) - 1;
+
+                samples_for_col += recursiveComplete(scene, slice, min_dist, vpls[order[i]], slice->octree_root.get(), sample_omega, 
+                    basis[basis_idx], flip, herrs[sel].second);
+
+                for(std::uint32_t j = 0; j < col_to_add.size(); ++j){
+                    col_to_add[j] = sample_omega[j];   
+                }
+
+
+                if(herrs[sel].second.size() == 0){
+                    if(num_verification_samples > 0){
+                        std::vector<std::uint32_t> ver_indices;
+
+                        std::uniform_int_distribution<std::uint32_t> gen_row(0, num_rows - 1);
+                        while(ver_indices.size() < num_verification_samples){
+                            std::uint32_t row = gen_row(rng);
+                            if(sample_omega.find(row) == sample_omega.end()){
+                                ver_indices.push_back(row);
+                            }
+                        }
+
+                        sampleColB(scene, slice, vpls, order[i], min_dist, num_verification_samples, rng, sample_omega, 
+                            probabilities, ver_indices, false);
+
+                        bool correct = true;
+                        for(std::uint32_t j = 0; j < ver_indices.size(); ++j){
+                            if(sample_omega[ver_indices[j]] != col_to_add[ver_indices[j]]){
+                                correct = false;
+                                break;
+                            }
+                        }
+
+                        if(!correct){
+                            sample_perc = std::min(max_sample_perc, sample_perc + verification_inc);
+                            num_samples = num_rows * sample_perc + 0.5f;
+
+                            sampleColB(scene, slice, vpls, order[i], min_dist, num_rows, rng, sample_omega, 
+                                probabilities, sampled, true);
+                            samples_for_col = num_rows;
+
+                            for(std::uint32_t j = 0; j < col_to_add.size(); ++j){
+                                col_to_add[j] = sample_omega[j];   
+                            }
+
+                            basis.push_back(col_to_add);
+                            
+                            full_col_sampled = true;
+                        }
+                    }
+                }
+                else{
+                    basis.push_back(col_to_add);
+                    full_col_sampled = true;
+                }
+            }
+        }
+        else{
+            sampled = sampleColB(scene, slice, vpls, order[i], min_dist, num_rows, rng, sample_omega, 
+                probabilities, sampled, true);
+            samples_for_col = num_rows;
+
+            for(std::uint32_t j = 0; j < col_to_add.size(); ++j){
+                col_to_add[j] = sample_omega[j];   
+            }
+
+            basis.push_back(col_to_add);
+            
+            full_col_sampled = true;
+        }
+
+        //probability update for importance sampling.
+        if(full_col_sampled){
+            std::vector<std::uint32_t> buckets;
+            std::uint8_t last_sign = 2;
+            for(std::uint32_t j = 0; j < col_to_add.size(); ++j){
+                if(last_sign != col_to_add[j]){
+                    buckets.push_back(j);
+                    last_sign = col_to_add[j];
+                }
+            }
+
+            buckets.push_back(col_to_add.size());
+            float prob_per_bucket = 1.f / buckets.size();
+
+            for(std::uint32_t j = 0; j < buckets.size(); ++j){
+                std::uint32_t bucket_size = j == 0 ? buckets[0] : buckets[j] - buckets[j - 1];
+                float curr_bucket_prob = prob_per_bucket / bucket_size;
+                std::uint32_t bucket_start = j == 0 ? 0 : buckets[j - 1];
+                std::uint32_t bucket_end = buckets[j];
+
+                for(std::uint32_t k = bucket_start; k < bucket_end; ++k){
+                    probabilities[k] += curr_bucket_prob;
+                }
+            }
+        }
+
+        std::uint32_t offset = order[i] * num_rows;
+        std::copy(col_to_add.begin(), col_to_add.end(), mat.begin() + offset);
+        total_samples += samples_for_col;
+    }
+    
+    basis_rank = basis.size();
+
+    return total_samples;
+}
+
 std::uint32_t adaptiveMatrixReconstructionB(
     std::vector<std::uint8_t>& mat, Scene* scene, KDTNode<ReconstructionSample>* slice, 
     const std::vector<VPL>& vpls, float min_dist, float sample_perc, float max_sample_perc, float verification_inc, 
@@ -1591,10 +1837,19 @@ std::tuple<float, float, float, float, float, float> recover(KDTNode<Reconstruct
             }
             else{
                 std::vector<std::uint8_t> bin_vis(slice->sample_indices.size() * quadranted_vpls[i].size(), 0);
-                samples = adaptiveMatrixReconstructionB(bin_vis, scene, slice,
-                    quadranted_vpls[i], general_params.min_dist, general_params.sample_perc, 
-                    general_params.max_sample_perc, general_params.sample_inc, rng, 
-                    basis_rank, cluster_contribs);
+                if(true){
+                    samples = adaptiveMatrixReconstructionBRecursive(bin_vis, scene, slice,
+                        quadranted_vpls[i], general_params.min_dist, general_params.sample_perc, 
+                        general_params.max_sample_perc, general_params.sample_inc, rng, 
+                        basis_rank, cluster_contribs);
+                }
+                else{
+                    samples = adaptiveMatrixReconstructionB(bin_vis, scene, slice,
+                        quadranted_vpls[i], general_params.min_dist, general_params.sample_perc, 
+                        general_params.max_sample_perc, general_params.sample_inc, rng, 
+                        basis_rank, cluster_contribs);
+                }
+                
 
                 for(auto col = 0; col < mat.cols(); ++col){
                     for(auto row = 0; row < mat.rows(); ++row){
@@ -1909,6 +2164,8 @@ std::tuple<std::uint64_t, std::uint64_t> recoverHW(KDTNode<ReconstructionSample>
     slice->rank_ratio.resize(8);
 
     slice->visibility_coefficients.resize(slice->sample_indices.size() * vpls.size(), 0.f);
+
+
 
     for(std::uint32_t i = 0; i < quadranted_vpls.size(); ++i){
         if(quadranted_vpls[i].size() == 0){

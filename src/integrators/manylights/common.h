@@ -170,6 +170,100 @@ const std::array<std::function<bool(float, const Intersection&)>, 6> searchers {
 };
 
 template<class Sample>
+struct OTN{
+    std::vector<std::uint32_t> sample_indices;
+    std::vector<std::unique_ptr<OTN>> children;
+    std::pair<Vector3f, Vector3f> bb;
+
+    OTN() = delete;
+
+    OTN(std::vector<Sample>* sample_set, const std::vector<std::uint32_t>& indices, const std::pair<Vector3f, Vector3f>& bounding_box, std::uint32_t min_size) : 
+        sample_indices(indices),
+        children(8),
+        bb(bounding_box){
+        assert(sample_indices.size() > 0);
+
+        if(sample_indices.size() > min_size){
+            Vector3f midpoint = (bounding_box.first + bounding_box.second) / 2.f;
+
+            std::vector<std::pair<Vector3f, Vector3f>> child_bbs = getChildBBs();
+            std::vector<std::vector<std::uint32_t>> child_indices(8);
+
+            for(std::uint32_t i = 0; i < sample_indices.size(); ++i){
+                Sample& curr_sample = (*sample_set)[sample_indices[i]];
+
+                Vector3f p(curr_sample.its.p);
+
+                std::uint8_t child_idx = getChildIndex(p, midpoint);
+                child_indices[child_idx].push_back(sample_indices[i]);
+            }
+
+            for(std::uint8_t i = 0; i < child_indices.size(); ++i){
+                if(child_indices[i].size() == 0){
+                    continue;
+                }
+
+                children[i] = std::move(std::unique_ptr<OctreeNode>(new OctreeNode(sample_set, 
+                    child_indices[i], child_bbs[i], min_size)));
+            }
+        }
+        else{
+            Vector3f cone_axis(representative().its.shFrame.n);
+            bcone = DirConef(cone_axis);
+        }
+    }
+
+    OTN(const OTN& other) = delete;
+    OTN& operator=(const OTN& other) = delete;
+    OTN(OTN&& other) = delete;
+    OTN& operator=(OTN&& other) = delete;
+
+    std::uint8_t getChildIndex(Vector3f child_pos, Vector3f midpoints){
+        std::uint8_t idx = 0;
+
+        if(child_pos.x > midpoints.x){
+            idx |= 1;
+        }
+
+        if(child_pos.y > midpoints.y){
+            idx |= 2;
+        }
+
+        if(child_pos.z > midpoints.z){
+            idx |= 4;
+        }
+
+        return idx;
+    }
+
+private:
+    std::vector<std::pair<Vector3f, Vector3f>> getChildBBs(){
+        std::vector<Vector3f> corners(8);
+        corners[0] = bounding_box.first;
+        corners[1] = Vector3f(bounding_box.second.x, bounding_box.first.y, bounding_box.first.z);
+        corners[2] = Vector3f(bounding_box.first.x, bounding_box.second.y, bounding_box.first.z);
+        corners[3] = Vector3f(bounding_box.second.x, bounding_box.second.y, bounding_box.first.z);
+        corners[4] = Vector3f(bounding_box.first.x, bounding_box.first.y, bounding_box.second.z);
+        corners[5] = Vector3f(bounding_box.second.x, bounding_box.first.y, bounding_box.second.z);
+        corners[6] = Vector3f(bounding_box.first.x, bounding_box.second.y, bounding_box.second.z);
+        corners[7] = bounding_box.second;
+        
+
+        Vector3f midpoint = (bounding_box.first + bounding_box.second) / 2.f;
+
+        std::vector<std::pair<Vector3f, Vector3f>> children_bbs(8);
+        for(std::uint32_t i = 0; i < 8; ++i){
+            children_bbs[i] = std::make_pair(
+                Vector3f(std::min(corners[i].x, midpoint.x), std::min(corners[i].x, midpoint.x), std::min(corners[i].x, midpoint.x)),
+                Vector3f(std::max(corners[i].x, midpoint.x), std::max(corners[i].x, midpoint.x), std::max(corners[i].x, midpoint.x))
+            );
+        }
+
+        return children_bbs;
+    }
+};
+
+template<class Sample>
 struct KDTNode{
     std::vector<std::uint32_t> sample_indices;
     std::vector<Sample>* samples;
@@ -183,6 +277,7 @@ struct KDTNode{
     std::vector<std::vector<float>> singular_values;
     std::vector<float> singular_values2;
     std::vector<float> visibility_coefficients;
+    std::unique_ptr<OTN<Sample>> octree_root;
 
     KDTNode(std::vector<Sample>* sample_set) : sample_indices(), samples(sample_set), 
         left(nullptr), right(nullptr), rank_ratio(0.f), sample_ratio(0.f){
@@ -320,6 +415,17 @@ struct KDTNode{
         delete query_points.ptr();
     }
 
+    std::pair<Vector3f, Vector3f> getBB(){
+        std::vector<std::pair<Vector3f, Vector3f>> bb(Vector3f(std::numeric_limits<float>::max()), Vector3f(-std::numeric_limits<float>::max()));
+
+        for(std::uint32_t i = 0; i < sample_indices.size(); ++i){
+            Vector3f p = sample(i).its.p;
+            expandBB(bb, p);
+        }
+
+        return bb;
+    }
+
 private:
     void constructFlannSampleMatrix(flann::Matrix<float>& mat, const std::vector<Sample>& samples, 
         const std::vector<std::uint32_t>& indices){
@@ -334,12 +440,26 @@ private:
             curr_pos[2] = samples[indices[i]].its.p.z;
         }
     }
+
+    void expandBB(std::pair<Vector3f, Vector3f>& bb, const Vector3f& v){
+        bb.first.x = std::min(bb.first.x, v.x);
+        bb.first.y = std::min(bb.first.y, v.y);
+        bb.first.z = std::min(bb.first.z, v.z);
+
+        bb.second.x = std::max(bb.second.x, v.x);
+        bb.second.y = std::max(bb.second.y, v.y);
+        bb.second.z = std::max(bb.second.z, v.z);
+    }
 };
 
 template<class Sample>
 void splitKDTree(KDTNode<Sample>* node, std::uint32_t size_threshold, std::uint32_t min_slice_size,
     float min_dist){
     if(node == nullptr || node->sample_indices.size() < size_threshold){
+        if(node != nullptr){
+            std::pair<Vector3f, Vector3f> bb = node->getBB();
+            node->octree_root = std::unique_ptr<OTN<Sample>>(new OTN<Sample>(node->samples, node->sample_indices, bb, 16));
+        }
         return;
     }
 
