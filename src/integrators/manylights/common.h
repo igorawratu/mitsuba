@@ -466,6 +466,10 @@ void splitKDTree(KDTNode<Sample>* node, std::uint32_t size_threshold, std::uint3
             splitKDTree(node->left.get(), size_threshold, min_slice_size, min_dist);
             splitKDTree(node->right.get(), size_threshold, min_slice_size, min_dist);
         }
+        else{
+            std::pair<Vector3f, Vector3f> bb = node->getBB();
+            node->octree_root = std::unique_ptr<OTN<Sample>>(new OTN<Sample>(node->samples, node->sample_indices, bb, 16));
+        }
     }
 }
 
