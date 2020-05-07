@@ -1157,9 +1157,9 @@ std::vector<std::pair<std::int32_t, std::vector<std::uint32_t>>> computeMinHammi
 std::uint32_t recursiveComplete(Scene* scene, KDTNode<ReconstructionSample>* slice, float min_dist, const VPL& vpl, 
     OTN<ReconstructionSample>* curr_octreenode, std::unordered_map<std::uint32_t, std::uint8_t>& sample_omega, 
     const std::vector<std::uint8_t>& basis_col, bool flip_basis, const std::vector<std::uint32_t>& incorrect_indices){
-    std::cout << incorrect_indices.size() << std::endl;
     //no error in subsection
     if(incorrect_indices.size() == 0){
+        std::cout << curr_octreenode->sample_indices.size() << std::endl;
         for(std::uint32_t i = 0; i < curr_octreenode->sample_indices.size(); ++i){
             std::uint32_t idx = curr_octreenode->sample_indices[i];
             sample_omega[idx] = flip_basis ? (basis_col[idx] + 1) % 2 : basis_col[idx];
