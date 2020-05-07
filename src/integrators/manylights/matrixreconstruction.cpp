@@ -1165,8 +1165,22 @@ std::uint32_t recursiveComplete(Scene* scene, KDTNode<ReconstructionSample>* sli
 
         return 0;
     }
+    else{
+        std::uint32_t samples_taken = 0;
+        for(std::uint32_t i = 0; i < curr_octreenode->sample_indices.size(); ++i){
+            std::uint32_t idx = curr_octreenode->sample_indices[i];
+            ReconstructionSample& scene_sample = slice->sample(idx);
 
-    std::uint32_t num_children = 0;
+            if(sample_omega.find(idx) == sample_omega.end()){
+                sample_omega[idx] = sampleVisibility(scene, scene_sample.its, vpl, min_dist) ? 1 : 0;
+                samples_taken++;
+            }
+        }
+
+        return samples_taken;
+    }
+
+    /*std::uint32_t num_children = 0;
     for(std::uint32_t i = 0; i < curr_octreenode->children.size(); ++i){
         if(curr_octreenode->children[i] != nullptr){
             num_children++;
@@ -1211,7 +1225,7 @@ std::uint32_t recursiveComplete(Scene* scene, KDTNode<ReconstructionSample>* sli
         }
     }
 
-    return samples_taken;
+    return samples_taken;*/
     
 }
 
