@@ -1352,7 +1352,7 @@ std::uint32_t adaptiveMatrixReconstructionBRecursive(
 
                 bool fully_sampled;
                 samples_for_col += recursiveComplete(scene, slice, min_dist, vpls[order[i]], slice->octree_root.get(), sample_omega, 
-                    basis[basis_idx], flip, herrs[sel].second, sampled_indices, 0.5f, fully_sampled);
+                    basis[basis_idx], flip, herrs[sel].second, sampled_indices, 0.05f, fully_sampled);
 
                 for(std::uint32_t j = 0; j < col_to_add.size(); ++j){
                     col_to_add[j] = sample_omega[j];   
