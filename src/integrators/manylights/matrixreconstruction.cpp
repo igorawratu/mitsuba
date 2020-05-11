@@ -1207,8 +1207,8 @@ std::uint32_t recursiveComplete(Scene* scene, KDTNode<ReconstructionSample>* sli
                 childbranch_ns |= !child_sampled;
 
                 if(!child_sampled){
-                    for(std::uint32_t j = 0; j < curr_octreenode->children[i].sample_indices.size(); ++j){
-                        std::uint32_t idx = curr_octreenode->children[i].sample_indices[j];
+                    for(std::uint32_t j = 0; j < curr_octreenode->children[i]->sample_indices.size(); ++j){
+                        std::uint32_t idx = curr_octreenode->children[i]->sample_indices[j];
                         if(already_sampled.find(idx) != already_sampled.end()){
                             valid_indices.push_back(idx);
                         }
@@ -1225,7 +1225,8 @@ std::uint32_t recursiveComplete(Scene* scene, KDTNode<ReconstructionSample>* sli
         //if some children have been fully sampled and others not, verify with sparse samples and if fail, then fully sample
         if(childbranch_fs && childbranch_ns){
             std::random_shuffle(valid_indices.begin(), valid_indices.end());
-            std::uint32_t num_validation_samples = std::max(1, std::min(valid_indices.size(), curr_octreenode->sample_indices.size() * validation_samples));
+            std::uint32_t num_validation_samples = std::max(1, 
+                std::min(valid_indices.size(), std::uint32_t(curr_octreenode->sample_indices.size() * validation_samples)));
 
             fully_sampled = false;
             for(std::uint32_t i = 0; i < num_validation_samples; ++i){
