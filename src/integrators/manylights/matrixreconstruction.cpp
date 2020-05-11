@@ -1209,7 +1209,7 @@ std::uint32_t recursiveComplete(Scene* scene, KDTNode<ReconstructionSample>* sli
                 if(!child_sampled){
                     for(std::uint32_t j = 0; j < curr_octreenode->children[i]->sample_indices.size(); ++j){
                         std::uint32_t idx = curr_octreenode->children[i]->sample_indices[j];
-                        if(already_sampled.find(idx) != already_sampled.end()){
+                        if(already_sampled.find(idx) == already_sampled.end()){
                             valid_indices.push_back(idx);
                         }
                     }
@@ -1230,7 +1230,6 @@ std::uint32_t recursiveComplete(Scene* scene, KDTNode<ReconstructionSample>* sli
             std::random_shuffle(valid_indices.begin(), valid_indices.end());
             std::uint32_t num_validation_samples = std::max(1u, 
                 std::min(std::uint32_t(valid_indices.size()), std::uint32_t(curr_octreenode->sample_indices.size() * validation_samples)));
-            std::cout << num_validation_samples << " " << curr_octreenode->sample_indices.size() << " " << valid_indices.size() << std::endl;
 
             fully_sampled = false;
             for(std::uint32_t i = 0; i < num_validation_samples; ++i){
