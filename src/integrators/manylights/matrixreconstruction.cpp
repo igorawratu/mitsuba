@@ -1156,7 +1156,8 @@ std::vector<std::pair<std::int32_t, std::vector<std::uint32_t>>> computeMinHammi
 
 std::uint32_t recursiveComplete(Scene* scene, KDTNode<ReconstructionSample>* slice, float min_dist, const VPL& vpl, 
     OTN<ReconstructionSample>* curr_octreenode, std::unordered_map<std::uint32_t, std::uint8_t>& sample_omega, 
-    const std::vector<std::uint8_t>& basis_col, bool flip_basis, const std::vector<std::uint32_t>& incorrect_indices){
+    const std::vector<std::uint8_t>& basis_col, bool flip_basis, const std::vector<std::uint32_t>& incorrect_indices, 
+    const std::unordered_set<std::uint32_t>& already_sampled, float validation_samples, bool& fully_sampled){
     //no error in subsection
     if(incorrect_indices.size() == 0){
         for(std::uint32_t i = 0; i < curr_octreenode->sample_indices.size(); ++i){
@@ -1166,22 +1167,10 @@ std::uint32_t recursiveComplete(Scene* scene, KDTNode<ReconstructionSample>* sli
             }
         }
 
+        fully_sampled = false;
+
         return 0;
     }
-   /* else{
-        std::uint32_t samples_taken = 0;
-        for(std::uint32_t i = 0; i < curr_octreenode->sample_indices.size(); ++i){
-            std::uint32_t idx = curr_octreenode->sample_indices[i];
-            ReconstructionSample& scene_sample = slice->sample(idx);
-
-            if(sample_omega.find(idx) == sample_omega.end()){
-                sample_omega[idx] = sampleVisibility(scene, scene_sample.its, vpl, min_dist) ? 1 : 0;
-                samples_taken++;
-            }
-        }
-
-        return samples_taken;
-    }*/
 
     std::uint32_t num_children = 0;
     for(std::uint32_t i = 0; i < curr_octreenode->children.size(); ++i){
@@ -1203,14 +1192,63 @@ std::uint32_t recursiveComplete(Scene* scene, KDTNode<ReconstructionSample>* sli
             children_incorrect_indices[child_idx].push_back(incorrect_indices[i]);
         }
 
+        bool childbranch_fs = false;
+        bool childbranch_ns = false;
+        std::vector<std::uint32_t> valid_indices;
+
         for(std::uint32_t i = 0; i < 8; ++i){
             if(curr_octreenode->children[i] != nullptr){
-                samples_taken += recursiveComplete(scene, slice, min_dist, vpl, 
-                    curr_octreenode->children[i].get(), sample_omega, basis_col, flip_basis, children_incorrect_indices[i]);
+                bool child_sampled;
+                samples_taken = recursiveComplete(scene, slice, min_dist, vpl, 
+                    curr_octreenode->children[i].get(), sample_omega, basis_col, flip_basis, children_incorrect_indices[i], already_sampled,
+                    validation_samples, child_sampled);
+                
+                childbranch_fs |= child_sampled;
+                childbranch_ns |= !child_sampled;
+
+                if(!child_sampled){
+                    for(std::uint32_t j = 0; j < curr_octreenode->children[i].sample_indices.size(); ++j){
+                        std::uint32_t idx = curr_octreenode->children[i].sample_indices[j];
+                        if(already_sampled.find(idx) != already_sampled.end()){
+                            valid_indices.push_back(idx);
+                        }
+                    }
+                }
             }
             else{
                 if(children_incorrect_indices[i].size() > 0){
                     std::cout << "This should never happen" << std::endl;
+                }
+            }
+        }
+
+        //if some children have been fully sampled and others not, verify with sparse samples and if fail, then fully sample
+        if(childbranch_fs && childbranch_ns){
+            std::random_shuffle(valid_indices.begin(), valid_indices.end());
+            std::uint32_t num_validation_samples = std::max(1, std::min(valid_indices.size(), curr_octreenode->sample_indices.size() * validation_samples));
+
+            fully_sampled = false;
+            for(std::uint32_t i = 0; i < num_validation_samples; ++i){
+                std::uint32_t idx = valid_indices[i];
+
+                ReconstructionSample& scene_sample = slice->sample(idx);
+                std::uint8_t result = sampleVisibility(scene, scene_sample.its, vpl, min_dist) ? 1 : 0;
+
+                if(result != sample_omega[idx]){
+                    fully_sampled = true;
+                    break;
+                }
+            }
+
+            if(fully_sampled){
+                for(std::uint32_t i = 0; i < valid_indices.size(); ++i){
+                    std::uint32_t idx = valid_indices[i];
+
+                    if(already_sampled.find(idx) == already_sampled.end()){
+                        ReconstructionSample& scene_sample = slice->sample(idx);
+                        sample_omega[idx] = sampleVisibility(scene, scene_sample.its, vpl, min_dist) ? 1 : 0;
+                        samples_taken++;
+                    }
                 }
             }
         }
@@ -1226,6 +1264,8 @@ std::uint32_t recursiveComplete(Scene* scene, KDTNode<ReconstructionSample>* sli
                 samples_taken++;
             }
         }
+
+        fully_sampled = true;
     }
 
     return samples_taken;
@@ -1306,8 +1346,9 @@ std::uint32_t adaptiveMatrixReconstructionBRecursive(
                     sampled_indices.insert(iter->first);
                 }
 
+                bool fully_sampled;
                 samples_for_col += recursiveComplete(scene, slice, min_dist, vpls[order[i]], slice->octree_root.get(), sample_omega, 
-                    basis[basis_idx], flip, herrs[sel].second);
+                    basis[basis_idx], flip, herrs[sel].second, sampled_indices, 0.05f, fully_sampled);
 
                 for(std::uint32_t j = 0; j < col_to_add.size(); ++j){
                     col_to_add[j] = sample_omega[j];   
