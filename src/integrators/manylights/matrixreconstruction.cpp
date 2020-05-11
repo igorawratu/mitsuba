@@ -1227,6 +1227,7 @@ std::uint32_t recursiveComplete(Scene* scene, KDTNode<ReconstructionSample>* sli
         }
         //if some children have been fully sampled and others not, verify with sparse samples and if fail, then fully sample
         else if(childbranch_fs && childbranch_ns){
+            std::cout << "verifying" << std::endl;
             std::random_shuffle(valid_indices.begin(), valid_indices.end());
             std::uint32_t num_validation_samples = std::max(1u, 
                 std::min(std::uint32_t(valid_indices.size()), std::uint32_t(curr_octreenode->sample_indices.size() * validation_samples)));
