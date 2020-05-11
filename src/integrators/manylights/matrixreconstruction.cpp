@@ -1227,7 +1227,6 @@ std::uint32_t recursiveComplete(Scene* scene, KDTNode<ReconstructionSample>* sli
         }
         //if some children have been fully sampled and others not, verify with sparse samples and if fail, then fully sample
         else if(childbranch_fs && childbranch_ns){
-            std::cout << "verifying" << std::endl;
             std::random_shuffle(valid_indices.begin(), valid_indices.end());
             std::uint32_t num_validation_samples = std::max(1u, 
                 std::min(std::uint32_t(valid_indices.size()), std::uint32_t(curr_octreenode->sample_indices.size() * validation_samples)));
@@ -1353,7 +1352,7 @@ std::uint32_t adaptiveMatrixReconstructionBRecursive(
 
                 bool fully_sampled;
                 samples_for_col += recursiveComplete(scene, slice, min_dist, vpls[order[i]], slice->octree_root.get(), sample_omega, 
-                    basis[basis_idx], flip, herrs[sel].second, sampled_indices, 0.05f, fully_sampled);
+                    basis[basis_idx], flip, herrs[sel].second, sampled_indices, 0.5f, fully_sampled);
 
                 for(std::uint32_t j = 0; j < col_to_add.size(); ++j){
                     col_to_add[j] = sample_omega[j];   
