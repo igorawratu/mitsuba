@@ -1320,7 +1320,7 @@ std::uint32_t adaptiveMatrixReconstructionBRecursive(
                 }
 
                 bool verification_passed = true;
-                if(num_verification_samples > 0){
+                if(num_verification_samples > 0 && herrs[sel].second.size() == 0){
                     std::unordered_set<std::uint32_t> sampled_indices(sampled.begin(), sampled.end());
                     std::vector<std::uint32_t> ver_indices;
 
@@ -1863,7 +1863,7 @@ std::tuple<float, float, float, float, float, float> recover(KDTNode<Reconstruct
             }
             else{
                 std::vector<std::uint8_t> bin_vis(slice->sample_indices.size() * quadranted_vpls[i].size(), 0);
-                if(false){
+                if(true){
                     samples = adaptiveMatrixReconstructionBRecursive(bin_vis, scene, slice,
                         quadranted_vpls[i], general_params.min_dist, general_params.sample_perc, 
                         general_params.max_sample_perc, general_params.sample_inc, rng, 
@@ -2243,7 +2243,7 @@ std::tuple<std::uint64_t, std::uint64_t> recoverHW(KDTNode<ReconstructionSample>
 
         if(bin_vis){
             std::vector<std::uint8_t> bv(slice->sample_indices.size() * quadranted_vpls[i].size(), 0);
-            if(false){
+            if(true){
                 samples = adaptiveMatrixReconstructionBRecursive(bv, scene, slice, 
                     quadranted_vpls[i], min_dist, sample_perc, max_sample_perc, sample_inc, rng, 
                     basis_rank, cluster_contribs);
