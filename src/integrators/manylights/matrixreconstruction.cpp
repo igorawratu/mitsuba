@@ -1320,7 +1320,6 @@ std::uint32_t adaptiveMatrixReconstructionBRecursive(
                 }
 
                 bool verification_passed = true;
-                std::cout << num_verification_samples << std::endl;
                 if(num_verification_samples > 0){
                     std::unordered_set<std::uint32_t> sampled_indices(sampled.begin(), sampled.end());
                     std::vector<std::uint32_t> ver_indices;
@@ -1333,6 +1332,7 @@ std::uint32_t adaptiveMatrixReconstructionBRecursive(
                         }
                     }
 
+                    sample_omega.clear();
                     sampleColB(scene, slice, vpls, order[i], min_dist, num_verification_samples, rng, sample_omega, 
                         probabilities, ver_indices, false);
 
@@ -1347,6 +1347,7 @@ std::uint32_t adaptiveMatrixReconstructionBRecursive(
                         sample_perc = std::min(max_sample_perc, sample_perc + verification_inc);
                         num_samples = num_rows * sample_perc + 0.5f;
 
+                        sample_omega.clear();
                         sampleColB(scene, slice, vpls, order[i], min_dist, num_rows, rng, sample_omega, 
                             probabilities, sampled, true);
                         samples_for_col = num_rows;
