@@ -1162,7 +1162,7 @@ std::uint32_t recursiveComplete(Scene* scene, KDTNode<ReconstructionSample>* sli
 
     //no error in subsection that has been sampled
     if(incorrect_indices.size() == 0){
-        if(sampled_indices.size() > 0){
+        /*if(sampled_indices.size() > 0)*/{
             for(std::uint32_t i = 0; i < curr_octreenode->sample_indices.size(); ++i){
                 std::uint32_t idx = curr_octreenode->sample_indices[i];
                 if(sample_omega.find(idx) == sample_omega.end()){
@@ -1172,7 +1172,7 @@ std::uint32_t recursiveComplete(Scene* scene, KDTNode<ReconstructionSample>* sli
 
         }
         //section has not been sampled, fully sample to be safe as this only happens when there is an error in one of its siblings
-        else{
+        /*else{
             for(std::uint32_t i = 0; i < curr_octreenode->sample_indices.size(); ++i){
                 std::uint32_t idx = curr_octreenode->sample_indices[i];
                 if(sample_omega.find(idx) == sample_omega.end()){
@@ -1181,7 +1181,7 @@ std::uint32_t recursiveComplete(Scene* scene, KDTNode<ReconstructionSample>* sli
                     samples_taken++;
                 }
             }
-        }
+        }*/
 
         return samples_taken;
     }
