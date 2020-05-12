@@ -1113,11 +1113,11 @@ std::vector<std::pair<std::uint32_t, bool>> getMatchingCols(const std::vector<st
     return matching_cols;
 }
 
-std::vector<std::pair<std::int32_t, std::vector<std::uint32_t>>> computeMinHammingErrs(const std::vector<std::vector<std::uint8_t>>& cols, 
-    const std::unordered_map<std::uint32_t, std::uint8_t>& sampled_vals){
+std::tuple<std::uint32_t, bool, std::vector<std::uint32_t>> computeMinHammingErr(const std::vector<std::vector<std::uint8_t>>& cols, 
+    const std::unordered_map<std::uint32_t, std::uint8_t>& sampled_vals, std::mt19937& rng){
     
-    std::vector<std::pair<std::int32_t, std::vector<std::uint32_t>>> min_hamming_distances;
     std::uint32_t min_dist = std::numeric_limits<std::uint32_t>::max();
+    std::vector<std::int32_t> indices;
 
     bool match_added = false;
 
@@ -1134,49 +1134,39 @@ std::vector<std::pair<std::int32_t, std::vector<std::uint32_t>>> computeMinHammi
             }
         }
 
-        /*if(herr.size() <= min_dist){
-            if(herr.size() < min_dist){
-                min_dist = herr.size();
-                min_hamming_distances.clear();
-            }           
+        if(herr <= min_dist){
+            if(herr < min_dist){
+                indices.clear();
+                min_dist = herr;
+            }
 
-            min_hamming_distances.push_back(std::make_pair(i + 1, herr));
+            indices.push_back(i + 1);
         }
 
-        if(oerr.size() <= min_dist){
-            if(oerr.size() < min_dist){
-                min_dist = oerr.size();
-                min_hamming_distances.clear();
-            }           
-
-            min_hamming_distances.push_back(std::make_pair(-(i + 1), oerr));
-        }*/
-
-        std::vector<std::uint32_t> errs;
-
-        if(herr == 0 || oerr == 0){
-            if(!match_added){
-                match_added = true;
-                min_hamming_distances.clear();
-            }
-            std::uint32_t idx = i + 1;
-            if(oerr == 0){
-                idx = -idx;
+        if(oerr <= min_dist){
+            if(oerr < min_dist){
+                indices.clear();
+                min_dist = oerr;
             }
 
-            min_hamming_distances.push_back(std::make_pair(idx, errs));
-        }
-        else{
-            if(!match_added){
-                std::uint32_t idx = i + 1;
-                errs.push_back(0);
-
-                min_hamming_distances.push_back(std::make_pair(idx, errs));
-            }
+            indices.push_back(-(i + 1));
         }
     }
 
-    return min_hamming_distances;
+    std::uniform_int_distribution<std::uint32_t> select_col(0, indices.size() - 1);
+    std::uint32_t sel = select_col(rng);
+    std::uint32_t basis_idx = std::abs(indices[sel]) - 1;
+    bool flip = indices[sel] < 0;
+
+    std::vector<std::uint32_t> error_indices;
+    for(auto iter = sampled_vals.begin(); iter != sampled_vals.end(); ++iter){
+        std::uint8_t val = flip ? (cols[basis_idx][iter->first] + 1) % 2 : cols[basis_idx][iter->first];
+        if(val != iter->second){
+            error_indices.push_back(iter->first);
+        }
+    }
+
+    return std::make_tuple(basis_idx, flip, error_indices);
 }
 
 std::uint32_t recursiveComplete(Scene* scene, KDTNode<ReconstructionSample>* slice, float min_dist, const VPL& vpl, 
@@ -1332,15 +1322,13 @@ std::uint32_t adaptiveMatrixReconstructionBRecursive(
                 }
             }
             else{
-                min_err_cols = computeMinHammingErrs(basis, sample_omega);
+                std::uint32_t basis_index;
+                bool flip;
+                std::vector<std::uint32_t> error_indices;
 
-                std::uniform_int_distribution<std::uint32_t> select_col(0, min_err_cols.size() - 1);
-                std::uint32_t sel = select_col(rng);
-                std::uint32_t basis_index = std::abs(min_err_cols[sel].first) - 1;
-                bool flip = min_err_cols[sel].first < 0;
-                std::uint32_t num_errs = min_err_cols[sel].second.size();
+                std::tie(basis_index, flip, error_indices) = computeMinHammingErr(basis, sample_omega, rng);
 
-                if(num_errs == 0){
+                if(error_indices.size() == 0){
                     //opposite direction so we flip
                     col_to_add = basis[basis_index];
                     if(flip){
