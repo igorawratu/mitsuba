@@ -1123,7 +1123,7 @@ std::vector<std::pair<std::int32_t, std::vector<std::uint32_t>>> computeMinHammi
         std::vector<std::uint32_t> herr;
         std::vector<std::uint32_t> oerr;
 
-        for(auto iter = sampled_vals.begin(); iter != sampled_vals.end(); ++iter){
+        /*for(auto iter = sampled_vals.begin(); iter != sampled_vals.end(); ++iter){
             if(iter->second == cols[i][iter->first]){
                 oerr.push_back(iter->first);
             }
@@ -1148,6 +1148,30 @@ std::vector<std::pair<std::int32_t, std::vector<std::uint32_t>>> computeMinHammi
             }           
 
             min_hamming_distances.push_back(std::make_pair(-(i + 1), oerr));
+        }*/
+
+        for(auto iter = sampled_vals.begin(); iter != sampled_vals.end(); ++iter){
+            if(iter->second == cols[i][iter->first]){
+                opposite = false;
+            }
+            else{
+                matching = false;
+            }
+        }
+
+        if(matching || opposite){
+            idx = i + 1;
+            if(opposite){
+                idx = -idx;
+            }
+
+            min_hamming_distances.push_back(std::make_pair(idx, herr));
+        }
+        else{
+            idx = i + 1;
+            herr.push_back(0);
+
+            min_hamming_distances.push_back(std::make_pair(idx, herr));
         }
     }
 
@@ -1300,7 +1324,6 @@ std::uint32_t adaptiveMatrixReconstructionBRecursive(
             samples_for_col = num_samples;
             
             std::vector<std::pair<std::int32_t, std::vector<std::uint32_t>>> min_err_cols;
-            std::vector<std::pair<std::uint32_t, bool>> matching_cols;
 
             if(sample_omega.size() == col_to_add.size()){
                 for(std::uint32_t j = 0; j < col_to_add.size(); ++j){
@@ -1308,22 +1331,15 @@ std::uint32_t adaptiveMatrixReconstructionBRecursive(
                 }
             }
             else{
-                //min_err_cols = computeMinHammingErrs(basis, sample_omega);
-                matching_cols = getMatchingCols(basis, sample_omega);
+                min_err_cols = computeMinHammingErrs(basis, sample_omega);
 
-                /*std::uniform_int_distribution<std::uint32_t> select_col(0, min_err_cols.size() - 1);
+                std::uniform_int_distribution<std::uint32_t> select_col(0, min_err_cols.size() - 1);
                 std::uint32_t sel = select_col(rng);
                 std::uint32_t basis_index = std::abs(min_err_cols[sel].first) - 1;
                 bool flip = min_err_cols[sel].first < 0;
-                std::uint32_t num_errs = min_err_cols[sel].second.size();*/
+                std::uint32_t num_errs = min_err_cols[sel].second.size();
 
-                
-
-                if/*(num_errs == 0)*/(matching_cols.size() > 0){
-                    std::uniform_int_distribution<std::uint32_t> select_col(0, matching_cols.size() - 1);
-                    std::uint32_t sel = select_col(rng);
-                    std::uint32_t basis_index = matching_cols[sel].first;
-                    bool flip = !matching_cols[sel].second;
+                if(num_errs == 0){
                     //opposite direction so we flip
                     col_to_add = basis[basis_index];
                     if(flip){
