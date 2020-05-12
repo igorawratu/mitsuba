@@ -1122,22 +1122,19 @@ std::vector<std::pair<std::int32_t, std::vector<std::uint32_t>>> computeMinHammi
     bool match_added = false;
 
     for(std::uint32_t i = 0; i < cols.size(); ++i){
-        std::vector<std::uint32_t> herr;
-        std::vector<std::uint32_t> oerr;
+        std::uint32_t herr = 0;
+        std::uint32_t oerr = 0;
 
-        bool matching = true;
-        bool opposite = true;
-
-        /*for(auto iter = sampled_vals.begin(); iter != sampled_vals.end(); ++iter){
+        for(auto iter = sampled_vals.begin(); iter != sampled_vals.end(); ++iter){
             if(iter->second == cols[i][iter->first]){
-                oerr.push_back(iter->first);
+                oerr++;
             }
             else{
-                herr.push_back(iter->first);
+                herr++;
             }
         }
 
-        if(herr.size() <= min_dist){
+        /*if(herr.size() <= min_dist){
             if(herr.size() < min_dist){
                 min_dist = herr.size();
                 min_hamming_distances.clear();
@@ -1155,22 +1152,13 @@ std::vector<std::pair<std::int32_t, std::vector<std::uint32_t>>> computeMinHammi
             min_hamming_distances.push_back(std::make_pair(-(i + 1), oerr));
         }*/
 
-        for(auto iter = sampled_vals.begin(); iter != sampled_vals.end(); ++iter){
-            if(iter->second == cols[i][iter->first]){
-                opposite = false;
-            }
-            else{
-                matching = false;
-            }
-        }
-
-        if(matching || opposite){
+        if(herr == 0 || oerr == 0){
             if(!match_added){
                 match_added = true;
                 min_hamming_distances.clear();
             }
             std::uint32_t idx = i + 1;
-            if(opposite){
+            if(oerr == 0){
                 idx = -idx;
             }
 
