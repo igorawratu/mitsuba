@@ -1178,7 +1178,7 @@ std::pair<std::int32_t, std::vector<std::uint32_t>> computeMinHammingErr(const s
         }
     }
 
-    return std::make_pair(sel, incorrect_indices);
+    return std::make_pair(min_hamming_basis[sel], incorrect_indices);
 }
 
 std::uint32_t recursiveComplete(Scene* scene, KDTNode<ReconstructionSample>* slice, float min_dist, const VPL& vpl, 
