@@ -1163,7 +1163,7 @@ std::vector<std::pair<std::int32_t, std::vector<std::uint32_t>>> computeMinHammi
         }
 
         if(matching || opposite){
-            std::uint32_t idx = i + 1;
+            std::uint32_t idx = i;
             if(opposite){
                 idx = -idx;
             }
@@ -1171,7 +1171,7 @@ std::vector<std::pair<std::int32_t, std::vector<std::uint32_t>>> computeMinHammi
             min_hamming_distances.push_back(std::make_pair(idx, herr));
         }
         else{
-            std::uint32_t idx = i + 1;
+            std::uint32_t idx = i;
             herr.push_back(0);
 
             min_hamming_distances.push_back(std::make_pair(idx, herr));
