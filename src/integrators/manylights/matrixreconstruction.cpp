@@ -1162,7 +1162,7 @@ std::uint32_t recursiveComplete(Scene* scene, KDTNode<ReconstructionSample>* sli
 
     //no error in subsection that has been sampled
     if(incorrect_indices.size() == 0){
-        if(sampled_indices.size() > 0){
+        /*if(sampled_indices.size() > 0)*/{
             for(std::uint32_t i = 0; i < curr_octreenode->sample_indices.size(); ++i){
                 std::uint32_t idx = curr_octreenode->sample_indices[i];
                 if(sample_omega.find(idx) == sample_omega.end()){
@@ -1172,7 +1172,7 @@ std::uint32_t recursiveComplete(Scene* scene, KDTNode<ReconstructionSample>* sli
 
         }
         //section has not been sampled, fully sample to be safe as this only happens when there is an error in one of its siblings
-        else{
+        /*else{
             for(std::uint32_t i = 0; i < curr_octreenode->sample_indices.size(); ++i){
                 std::uint32_t idx = curr_octreenode->sample_indices[i];
                 if(sample_omega.find(idx) == sample_omega.end()){
@@ -1181,7 +1181,7 @@ std::uint32_t recursiveComplete(Scene* scene, KDTNode<ReconstructionSample>* sli
                     samples_taken++;
                 }
             }
-        }
+        }*/
 
         return samples_taken;
     }
@@ -1207,21 +1207,16 @@ std::uint32_t recursiveComplete(Scene* scene, KDTNode<ReconstructionSample>* sli
             children_incorrect_indices[child_idx].push_back(incorrect_indices[i]);
         }
 
-        for(std::uint32_t i = 0; i < sampled_indices.size(); ++i){
+        /*for(std::uint32_t i = 0; i < sampled_indices.size(); ++i){
             Vector3f p(slice->sample(sampled_indices[i]).its.p);
             std::uint32_t child_idx = curr_octreenode->getChildIndex(p, midpoint);
             children_sampled_indices[child_idx].push_back(sampled_indices[i]);
-        }
+        }*/
 
         for(std::uint32_t i = 0; i < 8; ++i){
             if(curr_octreenode->children[i] != nullptr){
                 samples_taken += recursiveComplete(scene, slice, min_dist, vpl, 
-                    curr_octreenode->children[i].get(), sample_omega, basis_col, flip_basis, children_incorrect_indices[i], children_sampled_indices[i]);
-            }
-            else{
-                if(children_incorrect_indices[i].size() > 0 || children_sampled_indices[i].size() > 0){
-                    std::cout << "This should never happen" << std::endl;
-                }
+                    curr_octreenode->children[i].get(), sample_omega, basis_col, flip_basis, children_incorrect_indices[i], /*children_sampled_indices[i]*/sampled_indices);
             }
         }
     }
