@@ -1376,7 +1376,7 @@ std::uint32_t adaptiveMatrixReconstructionBRecursive(
                     }
                 }
                 else{
-                    samples_for_col += recursiveComplete(scene, slice, min_dist, vpl[order[i]], 
+                    samples_for_col += recursiveComplete(scene, slice, min_dist, vpls[order[i]], 
                         slice->octree_root.get(), sample_omega, basis[basis_index], flip, error_indices, 
                         sampled);
 
