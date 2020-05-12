@@ -1344,6 +1344,7 @@ std::uint32_t adaptiveMatrixReconstructionBRecursive(
                 std::uint32_t sel = select_col(rng);
                 
                 bool flip = herrs[sel].first < 0;
+                std::cout << herrs[sel].second.size() << " " << num_samples << std::endl;
                 std::uint32_t basis_idx = std::abs(herrs[sel].first) - 1;
                 std::unordered_set<std::uint32_t> sampled_indices;
                 for(auto iter = sample_omega.begin(); iter != sample_omega.end(); ++iter){
