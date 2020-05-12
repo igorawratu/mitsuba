@@ -1113,7 +1113,7 @@ std::vector<std::pair<std::uint32_t, bool>> getMatchingCols(const std::vector<st
     return matching_cols;
 }
 
-std::pair<std::uint32_t, bool, std::vector<std::uint32_t>> computeMinHammingErr(const std::vector<std::vector<std::uint8_t>>& cols, 
+std::tuple<std::uint32_t, bool, std::vector<std::uint32_t>> computeMinHammingErr(const std::vector<std::vector<std::uint8_t>>& cols, 
     std::unordered_map<std::uint32_t, std::uint8_t>& sampled_vals){
     
     std::vector<std::int32_t> min_hamming_basis;
