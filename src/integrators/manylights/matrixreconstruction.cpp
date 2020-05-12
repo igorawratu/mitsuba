@@ -1152,6 +1152,8 @@ std::vector<std::pair<std::int32_t, std::vector<std::uint32_t>>> computeMinHammi
             min_hamming_distances.push_back(std::make_pair(-(i + 1), oerr));
         }*/
 
+        std::vector<std::uint32_t> errs;
+
         if(herr == 0 || oerr == 0){
             if(!match_added){
                 match_added = true;
@@ -1162,12 +1164,12 @@ std::vector<std::pair<std::int32_t, std::vector<std::uint32_t>>> computeMinHammi
                 idx = -idx;
             }
 
-            min_hamming_distances.push_back(std::make_pair(idx, herr));
+            min_hamming_distances.push_back(std::make_pair(idx, errs));
         }
         else{
             if(!match_added){
                 std::uint32_t idx = i + 1;
-                herr.push_back(0);
+                errs.push_back(0);
 
                 min_hamming_distances.push_back(std::make_pair(idx, herr));
             }
