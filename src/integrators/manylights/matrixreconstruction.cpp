@@ -1323,7 +1323,7 @@ std::uint32_t adaptiveMatrixReconstructionBRecursive(
                     std::uniform_int_distribution<std::uint32_t> select_col(0, matching_cols.size() - 1);
                     std::uint32_t sel = select_col(rng);
                     std::uint32_t basis_index = matching_cols[sel].first;
-                    bool flip = matching_cols[sel].second;
+                    bool flip = !matching_cols[sel].second;
                     //opposite direction so we flip
                     col_to_add = basis[basis_index];
                     if(flip){
