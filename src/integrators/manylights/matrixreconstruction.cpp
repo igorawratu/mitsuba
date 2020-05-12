@@ -1114,7 +1114,7 @@ std::vector<std::pair<std::uint32_t, bool>> getMatchingCols(const std::vector<st
 }
 
 std::pair<std::int32_t, std::vector<std::uint32_t>> computeMinHammingErr(const std::vector<std::vector<std::uint8_t>>& cols, 
-    const std::unordered_map<std::uint32_t, std::uint8_t>& sampled_vals){
+    std::unordered_map<std::uint32_t, std::uint8_t>& sampled_vals){
     
     std::vector<std::int32_t> min_hamming_basis;
     std::uint32_t min_dist = std::numeric_limits<std::uint32_t>::max();
