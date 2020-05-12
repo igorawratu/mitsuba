@@ -1113,7 +1113,7 @@ std::vector<std::pair<std::uint32_t, bool>> getMatchingCols(const std::vector<st
     return matching_cols;
 }
 
-std::pair<std::int32_t, std::vector<std::uint32_t> computeMinHammingErr(const std::vector<std::vector<std::uint8_t>>& cols, 
+std::pair<std::int32_t, std::vector<std::uint32_t>> computeMinHammingErr(const std::vector<std::vector<std::uint8_t>>& cols, 
     const std::unordered_map<std::uint32_t, std::uint8_t>& sampled_vals){
     
     std::vector<std::int32_t> min_hamming_basis;
@@ -1332,7 +1332,7 @@ std::uint32_t adaptiveMatrixReconstructionBRecursive(
                 std::uint32_t selected_basis;
                 std::vector<std::uint32_t> incorrect_indices;
 
-                std::tie(selected_basis, incorrect_indices) = computeMinHammingErrs(basis, sample_omega);
+                std::tie(selected_basis, incorrect_indices) = computeMinHammingErr(basis, sample_omega);
 
                 bool flip = selected_basis < 0;
                 std::uint32_t basis_idx = std::abs(selected_basis) - 1;
