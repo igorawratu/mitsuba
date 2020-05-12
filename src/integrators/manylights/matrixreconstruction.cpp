@@ -1215,7 +1215,6 @@ std::uint32_t recursiveComplete(Scene* scene, KDTNode<ReconstructionSample>* sli
 
         for(std::uint32_t i = 0; i < 8; ++i){
             if(curr_octreenode->children[i] != nullptr){
-                bool child_sampled;
                 samples_taken += recursiveComplete(scene, slice, min_dist, vpl, 
                     curr_octreenode->children[i].get(), sample_omega, basis_col, flip_basis, children_incorrect_indices[i], children_sampled_indices[i]);
             }
@@ -1237,8 +1236,6 @@ std::uint32_t recursiveComplete(Scene* scene, KDTNode<ReconstructionSample>* sli
                 samples_taken++;
             }
         }
-
-        fully_sampled = true;
     }
 
     return samples_taken;
@@ -1319,9 +1316,8 @@ std::uint32_t adaptiveMatrixReconstructionBRecursive(
                     sampled_indices.insert(iter->first);
                 }
 
-                bool fully_sampled;
                 samples_for_col += recursiveComplete(scene, slice, min_dist, vpls[order[i]], slice->octree_root.get(), sample_omega, 
-                    basis[basis_idx], flip, herrs[sel].second, sampled_indices, 0.05f, fully_sampled);
+                    basis[basis_idx], flip, herrs[sel].second, sampled_indices, sampled);
 
                 for(std::uint32_t j = 0; j < col_to_add.size(); ++j){
                     col_to_add[j] = sample_omega[j];   
