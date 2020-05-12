@@ -1149,6 +1149,8 @@ std::vector<std::pair<std::int32_t, std::vector<std::uint32_t>>> computeMinHammi
 
             min_hamming_distances.push_back(std::make_pair(-(i + 1), oerr));
         }
+
+        break;
     }
 
     return min_hamming_distances;
