@@ -1113,72 +1113,45 @@ std::vector<std::pair<std::uint32_t, bool>> getMatchingCols(const std::vector<st
     return matching_cols;
 }
 
-std::tuple<std::uint32_t, bool, std::vector<std::uint32_t>> computeMinHammingErr(const std::vector<std::vector<std::uint8_t>>& cols, 
-    std::unordered_map<std::uint32_t, std::uint8_t>& sampled_vals){
+std::vector<std::pair<std::int32_t, std::vector<std::uint32_t>>> computeMinHammingErrs(const std::vector<std::vector<std::uint8_t>>& cols, 
+    const std::unordered_map<std::uint32_t, std::uint8_t>& sampled_vals){
     
-    std::vector<std::int32_t> min_hamming_basis;
+    std::vector<std::pair<std::int32_t, std::vector<std::uint32_t>>> min_hamming_distances;
     std::uint32_t min_dist = std::numeric_limits<std::uint32_t>::max();
 
-    std::vector<std::uint32_t> sampled_indices;
-
-    for(auto const& kv: sampled_vals){
-        sampled_indices.push_back(kv.first);
-    }
-
     for(std::uint32_t i = 0; i < cols.size(); ++i){
-        std::uint32_t herr = 0;
-        std::uint32_t oerr = 0;
+        std::vector<std::uint32_t> herr;
+        std::vector<std::uint32_t> oerr;
 
-        for(std::uint32_t j = 0; j < sampled_indices.size(); ++j){
-            auto& idx = sampled_indices[j];
-            if(sampled_vals[idx] == cols[i][idx]){
-                oerr++;
+        for(auto iter = sampled_vals.begin(); iter != sampled_vals.end(); ++iter){
+            if(iter->second == cols[i][iter->first]){
+                oerr.push_back(iter->first);
             }
             else{
-                herr++;
+                herr.push_back(iter->first);
             }
         }
 
-        std::uint32_t smaller_dist = std::min(herr, oerr);
+        if(herr.size() <= min_dist){
+            if(herr.size() < min_dist){
+                min_dist = herr.size();
+                min_hamming_distances.clear();
+            }           
 
-        if(smaller_dist <= min_dist){
-            if(smaller_dist < min_dist){
-                min_hamming_basis.clear();
-                min_dist = smaller_dist;
-            }
-            
-            if(herr <= min_dist){
-                min_hamming_basis.push_back(i + 1);
-            }
-
-            if(oerr <= min_dist){
-                min_hamming_basis.push_back(-(i + 1));
-            }
+            min_hamming_distances.push_back(std::make_pair(i + 1, herr));
         }
-    }
 
-    assert(min_hamming_basis.size() > 0);
+        if(oerr.size() <= min_dist){
+            if(oerr.size() < min_dist){
+                min_dist = oerr.size();
+                min_hamming_distances.clear();
+            }           
 
-    std::uint32_t sel = rand() % min_hamming_basis.size();
-
-    std::uint32_t selected_basis = std::abs(min_hamming_basis[sel]) - 1;
-    bool flip = min_hamming_basis[sel] < 0;
-
-    std::vector<std::uint32_t> incorrect_indices;
-
-    for(std::uint32_t i = 0; i < sampled_indices.size(); ++i){
-        auto& idx = sampled_indices[i];
-        std::uint8_t v = cols[selected_basis][idx];
-        if(flip){
-            v = (v + 1) % 2;
-        } 
-
-        if(sampled_vals[idx] != v){
-            incorrect_indices.push_back(idx);
+            min_hamming_distances.push_back(std::make_pair(-(i + 1), oerr));
         }
     }
 
-    return std::make_tuple(selected_basis, flip, incorrect_indices);
+    return min_hamming_distances;
 }
 
 std::uint32_t recursiveComplete(Scene* scene, KDTNode<ReconstructionSample>* slice, float min_dist, const VPL& vpl, 
@@ -1188,7 +1161,7 @@ std::uint32_t recursiveComplete(Scene* scene, KDTNode<ReconstructionSample>* sli
     std::uint32_t samples_taken = 0;
 
     //no error in subsection that has been sampled
-    if(incorrect_indices.size() == 0){
+    if(/*incorrect_indices.size() == 0*/true){
         if(sampled_indices.size() > 0){
             for(std::uint32_t i = 0; i < curr_octreenode->sample_indices.size(); ++i){
                 std::uint32_t idx = curr_octreenode->sample_indices[i];
@@ -1331,13 +1304,15 @@ std::uint32_t adaptiveMatrixReconstructionBRecursive(
                 }
             }
             else{
-                std::uint32_t basis_idx;
-                bool flip;
-                std::vector<std::uint32_t> incorrect_indices;
+                std::vector<std::pair<std::int32_t, std::vector<std::uint32_t>>> herrs = computeMinHammingErrs(basis, sample_omega);
 
-                std::tie(basis_idx, flip, incorrect_indices) = computeMinHammingErr(basis, sample_omega);
+                std::uniform_int_distribution<std::uint32_t> select_col(0, herrs.size() - 1);
+                std::uint32_t sel = select_col(rng);
+                
+                bool flip = herrs[sel].first < 0;
+                std::uint32_t basis_idx = std::abs(herrs[sel].first) - 1;
 
-                if(incorrect_indices.size() == 0){
+                if(herrs[sel].second.size() == 0){
                     for(std::uint32_t j = 0; j < col_to_add.size(); ++j){
                         col_to_add[j] = flip ? (basis[basis_idx][j] + 1) % 2 : basis[basis_idx][j];   
                     }
@@ -1385,7 +1360,7 @@ std::uint32_t adaptiveMatrixReconstructionBRecursive(
                 }
                 else{
                     samples_for_col += recursiveComplete(scene, slice, min_dist, vpls[order[i]], slice->octree_root.get(), sample_omega, 
-                        basis[basis_idx], flip, incorrect_indices, sampled);
+                        basis[basis_idx], flip, herrs[sel].second, sampled);
 
                     for(std::uint32_t j = 0; j < col_to_add.size(); ++j){
                         col_to_add[j] = sample_omega[j];
