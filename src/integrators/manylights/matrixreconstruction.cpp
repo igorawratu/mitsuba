@@ -1358,7 +1358,7 @@ std::uint32_t adaptiveMatrixReconstructionBRecursive(
                     col_to_add[j] = sample_omega[j];   
                 }
 
-                if(num_verification_samples > 0){
+                if(num_verification_samples > 0 && herrs[sel].second.size() == 0){
                     std::vector<std::uint32_t> ver_indices;
 
                     std::uniform_int_distribution<std::uint32_t> gen_row(0, num_rows - 1);
