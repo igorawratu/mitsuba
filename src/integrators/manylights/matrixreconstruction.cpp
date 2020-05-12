@@ -1304,15 +1304,25 @@ std::uint32_t adaptiveMatrixReconstructionBRecursive(
                 }
             }
             else{
-                std::vector<std::pair<std::int32_t, std::vector<std::uint32_t>>> herrs = computeMinHammingErrs(basis, sample_omega);
+                //std::vector<std::pair<std::int32_t, std::vector<std::uint32_t>>> herrs = computeMinHammingErrs(basis, sample_omega);
 
-                std::uniform_int_distribution<std::uint32_t> select_col(0, herrs.size() - 1);
+                auto matching_cols = getMatchingCols(basis, sample_omega);
+
+                
+
+                /*std::uniform_int_distribution<std::uint32_t> select_col(0, herrs.size() - 1);
                 std::uint32_t sel = select_col(rng);
                 
                 bool flip = herrs[sel].first < 0;
-                std::uint32_t basis_idx = std::abs(herrs[sel].first) - 1;
+                std::uint32_t basis_idx = std::abs(herrs[sel].first) - 1;*/
 
-                if(herrs[sel].second.size() == 0){
+                if(/*herrs[sel].second.size() == 0*/matching_cols.size() > 0){
+                    std::uniform_int_distribution<std::uint32_t> select_col(0, matching_cols.size() - 1);
+                    std::uint32_t sel = select_col(rng);
+                    
+                    bool flip = matching_cols[sel].second;
+                    std::uint32_t basis_idx = matching_cols[sel].first;
+                
                     for(std::uint32_t j = 0; j < col_to_add.size(); ++j){
                         col_to_add[j] = flip ? (basis[basis_idx][j] + 1) % 2 : basis[basis_idx][j];   
                     }
@@ -1359,8 +1369,12 @@ std::uint32_t adaptiveMatrixReconstructionBRecursive(
                     }
                 }
                 else{
-                    samples_for_col += recursiveComplete(scene, slice, min_dist, vpls[order[i]], slice->octree_root.get(), sample_omega, 
-                        basis[basis_idx], flip, herrs[sel].second, sampled);
+                    /*samples_for_col += recursiveComplete(scene, slice, min_dist, vpls[order[i]], slice->octree_root.get(), sample_omega, 
+                        basis[basis_idx], flip, herrs[sel].second, sampled);*/
+
+                    sampleColB(scene, slice, vpls, order[i], min_dist, num_rows, rng, sample_omega, 
+                                probabilities, sampled, true);
+                    samples_for_col = num_rows;
 
                     for(std::uint32_t j = 0; j < col_to_add.size(); ++j){
                         col_to_add[j] = sample_omega[j];
