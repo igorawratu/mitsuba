@@ -1320,6 +1320,7 @@ std::uint32_t adaptiveMatrixReconstructionBRecursive(
                 }
 
                 bool verification_passed = true;
+                std::cout << num_verification_samples << std::endl;
                 if(num_verification_samples > 0){
                     std::unordered_set<std::uint32_t> sampled_indices(sampled.begin(), sampled.end());
                     std::vector<std::uint32_t> ver_indices;
