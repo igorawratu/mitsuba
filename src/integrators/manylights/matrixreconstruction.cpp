@@ -1119,6 +1119,8 @@ std::vector<std::pair<std::int32_t, std::vector<std::uint32_t>>> computeMinHammi
     std::vector<std::pair<std::int32_t, std::vector<std::uint32_t>>> min_hamming_distances;
     std::uint32_t min_dist = std::numeric_limits<std::uint32_t>::max();
 
+    bool match_added = false;
+
     for(std::uint32_t i = 0; i < cols.size(); ++i){
         std::vector<std::uint32_t> herr;
         std::vector<std::uint32_t> oerr;
@@ -1163,7 +1165,11 @@ std::vector<std::pair<std::int32_t, std::vector<std::uint32_t>>> computeMinHammi
         }
 
         if(matching || opposite){
-            std::uint32_t idx = i;
+            if(!match_added){
+                match_added = true;
+                min_hamming_distances.clear();
+            }
+            std::uint32_t idx = i + 1;
             if(opposite){
                 idx = -idx;
             }
@@ -1171,10 +1177,12 @@ std::vector<std::pair<std::int32_t, std::vector<std::uint32_t>>> computeMinHammi
             min_hamming_distances.push_back(std::make_pair(idx, herr));
         }
         else{
-            std::uint32_t idx = i;
-            herr.push_back(0);
+            if(!match_added){
+                std::uint32_t idx = i + 1;
+                herr.push_back(0);
 
-            min_hamming_distances.push_back(std::make_pair(idx, herr));
+                min_hamming_distances.push_back(std::make_pair(idx, herr));
+            }
         }
     }
 
