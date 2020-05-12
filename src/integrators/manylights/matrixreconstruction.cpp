@@ -1176,7 +1176,7 @@ std::uint32_t recursiveComplete(Scene* scene, KDTNode<ReconstructionSample>* sli
     std::uint32_t samples_taken = 0;
 
     //no error in subsection that has been sampled
-    if(/*incorrect_indices.size() == 0*/true){
+    if(incorrect_indices.size() == 0){
         if(sampled_indices.size() > 0){
             for(std::uint32_t i = 0; i < curr_octreenode->sample_indices.size(); ++i){
                 std::uint32_t idx = curr_octreenode->sample_indices[i];
