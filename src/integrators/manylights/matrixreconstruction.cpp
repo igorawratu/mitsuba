@@ -1123,6 +1123,9 @@ std::vector<std::pair<std::int32_t, std::vector<std::uint32_t>>> computeMinHammi
         std::vector<std::uint32_t> herr;
         std::vector<std::uint32_t> oerr;
 
+        bool matching = true;
+        bool opposite = true;
+
         /*for(auto iter = sampled_vals.begin(); iter != sampled_vals.end(); ++iter){
             if(iter->second == cols[i][iter->first]){
                 oerr.push_back(iter->first);
