@@ -1314,7 +1314,7 @@ std::uint32_t adaptiveMatrixReconstructionBRecursive(
 
                 if(herrs[sel].second.size() == 0){
                     for(std::uint32_t j = 0; j < col_to_add.size(); ++j){
-                        col_to_add[j] = flip ? (basis[basis_idx] + 1) % 2 : basis[basis_idx];   
+                        col_to_add[j] = flip ? (basis[basis_idx][j] + 1) % 2 : basis[basis_idx][j];   
                     }
 
                     if(num_verification_samples > 0){
