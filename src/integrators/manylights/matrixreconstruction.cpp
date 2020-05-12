@@ -2267,7 +2267,7 @@ std::tuple<std::uint64_t, std::uint64_t> recoverHW(KDTNode<ReconstructionSample>
 
         if(bin_vis){
             std::vector<std::uint8_t> bv(slice->sample_indices.size() * quadranted_vpls[i].size(), 0);
-            if(false){
+            if(true){
                 samples = adaptiveMatrixReconstructionBRecursive(bv, scene, slice, 
                     quadranted_vpls[i], min_dist, sample_perc, max_sample_perc, sample_inc, rng, 
                     basis_rank, cluster_contribs);
