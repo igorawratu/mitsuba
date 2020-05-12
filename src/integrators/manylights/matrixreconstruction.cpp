@@ -1313,8 +1313,6 @@ std::uint32_t adaptiveMatrixReconstructionBRecursive(
             full_col_sampled = false;
 
             samples_for_col = num_samples;
-            
-            std::vector<std::pair<std::int32_t, std::vector<std::uint32_t>>> min_err_cols;
 
             if(sample_omega.size() == col_to_add.size()){
                 for(std::uint32_t j = 0; j < col_to_add.size(); ++j){
@@ -1378,9 +1376,13 @@ std::uint32_t adaptiveMatrixReconstructionBRecursive(
                     }
                 }
                 else{
-                    sampleColB(scene, slice, vpls, order[i], min_dist, num_rows, rng, sample_omega, 
+                    samples_for_col += recursiveComplete(scene, slice, min_dist, vpl[order[i]], 
+                        slice->octree_root.get(), sample_omega, basis[basis_index], flip, error_indices, 
+                        sampled);
+
+                    /*sampleColB(scene, slice, vpls, order[i], min_dist, num_rows, rng, sample_omega, 
                         probabilities, sampled, true);
-                    samples_for_col = num_rows;
+                    samples_for_col = num_rows;*/
 
                     for(std::uint32_t j = 0; j < col_to_add.size(); ++j){
                         col_to_add[j] = sample_omega[j];   
