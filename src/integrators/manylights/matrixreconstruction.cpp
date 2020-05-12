@@ -1130,7 +1130,8 @@ std::pair<std::int32_t, std::vector<std::uint32_t>> computeMinHammingErr(const s
         std::uint32_t oerr = 0;
 
         for(std::uint32_t j = 0; j < sampled_indices.size(); ++j){
-            if(iter->second == cols[i][sampled_indices[j]]){
+            auto& idx = sampled_indices[j];
+            if(sampled_vals[idx] == cols[i][idx]){
                 oerr++;
             }
             else{
@@ -1166,13 +1167,14 @@ std::pair<std::int32_t, std::vector<std::uint32_t>> computeMinHammingErr(const s
     std::vector<std::uint32_t> incorrect_indices;
 
     for(std::uint32_t i = 0; i < sampled_indices.size(); ++i){
-        std::uint8_t v = cols[selected_basis][sampled_indices[i]];
+        auto& idx = sampled_indices[i];
+        std::uint8_t v = cols[selected_basis][idx];
         if(flip){
             v = (v + 1) % 2;
         } 
 
-        if(sampled_vals[sampled_indices[i]] != v){
-            incorrect_indices.push_back(sampled_indices[i]);
+        if(sampled_vals[idx] != v){
+            incorrect_indices.push_back(idx);
         }
     }
 
