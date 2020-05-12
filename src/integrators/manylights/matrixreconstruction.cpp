@@ -1299,7 +1299,7 @@ std::uint32_t adaptiveMatrixReconstructionBRecursive(
 
             samples_for_col = num_samples;
             
-            std::vector<std::pair<std::uint32_t, bool>> matching_cols;
+            std::vector<std::pair<std::int32_t, std::vector<std::uint32_t>>> min_err_cols;
 
             if(sample_omega.size() == col_to_add.size()){
                 for(std::uint32_t j = 0; j < col_to_add.size(); ++j){
@@ -1307,15 +1307,18 @@ std::uint32_t adaptiveMatrixReconstructionBRecursive(
                 }
             }
             else{
-                matching_cols = getMatchingCols(basis, sample_omega);
+                min_err_cols = computeMinHammingErrs(basis, sample_omega);
 
-                if(matching_cols.size() > 0){
-                    std::uniform_int_distribution<std::uint32_t> select_col(0, matching_cols.size() - 1);
-                    std::uint32_t sel = select_col(rng);
-                    col_to_add = basis[matching_cols[sel].first];
+                std::uniform_int_distribution<std::uint32_t> select_col(0, min_err_cols.size() - 1);
+                std::uint32_t sel = select_col(rng);
+                std::uint32_t basis_index = std::abs(min_err_cols[sel].first) - 1;
+                bool flip = min_err_cols[sel].first < 0;
+                std::uint32_t num_errs = min_err_cols[sel].second.size();
 
+                if(num_errs == 0){
                     //opposite direction so we flip
-                    if(!matching_cols[sel].second){
+                    col_to_add = basis[basis_index];
+                    if(flip){
                         for(std::uint32_t j = 0; j < col_to_add.size(); ++j){
                             col_to_add[j] = (col_to_add[j] + 1) % 2;
                         }
