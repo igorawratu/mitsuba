@@ -1119,8 +1119,6 @@ std::tuple<std::uint32_t, bool, std::vector<std::uint32_t>> computeMinHammingErr
     std::uint32_t min_dist = std::numeric_limits<std::uint32_t>::max();
     std::vector<std::int32_t> indices;
 
-    bool match_added = false;
-
     for(std::uint32_t i = 0; i < cols.size(); ++i){
         std::uint32_t herr = 0;
         std::uint32_t oerr = 0;
@@ -2269,7 +2267,7 @@ std::tuple<std::uint64_t, std::uint64_t> recoverHW(KDTNode<ReconstructionSample>
 
         if(bin_vis){
             std::vector<std::uint8_t> bv(slice->sample_indices.size() * quadranted_vpls[i].size(), 0);
-            if(true){
+            if(false){
                 samples = adaptiveMatrixReconstructionBRecursive(bv, scene, slice, 
                     quadranted_vpls[i], min_dist, sample_perc, max_sample_perc, sample_inc, rng, 
                     basis_rank, cluster_contribs);
