@@ -1311,13 +1311,9 @@ std::uint32_t adaptiveMatrixReconstructionBRecursive(
                 
                 bool flip = herrs[sel].first < 0;
                 std::uint32_t basis_idx = std::abs(herrs[sel].first) - 1;
-                std::unordered_set<std::uint32_t> sampled_indices;
-                for(auto iter = sample_omega.begin(); iter != sample_omega.end(); ++iter){
-                    sampled_indices.insert(iter->first);
-                }
 
                 samples_for_col += recursiveComplete(scene, slice, min_dist, vpls[order[i]], slice->octree_root.get(), sample_omega, 
-                    basis[basis_idx], flip, herrs[sel].second, sampled_indices, sampled);
+                    basis[basis_idx], flip, herrs[sel].second, sampled);
 
                 for(std::uint32_t j = 0; j < col_to_add.size(); ++j){
                     col_to_add[j] = sample_omega[j];   
