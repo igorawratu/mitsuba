@@ -1113,7 +1113,7 @@ std::vector<std::pair<std::uint32_t, bool>> getMatchingCols(const std::vector<st
     return matching_cols;
 }
 
-std::pair<std::int32_t, std::vector<std::uint32_t>> computeMinHammingErr(const std::vector<std::vector<std::uint8_t>>& cols, 
+std::pair<std::uint32_t, bool, std::vector<std::uint32_t>> computeMinHammingErr(const std::vector<std::vector<std::uint8_t>>& cols, 
     std::unordered_map<std::uint32_t, std::uint8_t>& sampled_vals){
     
     std::vector<std::int32_t> min_hamming_basis;
@@ -1178,7 +1178,7 @@ std::pair<std::int32_t, std::vector<std::uint32_t>> computeMinHammingErr(const s
         }
     }
 
-    return std::make_pair(min_hamming_basis[sel], incorrect_indices);
+    return std::make_pair(selected_basis, flip, incorrect_indices);
 }
 
 std::uint32_t recursiveComplete(Scene* scene, KDTNode<ReconstructionSample>* slice, float min_dist, const VPL& vpl, 
@@ -1331,13 +1331,11 @@ std::uint32_t adaptiveMatrixReconstructionBRecursive(
                 }
             }
             else{
-                std::uint32_t selected_basis;
+                std::uint32_t basis_idx;
+                bool flip;
                 std::vector<std::uint32_t> incorrect_indices;
 
-                std::tie(selected_basis, incorrect_indices) = computeMinHammingErr(basis, sample_omega);
-
-                bool flip = selected_basis < 0;
-                std::uint32_t basis_idx = std::abs(selected_basis) - 1;
+                std::tie(basis_idx, flip, incorrect_indices) = computeMinHammingErr(basis, sample_omega);
 
                 if(incorrect_indices.size() == 0){
                     for(std::uint32_t j = 0; j < col_to_add.size(); ++j){
