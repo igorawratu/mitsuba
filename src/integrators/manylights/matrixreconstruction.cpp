@@ -1274,6 +1274,7 @@ std::uint32_t adaptiveMatrixReconstructionBRecursive(
             return col_estimations[lhs] > col_estimations[rhs];
         });
 
+
     std::vector<std::vector<std::uint8_t>> basis;
 
     std::uint32_t total_samples = 0;
@@ -1297,6 +1298,8 @@ std::uint32_t adaptiveMatrixReconstructionBRecursive(
             full_col_sampled = false;
 
             samples_for_col = num_samples;
+            
+            std::vector<std::pair<std::uint32_t, bool>> matching_cols;
 
             if(sample_omega.size() == col_to_add.size()){
                 for(std::uint32_t j = 0; j < col_to_add.size(); ++j){
@@ -1304,27 +1307,18 @@ std::uint32_t adaptiveMatrixReconstructionBRecursive(
                 }
             }
             else{
-                //std::vector<std::pair<std::int32_t, std::vector<std::uint32_t>>> herrs = computeMinHammingErrs(basis, sample_omega);
+                matching_cols = getMatchingCols(basis, sample_omega);
 
-                auto matching_cols = getMatchingCols(basis, sample_omega);
-
-                
-
-                /*std::uniform_int_distribution<std::uint32_t> select_col(0, herrs.size() - 1);
-                std::uint32_t sel = select_col(rng);
-                
-                bool flip = herrs[sel].first < 0;
-                std::uint32_t basis_idx = std::abs(herrs[sel].first) - 1;*/
-
-                if(/*herrs[sel].second.size() == 0*/matching_cols.size() > 0){
+                if(matching_cols.size() > 0){
                     std::uniform_int_distribution<std::uint32_t> select_col(0, matching_cols.size() - 1);
                     std::uint32_t sel = select_col(rng);
-                    
-                    bool flip = matching_cols[sel].second;
-                    std::uint32_t basis_idx = matching_cols[sel].first;
-                
-                    for(std::uint32_t j = 0; j < col_to_add.size(); ++j){
-                        col_to_add[j] = flip ? (basis[basis_idx][j] + 1) % 2 : basis[basis_idx][j];   
+                    col_to_add = basis[matching_cols[sel].first];
+
+                    //opposite direction so we flip
+                    if(!matching_cols[sel].second){
+                        for(std::uint32_t j = 0; j < col_to_add.size(); ++j){
+                            col_to_add[j] = (col_to_add[j] + 1) % 2;
+                        }
                     }
 
                     if(num_verification_samples > 0){
@@ -1341,16 +1335,15 @@ std::uint32_t adaptiveMatrixReconstructionBRecursive(
                         sampleColB(scene, slice, vpls, order[i], min_dist, num_verification_samples, rng, sample_omega, 
                             probabilities, ver_indices, false);
 
-                        bool resample = false;
-
+                        bool correct = true;
                         for(std::uint32_t j = 0; j < ver_indices.size(); ++j){
                             if(sample_omega[ver_indices[j]] != col_to_add[ver_indices[j]]){
-                                resample = true;
+                                correct = false;
                                 break;
                             }
                         }
 
-                        if(resample){
+                        if(!correct){
                             sample_perc = std::min(max_sample_perc, sample_perc + verification_inc);
                             num_samples = num_rows * sample_perc + 0.5f;
 
@@ -1369,18 +1362,16 @@ std::uint32_t adaptiveMatrixReconstructionBRecursive(
                     }
                 }
                 else{
-                    /*samples_for_col += recursiveComplete(scene, slice, min_dist, vpls[order[i]], slice->octree_root.get(), sample_omega, 
-                        basis[basis_idx], flip, herrs[sel].second, sampled);*/
-
                     sampleColB(scene, slice, vpls, order[i], min_dist, num_rows, rng, sample_omega, 
-                                probabilities, sampled, true);
+                        probabilities, sampled, true);
                     samples_for_col = num_rows;
 
                     for(std::uint32_t j = 0; j < col_to_add.size(); ++j){
-                        col_to_add[j] = sample_omega[j];
+                        col_to_add[j] = sample_omega[j];   
                     }
-
+    
                     basis.push_back(col_to_add);
+                    
                     full_col_sampled = true;
                 }
             }
