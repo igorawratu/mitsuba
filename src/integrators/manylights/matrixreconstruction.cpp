@@ -1178,7 +1178,7 @@ std::tuple<std::uint32_t, bool, std::vector<std::uint32_t>> computeMinHammingErr
         }
     }
 
-    return std::make_pair(selected_basis, flip, incorrect_indices);
+    return std::make_tuple(selected_basis, flip, incorrect_indices);
 }
 
 std::uint32_t recursiveComplete(Scene* scene, KDTNode<ReconstructionSample>* slice, float min_dist, const VPL& vpl, 
