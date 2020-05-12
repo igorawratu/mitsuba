@@ -1171,7 +1171,7 @@ std::vector<std::pair<std::int32_t, std::vector<std::uint32_t>>> computeMinHammi
                 std::uint32_t idx = i + 1;
                 errs.push_back(0);
 
-                min_hamming_distances.push_back(std::make_pair(idx, herr));
+                min_hamming_distances.push_back(std::make_pair(idx, errs));
             }
         }
     }
