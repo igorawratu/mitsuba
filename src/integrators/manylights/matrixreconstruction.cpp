@@ -1167,7 +1167,7 @@ std::tuple<std::uint32_t, bool, std::vector<std::uint32_t>> computeMinHammingErr
     return std::make_tuple(basis_idx, flip, error_indices);
 }
 
-/*std::uint32_t recursiveComplete(Scene* scene, KDTNode<ReconstructionSample>* slice, float min_dist, const VPL& vpl, 
+std::uint32_t recursiveComplete(Scene* scene, KDTNode<ReconstructionSample>* slice, float min_dist, const VPL& vpl, 
     OTN<ReconstructionSample>* curr_octreenode, std::unordered_map<std::uint32_t, std::uint8_t>& sample_omega, 
     const std::vector<std::uint8_t>& basis_col, bool flip_basis, const std::vector<std::uint32_t>& incorrect_indices, 
     const std::vector<std::uint32_t> sampled_indices){
@@ -1253,7 +1253,7 @@ std::tuple<std::uint32_t, bool, std::vector<std::uint32_t>> computeMinHammingErr
 
     return samples_taken;
     
-}*/
+}
 
 std::uint32_t recursiveComplete(Scene* scene, KDTNode<ReconstructionSample>* slice, float min_dist, const VPL& vpl, 
     OTN<ReconstructionSample>* curr_octreenode, std::unordered_map<std::uint32_t, std::uint8_t>& sample_omega, 
@@ -1496,16 +1496,16 @@ std::uint32_t adaptiveMatrixReconstructionBRecursive(
                     }
                 }
                 else{
-                    /*samples_for_col += recursiveComplete(scene, slice, min_dist, vpls[order[i]], 
+                    samples_for_col += recursiveComplete(scene, slice, min_dist, vpls[order[i]], 
                         slice->octree_root.get(), sample_omega, basis[basis_index], flip, error_indices, 
-                        sampled);*/
+                        sampled);
 
-                    std::unordered_set<std::uint32_t> sampled_set(sampled.begin(), sampled.end());
+                    /*std::unordered_set<std::uint32_t> sampled_set(sampled.begin(), sampled.end());
 
                     bool sampled;
                     samples_for_col += recursiveComplete(scene, slice, min_dist, vpls[order[i]], 
                         slice->octree_root.get(), sample_omega, basis[basis_index], flip, error_indices, 
-                        sampled_set, 0.05, sampled);
+                        sampled_set, 0.05, sampled);*/
 
                     for(std::uint32_t j = 0; j < col_to_add.size(); ++j){
                         col_to_add[j] = sample_omega[j];   
@@ -2392,7 +2392,7 @@ std::tuple<std::uint64_t, std::uint64_t> recoverHW(KDTNode<ReconstructionSample>
 
         if(bin_vis){
             std::vector<std::uint8_t> bv(slice->sample_indices.size() * quadranted_vpls[i].size(), 0);
-            if(true){
+            if(false){
                 samples = adaptiveMatrixReconstructionBRecursive(bv, scene, slice, 
                     quadranted_vpls[i], min_dist, sample_perc, max_sample_perc, sample_inc, rng, 
                     basis_rank, cluster_contribs);
