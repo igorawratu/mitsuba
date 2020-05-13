@@ -1167,7 +1167,7 @@ std::tuple<std::uint32_t, bool, std::vector<std::uint32_t>> computeMinHammingErr
     return std::make_tuple(basis_idx, flip, error_indices);
 }
 
-std::uint32_t recursiveComplete(Scene* scene, KDTNode<ReconstructionSample>* slice, float min_dist, const VPL& vpl, 
+/*std::uint32_t recursiveComplete(Scene* scene, KDTNode<ReconstructionSample>* slice, float min_dist, const VPL& vpl, 
     OTN<ReconstructionSample>* curr_octreenode, std::unordered_map<std::uint32_t, std::uint8_t>& sample_omega, 
     const std::vector<std::uint8_t>& basis_col, bool flip_basis, const std::vector<std::uint32_t>& incorrect_indices, 
     const std::vector<std::uint32_t> sampled_indices){
@@ -1249,6 +1249,128 @@ std::uint32_t recursiveComplete(Scene* scene, KDTNode<ReconstructionSample>* sli
                 samples_taken++;
             }
         }
+    }
+
+    return samples_taken;
+    
+}*/
+
+std::uint32_t recursiveComplete(Scene* scene, KDTNode<ReconstructionSample>* slice, float min_dist, const VPL& vpl, 
+    OTN<ReconstructionSample>* curr_octreenode, std::unordered_map<std::uint32_t, std::uint8_t>& sample_omega, 
+    const std::vector<std::uint8_t>& basis_col, bool flip_basis, const std::vector<std::uint32_t>& incorrect_indices, 
+    const std::unordered_set<std::uint32_t>& already_sampled, float validation_samples, bool& fully_sampled){
+    //no error in subsection
+    if(incorrect_indices.size() == 0){
+        for(std::uint32_t i = 0; i < curr_octreenode->sample_indices.size(); ++i){
+            std::uint32_t idx = curr_octreenode->sample_indices[i];
+            if(sample_omega.find(idx) == sample_omega.end()){
+                sample_omega[idx] = flip_basis ? (basis_col[idx] + 1) % 2 : basis_col[idx];
+            }
+        }
+
+        fully_sampled = false;
+
+        return 0;
+    }
+
+    std::uint32_t num_children = 0;
+    for(std::uint32_t i = 0; i < curr_octreenode->children.size(); ++i){
+        if(curr_octreenode->children[i] != nullptr){
+            num_children++;
+        }
+    }
+
+    std::uint32_t samples_taken = 0;
+
+    //recurse if has children
+    if(num_children > 0){
+        std::vector<std::vector<std::uint32_t>> children_incorrect_indices(8); 
+        Vector3f midpoint = (curr_octreenode->bb.first + curr_octreenode->bb.second) / 2.f;
+
+        for(std::uint32_t i = 0; i < incorrect_indices.size(); ++i){
+            Vector3f p(slice->sample(incorrect_indices[i]).its.p);
+            std::uint32_t child_idx = curr_octreenode->getChildIndex(p, midpoint);
+            children_incorrect_indices[child_idx].push_back(incorrect_indices[i]);
+        }
+
+        bool childbranch_fs = false;
+        bool childbranch_ns = false;
+        std::vector<std::uint32_t> valid_indices;
+
+        for(std::uint32_t i = 0; i < 8; ++i){
+            if(curr_octreenode->children[i] != nullptr){
+                bool child_sampled;
+                samples_taken = recursiveComplete(scene, slice, min_dist, vpl, 
+                    curr_octreenode->children[i].get(), sample_omega, basis_col, flip_basis, children_incorrect_indices[i], already_sampled,
+                    validation_samples, child_sampled);
+                
+                childbranch_fs |= child_sampled;
+                childbranch_ns |= !child_sampled;
+
+                if(!child_sampled){
+                    for(std::uint32_t j = 0; j < curr_octreenode->children[i]->sample_indices.size(); ++j){
+                        std::uint32_t idx = curr_octreenode->children[i]->sample_indices[j];
+                        if(already_sampled.find(idx) == already_sampled.end()){
+                            valid_indices.push_back(idx);
+                        }
+                    }
+                }
+            }
+            else{
+                if(children_incorrect_indices[i].size() > 0){
+                    std::cout << "This should never happen" << std::endl;
+                }
+            }
+        }
+
+        if(valid_indices.size() == 0){
+            fully_sampled = true;
+        }
+        //if some children have been fully sampled and others not, verify with sparse samples and if fail, then fully sample
+        else if(childbranch_fs && childbranch_ns){
+            std::random_shuffle(valid_indices.begin(), valid_indices.end());
+            std::uint32_t num_validation_samples = std::max(1u, 
+                std::min(std::uint32_t(valid_indices.size()), std::uint32_t(curr_octreenode->sample_indices.size() * validation_samples)));
+
+            fully_sampled = false;
+            for(std::uint32_t i = 0; i < num_validation_samples; ++i){
+                std::uint32_t idx = valid_indices[i];
+
+                ReconstructionSample& scene_sample = slice->sample(idx);
+                std::uint8_t result = sampleVisibility(scene, scene_sample.its, vpl, min_dist) ? 1 : 0;
+
+                if(result != sample_omega[idx]){
+                    fully_sampled = true;
+                    break;
+                }
+            }
+
+            if(fully_sampled){
+                for(std::uint32_t i = 0; i < valid_indices.size(); ++i){
+                    std::uint32_t idx = valid_indices[i];
+
+                    if(already_sampled.find(idx) == already_sampled.end()){
+                        ReconstructionSample& scene_sample = slice->sample(idx);
+                        sample_omega[idx] = sampleVisibility(scene, scene_sample.its, vpl, min_dist) ? 1 : 0;
+                        samples_taken++;
+                    }
+                }
+            }
+        }
+    }
+    //no children but has errors, fully sample
+    else{
+        for(std::uint32_t i = 0; i < curr_octreenode->sample_indices.size(); ++i){
+            std::uint32_t idx = curr_octreenode->sample_indices[i];
+            ReconstructionSample& scene_sample = slice->sample(idx);
+
+            if(sample_omega.find(idx) == sample_omega.end()){
+                sample_omega[idx] = sampleVisibility(scene, scene_sample.its, vpl, min_dist) ? 1 : 0;
+                samples_taken++;
+            }
+        }
+
+        fully_sampled = true;
     }
 
     return samples_taken;
