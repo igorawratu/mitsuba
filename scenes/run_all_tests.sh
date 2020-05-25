@@ -13,6 +13,8 @@ chmod +x "${source_dir}/run_time_error_sponza.sh"
 chmod +x "${source_dir}/run_time_error_staircase.sh"
 chmod +x "${source_dir}/run_time_error_kitchen.sh"
 chmod +x "${source_dir}/run_time_error_bathroom.sh"
+chmod +x "${source_dir}/run_time_error_staircase2.sh"
+chmod +x "${source_dir}/run_time_error_living_room.sh"
 chmod +x "${source_dir}/run_adaptive.sh"
 
 #${source_dir}/run_time_error_cbox.sh
@@ -25,6 +27,8 @@ chmod +x "${source_dir}/run_adaptive.sh"
 #${source_dir}/run_time_error_staircase.sh
 #${source_dir}/run_time_error_kitchen.sh
 #${source_dir}/run_time_error_bathroom.sh
+${source_dir}/run_time_error_staircase2.sh
+${source_dir}/run_time_error_living_room.sh
 
 python3 "${source_dir}/../generate_plots.py" "${source_dir}/cbox" "cbox" "Cornell box" "${source_dir}/cbox" "diffuse"
 python3 "${source_dir}/../generate_plots.py" "${source_dir}/breakfast-room/breakfast-room" "scene" "Breakfast room" "${source_dir}/breakfast-room" "diffuse"
@@ -36,6 +40,8 @@ python3 "${source_dir}/../generate_plots.py" "${source_dir}/sponza" "sponza" "Sp
 python3 "${source_dir}/../generate_plots.py" "${source_dir}/staircase/staircase" "scene" "Staircase" "${source_dir}/staircase" "diffuse"
 python3 "${source_dir}/../generate_plots.py" "${source_dir}/kitchen" "scene" "Kitchen" "${source_dir}/kitchen" "glossy"
 python3 "${source_dir}/../generate_plots.py" "${source_dir}/bathroom/bathroom" "scene" "Bathroom" "${source_dir}/bathroom" "glossy"
+python3 "${source_dir}/../generate_plots.py" "${source_dir}/living_room/living-room" "scene" "Grey & White Room" "${source_dir}/living_room/living-room" "glossy"
+python3 "${source_dir}/../generate_plots.py" "${source_dir}/staircase2/staircase2" "scene" "Modern Hall" "${source_dir}/staircase2/staircase2" "glossy"
 
 chmod +x "${source_dir}/run_bool_sanmiguel.sh"
 chmod +x "${source_dir}/run_is_sanmiguel.sh"
