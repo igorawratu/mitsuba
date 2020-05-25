@@ -2538,7 +2538,7 @@ void clusterWorkerMDLC(BlockingQueue<HWWorkUnit>& input, BlockingQueue<HWWorkUni
 
         vpls[work_unit.second] = light_tree->getClusteringForPoints(scene, slice_points);
         //not sure if this should change to a radius union approach instead
-        //updateVPLRadii(vpls[work_unit.second], min_dist);
+        updateVPLRadii(vpls[work_unit.second], min_dist);
 
         std::uint64_t slice_samples, num_slice_sampled;
         std::tie(slice_samples, num_slice_sampled) = recoverHW(work_unit.first, vpls[work_unit.second], scene, gather_stats, show_svd, sample_perc,
