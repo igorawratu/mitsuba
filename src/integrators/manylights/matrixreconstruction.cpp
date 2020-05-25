@@ -31,7 +31,7 @@ MTS_NAMESPACE_BEGIN
 void updateVPLRadii(std::vector<VPL>& vpls, float min_dist){
 	std::uint32_t num_sl = 0;
 	for(std::uint32_t i = 0; i < vpls.size(); ++i){
-		if(vpls[i].type == ESurfaceVPL){
+		if(vpls[i].type != EDirectionalEmitterVPL){
 			num_sl++;
 		}
 	} 
@@ -43,7 +43,7 @@ void updateVPLRadii(std::vector<VPL>& vpls, float min_dist){
 	std::uint32_t curr_light = 0;
 	std::vector<std::uint32_t> pointlight_indices;
     for(std::uint32_t i = 0; i < vpls.size(); ++i){
-		if(vpls[i].type == ESurfaceVPL){
+		if(vpls[i].type != EDirectionalEmitterVPL){
 			float* curr = (float*)dataset[curr_light++];
 			curr[0] = vpls[i].its.p.x;
 			curr[1] = vpls[i].its.p.y;
@@ -73,7 +73,7 @@ void updateVPLRadii(std::vector<VPL>& vpls, float min_dist){
 			}
 		}
 
-		vpls[pointlight_indices[i]].radius = 0.1;//sqrt(max) * 2.f;
+		vpls[pointlight_indices[i]].radius = sqrt(max) * 2.f;
 	}
 }
 

@@ -339,30 +339,41 @@ __kernel void shadeVSL(__global const struct PixelElement* pixels,
         return;
     }
 
-    float3 seed = /*pixels[i].p / min_dist * 100.f * */(float)(curr_pass + 1.0f);
-
     float coeff = coefficients[i].coeff;// > 0 ? 1.0f : 0.0f;
     int curr_light_idx = pixels[i].slice_id * clusters_per_slice + curr_pass;
 
-    float dp = dot(normalize(lights[curr_light_idx].p - pixels[i].p), pixels[i].n);
-    if(dp < 0.0001f){
-        return;
+    if(lights[curr_light_idx].type != 0){
+        float3 seed = /*pixels[i].p / min_dist * 100.f * */(float)(curr_pass + 1.0f);
+
+        float dp = dot(normalize(lights[curr_light_idx].p - pixels[i].p), pixels[i].n);
+        if(dp < 0.0001f){
+            return;
+        }
+
+        float central_disc_area = PI * lights[curr_light_idx].rad * lights[curr_light_idx].rad;
+        float d = length(pixels[i].p - lights[curr_light_idx].p);
+        float hypot_length = sqrt(d * d + lights[curr_light_idx].rad * lights[curr_light_idx].rad);
+        float cos_theta = d / hypot_length;
+        //float cos_theta = cos(asin(min(lights[curr_light_idx].rad / d, 1.0f)));
+        float solid_angle = 2.0f * PI * (1.0f - cos_theta);
+        int num_samples = max(1, (int)(sqrt(1.0f - cos_theta) * max_samples_per_vsl));
+
+        float3 final_color = 0.0f;
+
+        for(int sample = 0; sample < num_samples; ++sample){
+            final_color += sampleCone(pixels[i], lights[curr_light_idx], solid_angle, seed * sample);
+            final_color += sampleBSDF(pixels[i], lights[curr_light_idx], solid_angle, cos_theta, seed * sample);
+        }
+
+        output[i].col = output[i].col + final_color * coeff / (num_samples * central_disc_area);
     }
-
-    float central_disc_area = PI * lights[curr_light_idx].rad * lights[curr_light_idx].rad;
-    float d = length(pixels[i].p - lights[curr_light_idx].p);
-    float hypot_length = sqrt(d * d + lights[curr_light_idx].rad * lights[curr_light_idx].rad);
-    float cos_theta = d / hypot_length;
-    //float cos_theta = cos(asin(min(lights[curr_light_idx].rad / d, 1.0f)));
-    float solid_angle = 2.0f * PI * (1.0f - cos_theta);
-    int num_samples = max(1, (int)(sqrt(1.0f - cos_theta) * max_samples_per_vsl));
-
-    float3 final_color = 0.0f;
-
-    for(int sample = 0; sample < num_samples; ++sample){
-        final_color += sampleCone(pixels[i], lights[curr_light_idx], solid_angle, seed * sample);
-        final_color += sampleBSDF(pixels[i], lights[curr_light_idx], solid_angle, cos_theta, seed * sample);
+    else{
+        light_col = lights[curr_light_idx].power;
+        float3 dir = -lights[lidx].n;
+        float3 wi = normalize(dir);
+        float3 bsdf_col = evalBSDF(pixels[i].n, wi, pixels[i].wo, pixels[i].eta, pixels[i].k, pixels[i].roughness,
+            pixels[i].spec_col, pixels[i].diff_col);
+        output[i].col = output[i].col + bsdf_col * light_col * (float3)(coeff);
     }
-
-    output[i].col = output[i].col + final_color * coeff / (num_samples * central_disc_area);
+    
 }
