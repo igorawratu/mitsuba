@@ -39,6 +39,8 @@ void updateVPLRadii(std::vector<VPL>& vpls, float min_dist){
 		}
 	} 
 
+    std::cout << num_sl << std::endl;
+
     flann::Matrix<float> dataset(new float[num_sl * 3], num_sl, 3);
 	std::uint32_t curr_light = 0;
 	std::vector<std::uint32_t> pointlight_indices;
@@ -2538,7 +2540,7 @@ void clusterWorkerMDLC(BlockingQueue<HWWorkUnit>& input, BlockingQueue<HWWorkUni
 
         vpls[work_unit.second] = light_tree->getClusteringForPoints(scene, slice_points);
         //not sure if this should change to a radius union approach instead
-        //updateVPLRadii(vpls[work_unit.second], min_dist);
+        updateVPLRadii(vpls[work_unit.second], min_dist);
 
         std::uint64_t slice_samples, num_slice_sampled;
         std::tie(slice_samples, num_slice_sampled) = recoverHW(work_unit.first, vpls[work_unit.second], scene, gather_stats, show_svd, sample_perc,
