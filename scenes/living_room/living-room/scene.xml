@@ -8,7 +8,7 @@
 		<!--GENERAL-->
 		<float name="clamping" value="0.1"/>
 		<integer name="clustering_strat" value="$cstrat"/>
-		<integer name="vsl" value="1"/>
+		<integer name="vsl" value="0"/>
 		<integer name="vpls" value="100000"/>
 		<integer name="bfhw" value="1"/>
 
@@ -691,17 +691,11 @@
 		</transform>
 		<ref id="TableWood" />
 	</shape>
-	<!--<emitter type="envmap" >
+	<emitter type="envmap" >
 		<transform name="toWorld" >
 			<matrix value="-4.37114e-008 0 1 0 0 1 0 0 -1 0 -4.37114e-008 0 0 0 0 1"/>
 		</transform>
 		<string name="filename" value="textures/Sky 19.exr" />
-	</emitter>-->
-	<emitter type="sunsky" >
-		<float name="turbidity" value="3" />
-		<vector name="sunDirection" x="0.1" y="0.416766" z="0.6" />
-		<float name="skyScale" value="10" />
-		<float name="sunScale" value="15" />
-		<float name="sunRadiusScale" value="18.8131" />
+	</emitter>
 	</emitter>
 </scene>
