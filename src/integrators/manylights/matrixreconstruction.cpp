@@ -2012,7 +2012,7 @@ std::tuple<float, float, float, float, float, float> recover(KDTNode<Reconstruct
             }
             else{
                 std::vector<std::uint8_t> bin_vis(slice->sample_indices.size() * quadranted_vpls[i].size(), 0);
-                if(true){
+                if(false){
                     samples = adaptiveMatrixReconstructionBRecursive(bin_vis, scene, slice,
                         quadranted_vpls[i], general_params.min_dist, general_params.sample_perc, 
                         general_params.max_sample_perc, general_params.sample_inc, rng, 
