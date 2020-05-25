@@ -8,7 +8,7 @@
 		<!--GENERAL-->
 		<float name="clamping" value="0.1"/>
 		<integer name="clustering_strat" value="$cstrat"/>
-		<integer name="vsl" value="0"/>
+		<integer name="vsl" value="1"/>
 		<integer name="vpls" value="100000"/>
 		<integer name="bfhw" value="1"/>
 
