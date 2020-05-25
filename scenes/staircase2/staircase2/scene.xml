@@ -72,7 +72,7 @@
 		</transform>
 
 		<sampler type="sobol">
-			<integer name="sampleCount" value="1"/>
+			<integer name="sampleCount" value="$spp"/>
 		</sampler>
 
 		<film type="hdrfilm">
