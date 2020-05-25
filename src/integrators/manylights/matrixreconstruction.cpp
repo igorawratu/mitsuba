@@ -73,7 +73,7 @@ void updateVPLRadii(std::vector<VPL>& vpls, float min_dist){
 			}
 		}
 
-		vpls[pointlight_indices[i]].radius = sqrt(max) * 2.f;
+		vpls[pointlight_indices[i]].radius = sqrt(max) * 1.f;
 	}
 }
 
