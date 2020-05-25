@@ -368,8 +368,8 @@ __kernel void shadeVSL(__global const struct PixelElement* pixels,
         output[i].col = output[i].col + final_color * coeff / (num_samples * central_disc_area);
     }
     else{
-        light_col = lights[curr_light_idx].power;
-        float3 dir = -lights[lidx].n;
+        float3 light_col = lights[curr_light_idx].power;
+        float3 dir = -lights[curr_light_idx].n;
         float3 wi = normalize(dir);
         float3 bsdf_col = evalBSDF(pixels[i].n, wi, pixels[i].wo, pixels[i].eta, pixels[i].k, pixels[i].roughness,
             pixels[i].spec_col, pixels[i].diff_col);
