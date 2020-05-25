@@ -44,7 +44,7 @@
 		<integer name="completion-bvis" value="$bv"/>
 		<integer name="completion-clusters_per_slice" value="$cps"/>
 		<integer name="completion-ls_sps" value="$sps"/>
-		<float name="completion-verification_perc" value="$vp"/> 
+		<float name="completion-verification_perc" value="$vp"/>
 
 		<!--MATRIX SEPARATION, STRAT 4-->
 		<float name="separation-sample_perc" value="0.05"/>

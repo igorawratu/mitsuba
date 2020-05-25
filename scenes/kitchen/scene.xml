@@ -31,7 +31,7 @@
 		<integer name="completion-slice_size" value="$slice"/>
 		<integer name="completion-visibility_only" value="1"/>
 		<integer name="completion-adaptive_col_sampling" value="1"/>
-		<integer name="completion-adaptive_importance_sampling" value="1"/>
+		<integer name="completion-adaptive_importance_sampling" value="$is"/>
 		<integer name="completion-adaptive_force_resample" value="0"/>
 		<integer name="completion-adaptive_recover_transpose" value="0"/>
 		<integer name="completion-use_truncated" value="1"/>
@@ -41,10 +41,11 @@
 		<float name="completion-error_scale" value="1"/>
 		<string name="completion-cluster_strat" value = "$compcstrat"/>
 		<integer name="completion-hw" value="1"/>
-		<integer name="completion-bvis" value="1"/>
+		<integer name="completion-bvis" value="$bv"/>
 		<integer name="completion-clusters_per_slice" value="$cps"/>
 		<integer name="completion-ls_sps" value="$sps"/>
-
+		<float name="completion-verification_perc" value="$vp"/>
+		
 		<!--MATRIX SEPARATION, STRAT 4-->
 		<float name="separation-sample_perc" value="0.05"/>
 		<float name="separation-prediction_error_thresh" value="0.02"/>
