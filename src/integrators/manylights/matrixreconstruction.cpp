@@ -29,9 +29,6 @@
 MTS_NAMESPACE_BEGIN
 
 void updateVPLRadii(std::vector<VPL>& vpls, float min_dist){
-	//radius calculation, 11 to account 10 + 1 for adding a node's self in nearest neighbours
-	std::uint32_t num_neighbours = std::min((std::uint32_t)vpls.size(), 11u);
-
 	std::uint32_t num_sl = 0;
 	for(std::uint32_t i = 0; i < vpls.size(); ++i){
 		if(vpls[i].type == ESurfaceVPL){
@@ -39,7 +36,8 @@ void updateVPLRadii(std::vector<VPL>& vpls, float min_dist){
 		}
 	} 
 
-    std::cout << num_sl << std::endl;
+    //radius calculation, 11 to account 10 + 1 for adding a node's self in nearest neighbours
+    std::uint32_t num_neighbours = std::min(num_sl, 11u);
 
     flann::Matrix<float> dataset(new float[num_sl * 3], num_sl, 3);
 	std::uint32_t curr_light = 0;
@@ -75,7 +73,7 @@ void updateVPLRadii(std::vector<VPL>& vpls, float min_dist){
 			}
 		}
 
-		vpls[pointlight_indices[i]].radius = sqrt(max) * 2.f;
+		vpls[pointlight_indices[i]].radius = 0.1;//sqrt(max) * 2.f;
 	}
 }
 
