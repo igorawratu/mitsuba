@@ -456,9 +456,9 @@ void splitKDTree(KDTNode<Sample>* node, std::uint32_t size_threshold, std::uint3
     if(node == nullptr || node->sample_indices.size() < size_threshold){
         if(node != nullptr){
             std::pair<Vector3f, Vector3f> bb = node->getBB();
-            std::vector<std::uint32_t> indices(node->sample_indices.size());
+            /*std::vector<std::uint32_t> indices(node->sample_indices.size());
             std::iota(indices.begin(), indices.end(), 0);
-            node->octree_root = std::unique_ptr<OTN<Sample>>(new OTN<Sample>(node->samples, indices, node->sample_indices, bb, 16));
+            node->octree_root = std::unique_ptr<OTN<Sample>>(new OTN<Sample>(node->samples, indices, node->sample_indices, bb, 16));*/
         }
         return;
     }
@@ -472,9 +472,9 @@ void splitKDTree(KDTNode<Sample>* node, std::uint32_t size_threshold, std::uint3
         }
         else{
             std::pair<Vector3f, Vector3f> bb = node->getBB();
-            std::vector<std::uint32_t> indices(node->sample_indices.size());
+            /*std::vector<std::uint32_t> indices(node->sample_indices.size());
             std::iota(indices.begin(), indices.end(), 0);
-            node->octree_root = std::unique_ptr<OTN<Sample>>(new OTN<Sample>(node->samples, indices, node->sample_indices, bb, 16));
+            node->octree_root = std::unique_ptr<OTN<Sample>>(new OTN<Sample>(node->samples, indices, node->sample_indices, bb, 16));*/
         }
     }
 }
