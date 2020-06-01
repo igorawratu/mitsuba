@@ -884,7 +884,7 @@ std::vector<std::uint32_t> sampleColBWithLeading(Scene* scene, KDTNode<Reconstru
     std::uint32_t max_samples = slice->sample_indices.size();
     assert(num_samples <= max_samples);
 
-    std::vector<std::uint32_t> sampled_indices;
+    std::vector<std::uint32_t> sample_indices;
 
     if(resample){
         std::uint32_t num_leading_samples = std::max(std::uint32_t(leading_indices.size()), std::min(1u, std::uint32_t(leading_perc * num_samples)));
@@ -908,7 +908,6 @@ std::vector<std::uint32_t> sampleColBWithLeading(Scene* scene, KDTNode<Reconstru
     else{
         sample_indices = sample_set;
     }
-    std::vector<std::uint32_t> sampled_indices = resample ? importanceSample(num_samples, rng, probabilities) : sample_set;
 
     for(size_t i = 0; i < sampled_indices.size(); ++i){
         const VPL& vpl = vpls[col];
@@ -922,14 +921,18 @@ std::vector<std::uint32_t> sampleColBWithLeading(Scene* scene, KDTNode<Reconstru
     return sampled_indices;
 }
 
-std::vector<std::vector<std::uint8_t>> gf2elim(const std::vector<std::uint8_t>& basis, std::vector<std::uint32_t>& reduced_basis_rows, 
+std::vector<std::vector<std::uint8_t>> gf2elim(const std::vector<std::vector<std::uint8_t>>& basis, std::vector<std::uint32_t>& reduced_basis_rows, 
     std::vector<std::uint32_t>& leading_pos){
-    reduced_basis_cols.clear();
+    
+    reduced_basis_rows.clear();
+    leading_pos.clear();
     std::vector<std::vector<std::uint8_t>> reduced_basis;
     
     if(basis.size() == 0){
         return reduced_basis;
     }
+
+    reduced_basis_rows.clear();
 
     //find nonzero rows, we only reduce those
     for(std::uint32_t i = 0; i < basis[0].size(); ++i){
@@ -956,8 +959,10 @@ std::vector<std::vector<std::uint8_t>> gf2elim(const std::vector<std::uint8_t>& 
 
     //copy nonzero info to separate matrix
     for(std::uint32_t i = 0; i < cols; ++i){
+        reduced_basis[i].resize(rows);
         for(std::uint32_t j = 0; j < rows; ++j){
-            reduced_basis[i][j] = basis[i][reduced_basis_rows[j]];
+            std::uint32_t idx = reduced_basis_rows[j];
+            reduced_basis[i][j] = basis[i][idx];
         }
     }
 
@@ -1048,7 +1053,7 @@ bool gereconstruct(std::unordered_map<std::uint32_t, std::uint8_t>& sampled, con
     std::vector<std::uint32_t> one_counts(basis_indices.size(), 0);
     std::vector<std::uint32_t> basis_to_consider;
 
-    for(std::uint32_t i = 0; i < leading_indices; ++i){
+    for(std::uint32_t i = 0; i < leading_indices.size(); ++i){
         std::uint32_t actual_index = basis_indices[leading_indices[i]];
 
         //only consider basis if it's pivot has been sampled
@@ -1061,7 +1066,7 @@ bool gereconstruct(std::unordered_map<std::uint32_t, std::uint8_t>& sampled, con
                 basis_to_consider.push_back(i);
                 
                 for(std::uint32_t j = 0; j < one_counts.size(); ++j){
-                    one_counts[i] += basis[i][j];
+                    one_counts[i] += reduced_basis[i][j];
                 }
             }
         }
