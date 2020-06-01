@@ -1012,11 +1012,11 @@ std::vector<std::vector<std::uint8_t>> gf2elim(const std::vector<std::vector<std
         curr_pivot_col++;
 
         //this is to handle empty columns after the current row has been handled, so we forward the column pivot to the next non-empty column of the submatrix
-        for(; curr_pivot_col < cols, ++curr_pivot_col){
+        for(; curr_pivot_col < cols; ++curr_pivot_col){
             std::uint8_t has_one = 0;
 
             for(std::uint32_t i = curr_pivot_row; i < rows; ++i){
-                has_one |= curr_pivot_row[i][curr_pivot_col];
+                has_one |= reduced_basis[i][curr_pivot_col];
             }
 
             if(has_one){
