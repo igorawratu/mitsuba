@@ -879,7 +879,7 @@ std::vector<std::uint32_t> sampleColBWithLeading(Scene* scene, KDTNode<Reconstru
     const std::vector<VPL>& vpls, std::uint32_t col, float min_dist, std::uint32_t num_samples, 
     std::mt19937& rng, std::unordered_map<std::uint32_t, std::uint8_t>& sampled_vals, const std::vector<float>& leading_probabilities, 
     const std::vector<float>& non_leading_probabilities, const std::vector<std::uint32_t>& leading_indices, 
-    const std::vector<std::uint32_t>& basis_indices, float leading_perc, const std::vector<std::uint32_t>& sample_set, bool resample){
+    float leading_perc, const std::vector<std::uint32_t>& sample_set, bool resample){
 
     std::uint32_t max_samples = slice->sample_indices.size();
     assert(num_samples <= max_samples);
@@ -890,7 +890,7 @@ std::vector<std::uint32_t> sampleColBWithLeading(Scene* scene, KDTNode<Reconstru
         std::uint32_t num_leading_samples = std::max(std::uint32_t(leading_indices.size()), std::min(1u, std::uint32_t(leading_perc * num_samples)));
         if(num_leading_samples == leading_indices.size()){
             for(std::uint32_t i = 0; i < leading_indices.size(); ++i){
-                sample_indices.push_back(basis_indices[leading_indices[i]]);
+                sample_indices.push_back(leading_indices[i]);
             }
         }
         else{
@@ -1018,7 +1018,7 @@ std::vector<std::vector<std::uint8_t>> gf2elim(const std::vector<std::vector<std
     for(std::uint32_t i = 0; i < leading_pos.size(); ++i){
         std::cout << leading_pos[i] << " ";
     }
-    std::cout << " | " << reduced_basis_indices.size() << std::endl;
+    std::cout << " | " << reduced_basis.size() << std::endl;
 
     return reduced_basis;
 }
@@ -1039,7 +1039,7 @@ bool gereconstruct(std::unordered_map<std::uint32_t, std::uint8_t>& sampled, con
 
             //check if need to consider basis, if yes update tally, this works because the matrix is at least in echelon form after
             //gaussian elimination, thus we know the column will be zero from now onwards
-            if((sampled[actual_index] == 1 && even) || (sampled[actual_index] == 0 && !even)){
+            if((sampled[idx] == 1 && even) || (sampled[idx] == 0 && !even)){
                 basis_to_consider.push_back(i);
                 
                 for(std::uint32_t j = 0; j < one_counts.size(); ++j){
@@ -1130,7 +1130,7 @@ std::uint32_t adaptiveMatrixReconstructionBGE(
 
        if(basis.size() > 0){
             sampled = sampleColBWithLeading(scene, slice, vpls, order[i], min_dist, num_samples, rng, sample_omega,
-                leading_probabilities, non_leading_probabilities, leading_indices, basis_indices, 0.25f, sampled, regenerate_sample_indices);
+                leading_probabilities, non_leading_probabilities, leading_indices, 0.25f, sampled, regenerate_sample_indices);
             regenerate_sample_indices = false;
 
             full_col_sampled = false;
@@ -1246,7 +1246,7 @@ std::uint32_t adaptiveMatrixReconstructionBGE(
             //set leading and non-leading probabilities
             non_leading_probabilities = probabilities;
             for(std::uint32_t i = 0; i < leading_indices.size(); ++i){
-                std::uint32_t idx = basis_indices[leading_indices[i]];
+                std::uint32_t idx = leading_indices[i];
                 non_leading_probabilities[idx] = 0.f;
                 leading_probabilities[idx] = probabilities[idx];
             }
