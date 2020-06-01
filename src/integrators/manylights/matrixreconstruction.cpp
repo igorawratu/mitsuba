@@ -979,7 +979,9 @@ std::vector<std::vector<std::uint8_t>> gf2elim(const std::vector<std::vector<std
             }
         }
 
-        std::cout << first_nonzero_idx << std::endl;
+        if(first_nonzero_idx == -1){
+            break;
+        }
 
         //swap rows
         if(first_nonzero_idx != curr_pivot){
@@ -1019,6 +1021,8 @@ std::vector<std::vector<std::uint8_t>> gf2elim(const std::vector<std::vector<std
 
         curr_pivot++;
     }
+
+    reduced_basis.resize(curr_pivot);
 
     //get all leading positions, will be needed when obtaining coefficients
     std::vector<std::vector<std::uint8_t>> nonzero_reduced;
