@@ -998,20 +998,12 @@ std::vector<std::vector<std::uint8_t>> gf2elim(const std::vector<std::vector<std
 
         c[curr_pivot] = 0; //dont self xor pivot
 
-        //outer product
-        std::vector<std::vector<std::uint8_t>> outer_prod(rows);
-
-        for(std::uint32_t i = 0; i < c.size(); ++i){
-            outer_prod[i].resize(aijn.size());
-            for(std::uint32_t j = 0; j < aijn.size(); ++j){
-                outer_prod[i][j] = c[i] & aijn[j];
-            }
-        }
-
         //xor
-        for(std::uint32_t i = 0; i < outer_prod.size(); ++i){
-            for(std::uint32_t j = 0; j < outer_prod[i].size(); ++j){
-                reduced_basis[i][curr_pivot + j] ^= outer_prod[i][j];
+        for(std::uint32_t i = 0; i < c.size(); ++i){
+            if(c[i]){
+                for(std::uint32_t j = 0; j < aijn.size(); ++j){
+                    reduced_basis[i][j + curr_pivot] ^= aijn[j];
+                }
             }
         }
 
