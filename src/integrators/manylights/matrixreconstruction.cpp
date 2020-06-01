@@ -1261,6 +1261,8 @@ std::uint32_t adaptiveMatrixReconstructionBGE(
     
     basis_rank = basis.size();
 
+    std::cout << basis.size() << std::endl;
+
     return total_samples;
 }
 
