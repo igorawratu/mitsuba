@@ -1040,7 +1040,7 @@ std::vector<std::vector<std::uint8_t>> gf2elim(const std::vector<std::vector<std
     for(std::uint32_t i = 0; i < leading_pos.size(); ++i){
         std::cout << leading_pos[i] << " ";
     }
-    std::cout << std::endl;
+    std::cout << " | " << reduced_basis_indices.size() << std::endl;
 
     return nonzero_reduced;
 }
