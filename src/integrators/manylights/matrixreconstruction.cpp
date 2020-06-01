@@ -925,7 +925,6 @@ std::vector<std::vector<std::uint8_t>> gf2elim(const std::vector<std::vector<std
     std::vector<std::uint32_t>& leading_pos){
 
     reduced_basis_indices.clear();
-    leading_pos.clear();
     std::vector<std::vector<std::uint8_t>> reduced_basis;
     
     if(basis.size() == 0){
@@ -1037,6 +1036,11 @@ std::vector<std::vector<std::uint8_t>> gf2elim(const std::vector<std::vector<std
             leading_pos.push_back(nonzero_pos);
         }
     }
+
+    for(std::uint32_t i = 0; i < leading_pos.size(); ++i){
+        std::cout << leading_pos[i] << " ";
+    }
+    std::cout << std::endl;
 
     return nonzero_reduced;
 }
@@ -1247,13 +1251,13 @@ std::uint32_t adaptiveMatrixReconstructionBGE(
             basis.push_back(col_to_add);
             reduced_basis = gf2elim(basis, basis_indices, leading_indices);
 
-            for(std::uint32_t j = 0; j < reduced_basis.size(); ++j){
+            /*for(std::uint32_t j = 0; j < reduced_basis.size(); ++j){
                 for(std::uint32_t k = 0; k < reduced_basis[j].size(); ++k){
                     std::cout << std::uint32_t(reduced_basis[j][k]) << " ";
                 }
                 std::cout << std::endl;
             }
-            std::cout << std::endl;
+            std::cout << std::endl;*/
 
             //probability update
             std::vector<std::uint32_t> buckets;
