@@ -921,57 +921,42 @@ std::vector<std::uint32_t> sampleColBWithLeading(Scene* scene, KDTNode<Reconstru
     return sample_indices;
 }
 
-std::vector<std::vector<std::uint8_t>> gf2elim(const std::vector<std::vector<std::uint8_t>>& basis, std::vector<std::uint32_t>& reduced_basis_indices, 
-    std::vector<std::uint32_t>& leading_pos){
-
-    reduced_basis_indices.clear();
-    std::vector<std::vector<std::uint8_t>> reduced_basis;
+std::vector<std::vector<std::uint8_t>> gf2elim(const std::vector<std::vector<std::uint8_t>>& basis, std::vector<std::uint32_t>& leading_pos){
+    std::vector<std::vector<std::uint8_t>> reduced_basis = basis;
     
     if(basis.size() == 0){
         return reduced_basis;
     }
 
-    reduced_basis_indices.clear();
-
-    //find nonzero rows, we only reduce those
-    for(std::uint32_t i = 0; i < basis[0].size(); ++i){
-        std::uint8_t one_exists = 0;
-
-        for(std::uint32_t j = 0; j < basis.size(); ++j){
-            one_exists |= basis[j][i];
-        }
-
-        if(one_exists){
-            reduced_basis_indices.push_back(i);
-        }
-    }
-
-    if(reduced_basis_indices.size() == 0){
-        return reduced_basis;
-    }
-
     //swap rows and columns because we perform elimination on a transposed matrix
-    std::uint32_t rows = basis.size();
-    std::uint32_t cols = reduced_basis_indices.size();
-
-    reduced_basis.resize(rows);
-
-    //copy nonzero info to separate matrix
-    for(std::uint32_t i = 0; i < rows; ++i){
-        reduced_basis[i].resize(cols);
-        for(std::uint32_t j = 0; j < cols; ++j){
-            std::uint32_t idx = reduced_basis_indices[j];
-            reduced_basis[i][j] = basis[i][idx];
-        }
-    }
-
+    std::uint32_t rows = reduced_basis.size();
+    std::uint32_t cols = reduced_basis[0].size();
 
     //actual gaussian elimination algorithm for gf2, should be noted that we are reducing the transpose of the above matrix, so all rows and columns 
-    //are inherently changed. Also as all nonzero cols are removed, the first col is guaranteed to contain a 1
+    //are inherently changed.
     std::uint32_t curr_pivot_row = 0;
     std::uint32_t curr_pivot_col = 0;
 
     while(curr_pivot_row < rows && curr_pivot_col < cols){
+        //this is to handle empty columns. we forward the column pivot to the next non-empty column of the submatrix
+        for(; curr_pivot_col < cols; ++curr_pivot_col){
+            std::uint8_t has_one = 0;
+
+            for(std::uint32_t i = curr_pivot_row; i < rows; ++i){
+                has_one |= reduced_basis[i][curr_pivot_col];
+            }
+
+            if(has_one){
+                break;
+            }
+        }
+
+        //finished
+        if(curr_pivot_col < cols){
+            break;
+        }
+
+        //put first row with nonzero pivot element as the first
         int first_nonzero_idx = curr_pivot_row;
         for(std::uint32_t i = curr_pivot_row; i < reduced_basis.size(); ++i){
             if(reduced_basis[i][curr_pivot_col]){
@@ -980,13 +965,13 @@ std::vector<std::vector<std::uint8_t>> gf2elim(const std::vector<std::vector<std
             }
         }
 
-        //swap rows
         if(first_nonzero_idx != curr_pivot_row){
             auto temp = reduced_basis[curr_pivot_row];
             reduced_basis[curr_pivot_row] = reduced_basis[first_nonzero_idx];
             reduced_basis[first_nonzero_idx] = temp;
         }
 
+        //xor pivot row with all other rows in the matrix
         std::vector<std::uint8_t> aijn(cols - curr_pivot_col);
         for(std::uint32_t i = curr_pivot_col; i < cols; ++i){
             aijn[i - curr_pivot_col] = reduced_basis[curr_pivot_row][i];
@@ -999,7 +984,6 @@ std::vector<std::vector<std::uint8_t>> gf2elim(const std::vector<std::vector<std
 
         c[curr_pivot_row] = 0; //dont self xor pivot row
 
-        //xor
         for(std::uint32_t i = 0; i < c.size(); ++i){
             if(c[i]){
                 for(std::uint32_t j = 0; j < aijn.size(); ++j){
@@ -1010,23 +994,12 @@ std::vector<std::vector<std::uint8_t>> gf2elim(const std::vector<std::vector<std
 
         curr_pivot_row++;
         curr_pivot_col++;
-
-        //this is to handle empty columns after the current row has been handled, so we forward the column pivot to the next non-empty column of the submatrix
-        for(; curr_pivot_col < cols; ++curr_pivot_col){
-            std::uint8_t has_one = 0;
-
-            for(std::uint32_t i = curr_pivot_row; i < rows; ++i){
-                has_one |= reduced_basis[i][curr_pivot_col];
-            }
-
-            if(has_one){
-                break;
-            }
-        }
     }
 
+    //drop all zero rows
+    reduced_basis.resize(curr_pivot_row);
+
     //get all leading positions, will be needed when obtaining coefficients
-    std::vector<std::vector<std::uint8_t>> nonzero_reduced;
     leading_pos.clear();
 
     for(std::uint32_t i = 0; i < reduced_basis.size(); ++i){
@@ -1038,16 +1011,16 @@ std::vector<std::vector<std::uint8_t>> gf2elim(const std::vector<std::vector<std
             }
         }
 
-        if(nonzero_pos >= 0){
-            nonzero_reduced.push_back(reduced_basis[i]);
-            leading_pos.push_back(nonzero_pos);
-        }
+        assert(nonzero_pos >= 0);
+
+        nonzero_reduced.push_back(reduced_basis[i]);
+        leading_pos.push_back(nonzero_pos);
     }
 
-    /*for(std::uint32_t i = 0; i < leading_pos.size(); ++i){
+    for(std::uint32_t i = 0; i < leading_pos.size(); ++i){
         std::cout << leading_pos[i] << " ";
     }
-    std::cout << " | " << reduced_basis_indices.size() << std::endl;*/
+    std::cout << " | " << reduced_basis_indices.size() << std::endl;
 
     return nonzero_reduced;
 }
