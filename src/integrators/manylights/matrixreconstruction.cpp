@@ -971,16 +971,12 @@ std::vector<std::vector<std::uint8_t>> gf2elim(const std::vector<std::vector<std
     std::uint32_t curr_pivot = 0;
 
     while(curr_pivot < rows && curr_pivot < cols){
-        int first_nonzero_idx = -1;
+        int first_nonzero_idx = curr_pivot;
         for(std::uint32_t i = curr_pivot; i < reduced_basis.size(); ++i){
             if(reduced_basis[i][curr_pivot]){
                 first_nonzero_idx = i;
                 break;
             }
-        }
-
-        if(first_nonzero_idx == -1){
-            break;
         }
 
         //swap rows
@@ -1000,7 +996,7 @@ std::vector<std::vector<std::uint8_t>> gf2elim(const std::vector<std::vector<std
             c[i] = reduced_basis[i][curr_pivot];
         }
 
-        c[0] = 0; //dont self xor pivot
+        c[curr_pivot] = 0; //dont self xor pivot
 
         //outer product
         std::vector<std::vector<std::uint8_t>> outer_prod(rows);
@@ -1021,8 +1017,6 @@ std::vector<std::vector<std::uint8_t>> gf2elim(const std::vector<std::vector<std
 
         curr_pivot++;
     }
-
-    reduced_basis.resize(curr_pivot);
 
     //get all leading positions, will be needed when obtaining coefficients
     std::vector<std::vector<std::uint8_t>> nonzero_reduced;
