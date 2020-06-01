@@ -952,15 +952,15 @@ std::vector<std::vector<std::uint8_t>> gf2elim(const std::vector<std::vector<std
     }
 
     //swap rows and columns because we perform elimination on a transposed matrix
-    std::uint32_t cols = basis.size();
-    std::uint32_t rows = reduced_basis_indices.size();
+    std::uint32_t rows = basis.size();
+    std::uint32_t cols = reduced_basis_indices.size();
 
-    reduced_basis.resize(cols);
+    reduced_basis.resize(rows);
 
     //copy nonzero info to separate matrix
-    for(std::uint32_t i = 0; i < cols; ++i){
-        reduced_basis[i].resize(rows);
-        for(std::uint32_t j = 0; j < rows; ++j){
+    for(std::uint32_t i = 0; i < rows; ++i){
+        reduced_basis[i].resize(cols);
+        for(std::uint32_t j = 0; j < cols; ++j){
             std::uint32_t idx = reduced_basis_indices[j];
             reduced_basis[i][j] = basis[i][idx];
         }
@@ -989,21 +989,21 @@ std::vector<std::vector<std::uint8_t>> gf2elim(const std::vector<std::vector<std
 
         std::vector<std::uint8_t> aijn(cols - curr_pivot);
         for(std::uint32_t i = curr_pivot; i < cols; ++i){
-            aijn[i - curr_pivot] = reduced_basis[i][curr_pivot];
+            aijn[i - curr_pivot] = reduced_basis[curr_pivot][i];
         }
 
         std::vector<std::uint8_t> c(rows);
         for(std::uint32_t i = 0; i < rows; ++i){
-            c[i] = reduced_basis[curr_pivot][i];
+            c[i] = reduced_basis[i][curr_pivot];
         }
 
         c[0] = 0; //dont self xor pivot
 
         //outer product
-        std::vector<std::vector<std::uint8_t>> outer_prod(aijn.size());
+        std::vector<std::vector<std::uint8_t>> outer_prod(rows);
 
         for(std::uint32_t i = 0; i < c.size(); ++i){
-            outer_prod.resize(rows);
+            outer_prod.resize(aijn.size());
             for(std::uint32_t j = 0; j < aijn.size(); ++j){
                 outer_prod[i][j] = c[i] & aijn[j];
             }
