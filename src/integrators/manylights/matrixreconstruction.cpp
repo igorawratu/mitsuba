@@ -1153,7 +1153,6 @@ std::uint32_t adaptiveMatrixReconstructionBGE(
 
     //The actual adaptive matrix recovery algorithm
     for(std::uint32_t i = 0; i < order.size(); ++i){
-        std::cout << i << " " << basis.size() << " " << reduced_basis.size() << " " << basis_indices.size() << std::endl;
         sample_omega.clear();
         std::uint32_t samples_for_col = 0;
 
@@ -1247,6 +1246,14 @@ std::uint32_t adaptiveMatrixReconstructionBGE(
             //basis update
             basis.push_back(col_to_add);
             reduced_basis = gf2elim(basis, basis_indices, leading_indices);
+
+            for(std::uint32_t j = 0; j < reduced_basis.size(); ++j){
+                for(std::uint32_t k = 0; k < reduced_basis[j].size(); ++k){
+                    std::cout << reduced_basis[j][k] << " ";
+                }
+                std::cout << std::endl;
+            }
+            std::cout << std::endl;
 
             //probability update
             std::vector<std::uint32_t> buckets;
