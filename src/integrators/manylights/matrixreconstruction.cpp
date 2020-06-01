@@ -1062,7 +1062,7 @@ bool gereconstruct(std::unordered_map<std::uint32_t, std::uint8_t>& sampled, con
 
             //check if need to consider basis, if yes update tally, this works because the matrix is at least in echelon form after
             //gaussian elimination, thus we know the column will be zero from now onwards
-            if((sampled[actual_index] == 1 && even) || (sampled[actual_index] == 0) && !even){
+            if((sampled[actual_index] == 1 && even) || (sampled[actual_index] == 0 && !even)){
                 basis_to_consider.push_back(i);
                 
                 for(std::uint32_t j = 0; j < one_counts.size(); ++j){
