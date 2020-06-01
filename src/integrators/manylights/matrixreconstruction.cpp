@@ -967,47 +967,62 @@ std::vector<std::vector<std::uint8_t>> gf2elim(const std::vector<std::vector<std
 
 
     //actual gaussian elimination algorithm for gf2, should be noted that we are reducing the transpose of the above matrix, so all rows and columns 
-    //are inherently changed
-    std::uint32_t curr_pivot = 0;
+    //are inherently changed. Also as all nonzero cols are removed, the first col is guaranteed to contain a 1
+    std::uint32_t curr_pivot_row = 0;
+    std::uint32_t curr_pivot_col = 0;
 
-    while(curr_pivot < rows && curr_pivot < cols){
-        int first_nonzero_idx = curr_pivot;
-        for(std::uint32_t i = curr_pivot; i < reduced_basis.size(); ++i){
-            if(reduced_basis[i][curr_pivot]){
+    while(curr_pivot_row < rows && curr_pivot_col < cols){
+        int first_nonzero_idx = curr_pivot_row;
+        for(std::uint32_t i = curr_pivot_row; i < reduced_basis.size(); ++i){
+            if(reduced_basis[i][curr_pivot_col]){
                 first_nonzero_idx = i;
                 break;
             }
         }
 
         //swap rows
-        if(first_nonzero_idx != curr_pivot){
-            auto temp = reduced_basis[curr_pivot];
-            reduced_basis[curr_pivot] = reduced_basis[first_nonzero_idx];
+        if(first_nonzero_idx != curr_pivot_row){
+            auto temp = reduced_basis[curr_pivot_row];
+            reduced_basis[curr_pivot_row] = reduced_basis[first_nonzero_idx];
             reduced_basis[first_nonzero_idx] = temp;
         }
 
-        std::vector<std::uint8_t> aijn(cols - curr_pivot);
-        for(std::uint32_t i = curr_pivot; i < cols; ++i){
-            aijn[i - curr_pivot] = reduced_basis[curr_pivot][i];
+        std::vector<std::uint8_t> aijn(cols - curr_pivot_col);
+        for(std::uint32_t i = curr_pivot_col; i < cols; ++i){
+            aijn[i - curr_pivot_col] = reduced_basis[curr_pivot_row][i];
         }
 
         std::vector<std::uint8_t> c(rows);
         for(std::uint32_t i = 0; i < rows; ++i){
-            c[i] = reduced_basis[i][curr_pivot];
+            c[i] = reduced_basis[i][curr_pivot_col];
         }
 
-        c[curr_pivot] = 0; //dont self xor pivot
+        c[curr_pivot_row] = 0; //dont self xor pivot row
 
         //xor
         for(std::uint32_t i = 0; i < c.size(); ++i){
             if(c[i]){
                 for(std::uint32_t j = 0; j < aijn.size(); ++j){
-                    reduced_basis[i][j + curr_pivot] ^= aijn[j];
+                    reduced_basis[i][j + curr_pivot_col] ^= aijn[j];
                 }
             }
         }
 
-        curr_pivot++;
+        curr_pivot_row++;
+        curr_pivot_col++;
+
+        //this is to handle empty columns after the current row has been handled, so we forward the column pivot to the next non-empty column of the submatrix
+        for(; curr_pivot_col < cols, ++curr_pivot_col){
+            std::uint8_t has_one = 0;
+
+            for(std::uint32_t i = curr_pivot_row; i < rows; ++i){
+                has_one |= curr_pivot_row[i][curr_pivot_col];
+            }
+
+            if(has_one){
+                break;
+            }
+        }
     }
 
     //get all leading positions, will be needed when obtaining coefficients
