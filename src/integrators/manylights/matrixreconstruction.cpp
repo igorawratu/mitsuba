@@ -900,7 +900,7 @@ std::vector<std::uint32_t> sampleColBWithLeading(Scene* scene, KDTNode<Reconstru
         std::uint32_t remaining_samples = num_samples - num_leading_samples;
         std::vector<std::uint32_t> nonleading_sample_indices;
         if(remaining_samples > 0){
-            nonleading_sample_indices = importanceSample(remaining_samples, rng, non_leading_probabilities)
+            nonleading_sample_indices = importanceSample(remaining_samples, rng, non_leading_probabilities);
         }
 
         sample_indices.insert(sample_indices.end(), nonleading_sample_indices.begin(), nonleading_sample_indices.end());
@@ -909,21 +909,21 @@ std::vector<std::uint32_t> sampleColBWithLeading(Scene* scene, KDTNode<Reconstru
         sample_indices = sample_set;
     }
 
-    for(size_t i = 0; i < sampled_indices.size(); ++i){
+    for(size_t i = 0; i < sample_indices.size(); ++i){
         const VPL& vpl = vpls[col];
-        ReconstructionSample& scene_sample = slice->sample(sampled_indices[i]);
+        ReconstructionSample& scene_sample = slice->sample(sample_indices[i]);
 
-        if(sampled_vals.find(sampled_indices[i]) == sampled_vals.end()){
-            sampled_vals[sampled_indices[i]] = sampleVisibility(scene, scene_sample.its, vpl, min_dist) ? 1 : 0;    
+        if(sampled_vals.find(sample_indices[i]) == sampled_vals.end()){
+            sampled_vals[sample_indices[i]] = sampleVisibility(scene, scene_sample.its, vpl, min_dist) ? 1 : 0;    
         }
     }
 
-    return sampled_indices;
+    return sample_indices;
 }
 
 std::vector<std::vector<std::uint8_t>> gf2elim(const std::vector<std::vector<std::uint8_t>>& basis, std::vector<std::uint32_t>& reduced_basis_rows, 
     std::vector<std::uint32_t>& leading_pos){
-    
+
     reduced_basis_rows.clear();
     leading_pos.clear();
     std::vector<std::vector<std::uint8_t>> reduced_basis;
