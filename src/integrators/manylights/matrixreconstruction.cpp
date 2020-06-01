@@ -1000,10 +1000,10 @@ std::vector<std::vector<std::uint8_t>> gf2elim(const std::vector<std::vector<std
         c[0] = 0; //dont self xor pivot
 
         //outer product
-        std::vector<std::vector<std::uint8_t>> outer_prod(rows);
+        std::vector<std::vector<std::uint8_t>> outer_prod(aijn.size());
 
         for(std::uint32_t i = 0; i < c.size(); ++i){
-            outer_prod.resize(aijn.size());
+            outer_prod.resize(rows);
             for(std::uint32_t j = 0; j < aijn.size(); ++j){
                 outer_prod[i][j] = c[i] & aijn[j];
             }
