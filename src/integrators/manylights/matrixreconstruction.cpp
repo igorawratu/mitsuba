@@ -921,10 +921,10 @@ std::vector<std::uint32_t> sampleColBWithLeading(Scene* scene, KDTNode<Reconstru
     return sample_indices;
 }
 
-std::vector<std::vector<std::uint8_t>> gf2elim(const std::vector<std::vector<std::uint8_t>>& basis, std::vector<std::uint32_t>& reduced_basis_rows, 
+std::vector<std::vector<std::uint8_t>> gf2elim(const std::vector<std::vector<std::uint8_t>>& basis, std::vector<std::uint32_t>& reduced_basis_indices, 
     std::vector<std::uint32_t>& leading_pos){
 
-    reduced_basis_rows.clear();
+    reduced_basis_indices.clear();
     leading_pos.clear();
     std::vector<std::vector<std::uint8_t>> reduced_basis;
     
@@ -932,7 +932,7 @@ std::vector<std::vector<std::uint8_t>> gf2elim(const std::vector<std::vector<std
         return reduced_basis;
     }
 
-    reduced_basis_rows.clear();
+    reduced_basis_indices.clear();
 
     //find nonzero rows, we only reduce those
     for(std::uint32_t i = 0; i < basis[0].size(); ++i){
@@ -943,17 +943,17 @@ std::vector<std::vector<std::uint8_t>> gf2elim(const std::vector<std::vector<std
         }
 
         if(one_exists){
-            reduced_basis_rows.push_back(i);
+            reduced_basis_indices.push_back(i);
         }
     }
 
-    if(reduced_basis_rows.size() == 0){
+    if(reduced_basis_indices.size() == 0){
         return reduced_basis;
     }
 
     //swap rows and columns because we perform elimination on a transposed matrix
     std::uint32_t cols = basis.size();
-    std::uint32_t rows = reduced_basis_rows.size();
+    std::uint32_t rows = reduced_basis_indices.size();
 
     reduced_basis.resize(cols);
 
@@ -989,12 +989,12 @@ std::vector<std::vector<std::uint8_t>> gf2elim(const std::vector<std::vector<std
 
         std::vector<std::uint8_t> aijn(cols - curr_pivot);
         for(std::uint32_t i = curr_pivot; i < cols; ++i){
-            aijn[i - curr_pivot] = reduced_basis[curr_pivot][i];
+            aijn[i - curr_pivot] = reduced_basis[i][curr_pivot];
         }
 
         std::vector<std::uint8_t> c(rows);
         for(std::uint32_t i = 0; i < rows; ++i){
-            c[i] = reduced_basis[i][curr_pivot];
+            c[i] = reduced_basis[curr_pivot][i];
         }
 
         c[0] = 0; //dont self xor pivot
