@@ -961,7 +961,7 @@ std::vector<std::vector<std::uint8_t>> gf2elim(const std::vector<std::vector<std
     for(std::uint32_t i = 0; i < cols; ++i){
         reduced_basis[i].resize(rows);
         for(std::uint32_t j = 0; j < rows; ++j){
-            std::uint32_t idx = reduced_basis_rows[j];
+            std::uint32_t idx = reduced_basis_indices[j];
             reduced_basis[i][j] = basis[i][idx];
         }
     }
