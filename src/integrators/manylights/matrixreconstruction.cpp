@@ -1261,7 +1261,7 @@ std::uint32_t adaptiveMatrixReconstructionBGE(
     
     basis_rank = basis.size();
 
-    std::cout << basis.size() << " " << vpls.size() << " " << slice->sample_indices.size() << std::endl;
+    std::cout << basis.size() << " " << reduced_basis.size() << " " << vpls.size() << " " << slice->sample_indices.size() << std::endl;
 
     return total_samples;
 }
