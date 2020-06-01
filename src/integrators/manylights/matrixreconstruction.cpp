@@ -1012,8 +1012,6 @@ std::vector<std::vector<std::uint8_t>> gf2elim(const std::vector<std::vector<std
         }
 
         assert(nonzero_pos >= 0);
-
-        nonzero_reduced.push_back(reduced_basis[i]);
         leading_pos.push_back(nonzero_pos);
     }
 
@@ -1022,27 +1020,22 @@ std::vector<std::vector<std::uint8_t>> gf2elim(const std::vector<std::vector<std
     }
     std::cout << " | " << reduced_basis_indices.size() << std::endl;
 
-    return nonzero_reduced;
+    return reduced_basis;
 }
 
-//basis is gaussian eliminated version of actual basis after removing all zero rows, leading indices must be sorted
+//basis is gaussian eliminated version of actual basis
 bool gereconstruct(std::unordered_map<std::uint32_t, std::uint8_t>& sampled, const std::vector<std::vector<std::uint8_t>>& reduced_basis, 
-    const std::vector<std::uint32_t>& basis_indices, const std::vector<std::uint32_t>& leading_indices, std::uint32_t rows){
+    const std::vector<std::uint32_t>& leading_indices, std::uint32_t rows){
 
-    //no basis columns, can't reconstruct
-    if(reduced_basis.size() == 0){
-        return false;
-    }
-
-    std::vector<std::uint32_t> one_counts(basis_indices.size(), 0);
+    std::vector<std::uint32_t> one_counts(rows, 0);
     std::vector<std::uint32_t> basis_to_consider;
 
     for(std::uint32_t i = 0; i < leading_indices.size(); ++i){
-        std::uint32_t actual_index = basis_indices[leading_indices[i]];
+        std::uint32_t idx = leading_indices[i];
 
         //only consider basis if it's pivot has been sampled
-        if(sampled.find(actual_index) != sampled.end()){
-            bool even = (one_counts[leading_indices[i]] & 1) == 0;
+        if(sampled.find(idx) != sampled.end()){
+            bool even = (one_counts[idx] & 1) == 0;
 
             //check if need to consider basis, if yes update tally, this works because the matrix is at least in echelon form after
             //gaussian elimination, thus we know the column will be zero from now onwards
@@ -1056,18 +1049,14 @@ bool gereconstruct(std::unordered_map<std::uint32_t, std::uint8_t>& sampled, con
         }
     }
 
-    std::vector<std::uint32_t> reconstructed(rows, 0);
-
     for(std::uint32_t i = 0; i < one_counts.size(); ++i){
-        std::uint32_t curr_idx = basis_indices[i];
-        
-        reconstructed[curr_idx] = one_counts[i] & 1;
+        one_counts[i] &= 1;
     }
 
     bool matching = true;
     for(auto iter = sampled.begin(); iter != sampled.end(); ++iter){
         std::uint32_t idx = iter->first;
-        if(iter->second != reconstructed[idx]){
+        if(iter->second != one_counts[idx]){
             matching = false;
             break;
         }
@@ -1075,7 +1064,7 @@ bool gereconstruct(std::unordered_map<std::uint32_t, std::uint8_t>& sampled, con
 
     if(matching){
         for(std::uint32_t i = 0; i < rows; ++i){
-            sampled[i] = reconstructed[i];
+            sampled[i] = one_counts[i];
         }
     }
 
@@ -1117,7 +1106,6 @@ std::uint32_t adaptiveMatrixReconstructionBGE(
 
     std::vector<std::vector<std::uint8_t>> basis;
     std::vector<std::vector<std::uint8_t>> reduced_basis;
-    std::vector<std::uint32_t> basis_indices;
     std::vector<std::uint32_t> leading_indices;
 
     std::uint32_t total_samples = 0;
@@ -1156,7 +1144,7 @@ std::uint32_t adaptiveMatrixReconstructionBGE(
             }
             else{
                 std::unordered_map<std::uint32_t, std::uint8_t> reconstructed = sample_omega; 
-                if(gereconstruct(reconstructed, reduced_basis, basis_indices, leading_indices, num_rows)){
+                if(gereconstruct(reconstructed, reduced_basis, leading_indices, num_rows)){
                     for(std::uint32_t j = 0; j < col_to_add.size(); ++j){
                         col_to_add[j] = sample_omega[j];   
                     }
@@ -1229,15 +1217,7 @@ std::uint32_t adaptiveMatrixReconstructionBGE(
         if(full_col_sampled){
             //basis update
             basis.push_back(col_to_add);
-            reduced_basis = gf2elim(basis, basis_indices, leading_indices);
-
-            /*for(std::uint32_t j = 0; j < reduced_basis.size(); ++j){
-                for(std::uint32_t k = 0; k < reduced_basis[j].size(); ++k){
-                    std::cout << std::uint32_t(reduced_basis[j][k]) << " ";
-                }
-                std::cout << std::endl;
-            }
-            std::cout << std::endl;*/
+            reduced_basis = gf2elim(basis, leading_indices);
 
             //probability update
             std::vector<std::uint32_t> buckets;
