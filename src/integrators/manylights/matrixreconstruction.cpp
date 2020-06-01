@@ -971,13 +971,15 @@ std::vector<std::vector<std::uint8_t>> gf2elim(const std::vector<std::vector<std
     std::uint32_t curr_pivot = 0;
 
     while(curr_pivot < rows && curr_pivot < cols){
-        std::uint32_t first_nonzero_idx = curr_pivot;
+        int first_nonzero_idx = -1;
         for(std::uint32_t i = curr_pivot; i < reduced_basis.size(); ++i){
             if(reduced_basis[i][curr_pivot]){
                 first_nonzero_idx = i;
                 break;
             }
         }
+
+        std::cout << first_nonzero_idx << std::endl;
 
         //swap rows
         if(first_nonzero_idx != curr_pivot){
