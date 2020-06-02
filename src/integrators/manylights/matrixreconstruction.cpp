@@ -1030,68 +1030,53 @@ std::vector<std::vector<std::uint8_t>> gf2elim(const std::vector<std::vector<std
 bool gereconstruct(std::unordered_map<std::uint32_t, std::uint8_t>& sampled, const std::vector<std::vector<std::uint8_t>>& reduced_basis, 
     const std::vector<std::uint32_t>& leading_indices, std::uint32_t rows){
 
-    std::uint32_t one_count = 0;
-    std::uint32_t ns = 0;
     for(std::uint32_t i = 0; i < rows; ++i){
         if(sampled.find(i) != sampled.end()){
-            ns++;
-            if(sampled[i]){
-                one_count++;
-            }
+            std::cout << std::uint32_t(sampled[i]);
         }
+        else std::cout << "-";
     }
-
-    if(one_count > 0 && one_count != ns){
-        for(std::uint32_t i = 0; i < rows; ++i){
-            if(sampled.find(i) != sampled.end()){
-                std::cout << std::uint32_t(sampled[i]);
-            }
-            else std::cout << "-";
-        }
-        std::cout << std::endl;
-    }
+    std::cout << std::endl;
 
     std::vector<std::uint32_t> one_counts(rows, 0);
 
-    /*if(one_count > 0)*/{
-        std::uint32_t current_idx = 0;
+    std::uint32_t current_idx = 0;
 
-        for(std::uint32_t i = 0; i < leading_indices.size(); ++i){
-            //consider indices up to idx for current row
-            std::uint32_t upper = leading_indices[i];
+    for(std::uint32_t i = 0; i < leading_indices.size(); ++i){
+        //consider indices up to idx for current row
+        std::uint32_t upper = leading_indices[i];
 
-            std::uint32_t consider_count = 0;
-            std::uint32_t donotconsider_count = 0;
+        std::uint32_t consider_count = 0;
+        std::uint32_t donotconsider_count = 0;
 
-            for(; current_idx < upper; ++current_idx){
-                if(sampled.find(current_idx) != sampled.end()){
-                    bool even = (one_counts[current_idx] & 1) == 0;
+        for(; current_idx < upper; ++current_idx){
+            if(sampled.find(current_idx) != sampled.end()){
+                bool even = (one_counts[current_idx] & 1) == 0;
 
-                    if((sampled[current_idx] == 0 && !even) || (sampled[current_idx] == 1 && even)){
-                        //no way to reconstruct
-                        if(reduced_basis[i][current_idx] == 0){
-                            return false;
-                        }
-                        else{
-                            consider_count++;
-                        }
+                if((sampled[current_idx] == 0 && !even) || (sampled[current_idx] == 1 && even)){
+                    //no way to reconstruct
+                    if(reduced_basis[i][current_idx] == 0){
+                        return false;
                     }
                     else{
-                        donotconsider_count++;
+                        consider_count++;
                     }
-                }
-            }
-
-            //if consider count is 0, then we can just ignore the row
-            if(consider_count > 0){
-                //disagrement, can't reconstruct
-                if(donotconsider_count > 0){
-                    return false;
                 }
                 else{
-                    for(std::uint32_t j = 0; j < one_counts.size(); ++j){
-                        one_counts[j] += reduced_basis[i][j];
-                    }
+                    donotconsider_count++;
+                }
+            }
+        }
+
+        //if consider count is 0, then we can just ignore the row
+        if(consider_count > 0){
+            //disagrement, can't reconstruct
+            if(donotconsider_count > 0){
+                return false;
+            }
+            else{
+                for(std::uint32_t j = 0; j < one_counts.size(); ++j){
+                    one_counts[j] += reduced_basis[i][j];
                 }
             }
         }
