@@ -1014,7 +1014,7 @@ std::vector<std::vector<std::uint8_t>> gf2elim(const std::vector<std::vector<std
             std::cout << std::endl;
         }
 
-        std::cout << "rows: " << rows << " leading: ";
+        std::cout << "cols: " << cols << " leading: ";
         
         for(std::uint32_t i = 0; i < leading_pos.size(); ++i){
             std::cout << leading_pos[i] << " ";
@@ -1029,6 +1029,10 @@ std::vector<std::vector<std::uint8_t>> gf2elim(const std::vector<std::vector<std
 //basis is gaussian eliminated version of actual basis
 bool gereconstruct(std::unordered_map<std::uint32_t, std::uint8_t>& sampled, const std::vector<std::vector<std::uint8_t>>& reduced_basis, 
     const std::vector<std::uint32_t>& leading_indices, std::uint32_t rows){
+
+    if(reduced_basis.size() != leading_indices.size()){
+        std::cout << reduced_basis.size() << " " << leading_indices.size() << std::endl;
+    }
 
     std::vector<std::uint32_t> one_counts(rows, 0);
     std::uint32_t current_idx = 0;
