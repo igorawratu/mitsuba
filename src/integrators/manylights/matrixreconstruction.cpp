@@ -1053,7 +1053,7 @@ bool gereconstruct(std::unordered_map<std::uint32_t, std::uint8_t>& sampled, con
             break;
         }
     }
-    
+
     if(matching){
         for(std::uint32_t i = 0; i < rows; ++i){
             sampled[i] = one_counts[i];
@@ -1240,7 +1240,7 @@ std::uint32_t adaptiveMatrixReconstructionBGE(
             non_leading_probabilities = probabilities;
             for(std::uint32_t i = 0; i < leading_indices.size(); ++i){
                 std::uint32_t idx = leading_indices[i];
-                non_leading_probabilities[idx] = 0.f;
+                //non_leading_probabilities[idx] = 0.f;
                 leading_probabilities[idx] = probabilities[idx];
             }
         }
