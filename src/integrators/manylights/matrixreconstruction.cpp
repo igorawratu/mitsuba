@@ -887,7 +887,7 @@ std::vector<std::uint32_t> sampleColBWithLeading(Scene* scene, KDTNode<Reconstru
     std::vector<std::uint32_t> sample_indices;
 
     if(resample){
-        std::uint32_t num_leading_samples = std::max(std::uint32_t(leading_indices.size()), std::min(1u, std::uint32_t(leading_perc * num_samples)));
+        std::uint32_t num_leading_samples = std::min(std::uint32_t(leading_indices.size()), std::max(1u, std::uint32_t(leading_perc * num_samples)));
         if(num_leading_samples == leading_indices.size()){
             for(std::uint32_t i = 0; i < leading_indices.size(); ++i){
                 sample_indices.push_back(leading_indices[i]);
@@ -902,9 +902,8 @@ std::vector<std::uint32_t> sampleColBWithLeading(Scene* scene, KDTNode<Reconstru
         if(remaining_samples > 0){
             nonleading_sample_indices = importanceSample(remaining_samples, rng, non_leading_probabilities);
         }
-        std::cout << sample_indices.size() << " ";
+
         sample_indices.insert(sample_indices.end(), nonleading_sample_indices.begin(), nonleading_sample_indices.end());
-        std::cout << nonleading_sample_indices.size() << " " << sample_indices.size() << std::endl;
     }
     else{
         sample_indices = sample_set;
