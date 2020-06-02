@@ -1014,7 +1014,7 @@ std::vector<std::vector<std::uint8_t>> gf2elim(const std::vector<std::vector<std
             std::cout << std::endl;
         }
 
-        std::cout << "cols: " << cols << " leading: ";
+        std::cout << "cols: " << cols << "basis size: " << basis.size() << " leading: ";
         
         for(std::uint32_t i = 0; i < leading_pos.size(); ++i){
             std::cout << leading_pos[i] << " ";
