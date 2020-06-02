@@ -1053,7 +1053,7 @@ bool gereconstruct(std::unordered_map<std::uint32_t, std::uint8_t>& sampled, con
 
     std::vector<std::uint32_t> one_counts(rows, 0);
 
-    if(one_count > 0){
+    /*if(one_count > 0)*/{
         std::uint32_t current_idx = 0;
 
         for(std::uint32_t i = 0; i < leading_indices.size(); ++i){
@@ -1065,10 +1065,16 @@ bool gereconstruct(std::unordered_map<std::uint32_t, std::uint8_t>& sampled, con
 
             for(; current_idx < upper; ++current_idx){
                 if(sampled.find(current_idx) != sampled.end()){
-                    bool even = ((one_counts[current_idx] + reduced_basis[i][current_idx]) & 1) == 0;
+                    bool even = (one_counts[current_idx] & 1) == 0;
 
-                    if((sampled[current_idx] == 0 && even) || (sampled[current_idx] == 1 && !even)){
-                        consider_count++;
+                    if((sampled[current_idx] == 0 && !even) || (sampled[current_idx] == 1 && even)){
+                        //no way to reconstruct
+                        if(reduced_basis[i][current_idx] == 0){
+                            return false;
+                        }
+                        else{
+                            consider_count++;
+                        }
                     }
                     else{
                         donotconsider_count++;
@@ -1078,6 +1084,7 @@ bool gereconstruct(std::unordered_map<std::uint32_t, std::uint8_t>& sampled, con
 
             //if consider count is 0, then we can just ignore the row
             if(consider_count > 0){
+                //disagrement, can't reconstruct
                 if(donotconsider_count > 0){
                     return false;
                 }
