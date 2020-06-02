@@ -1023,26 +1023,27 @@ bool gereconstruct(std::unordered_map<std::uint32_t, std::uint8_t>& sampled, con
     const std::vector<std::uint32_t>& leading_indices, std::uint32_t rows){
 
     std::vector<std::uint32_t> one_counts(rows, 0);
-    std::vector<std::uint32_t> basis_to_consider;
+    std::uint32_t leading_sampled = 0;
 
     for(std::uint32_t i = 0; i < leading_indices.size(); ++i){
         std::uint32_t idx = leading_indices[i];
 
         //only consider basis if it's pivot has been sampled
         if(sampled.find(idx) != sampled.end()){
+            leading_sampled++;
             bool even = (one_counts[idx] & 1) == 0;
 
             //check if need to consider basis, if yes update tally, this works because the matrix is at least in echelon form after
             //gaussian elimination, thus we know the column will be zero from now onwards
             if((sampled[idx] == 1 && even) || (sampled[idx] == 0 && !even)){
-                basis_to_consider.push_back(i);
-                
                 for(std::uint32_t j = 0; j < one_counts.size(); ++j){
                     one_counts[j] += reduced_basis[i][j];
                 }
             }
         }
     }
+
+    std::cout << leading_sampled << " " << leading_indices.size() << std::endl;
 
     for(std::uint32_t i = 0; i < one_counts.size(); ++i){
         one_counts[i] &= 1;
@@ -3211,7 +3212,7 @@ std::tuple<std::uint64_t, std::uint64_t> MatrixReconstructionRenderer::renderHW(
     std::vector<float>& timings, const std::vector<KDTNode<ReconstructionSample>*>& slices, 
     std::uint32_t samples_per_slice, std::uint32_t slice_size){
     auto start = std::chrono::high_resolution_clock::now();
-    std::uint32_t num_workers = 15;//std::max(size_t(1), std::min(slices.size(), size_t(std::thread::hardware_concurrency() / 2)));
+    std::uint32_t num_workers = 1;//std::max(size_t(1), std::min(slices.size(), size_t(std::thread::hardware_concurrency() / 2)));
     std::uint32_t batch_size = 500 / (std::max(slice_size / 1000u, 1u) * std::max(1u, num_clusters_ / 4000));//std::max(num_workers * 2, 64u);
 
     BlockingQueue<HWWorkUnit> to_cluster;
