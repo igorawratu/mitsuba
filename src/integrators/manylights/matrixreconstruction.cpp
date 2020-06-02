@@ -1068,7 +1068,7 @@ bool gereconstruct(std::unordered_map<std::uint32_t, std::uint8_t>& sampled, con
 
     if(actual_considered == 0 && matching){
         for(std::uint32_t i = 0; i < one_counts.size(); ++i){
-            std::cout << sampled[i];
+            std::cout << std::uint32_t(sampled[i]);
         }
         std::cout << std::endl << std::endl;
     }
