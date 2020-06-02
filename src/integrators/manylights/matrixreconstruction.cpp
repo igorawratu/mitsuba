@@ -902,9 +902,7 @@ std::vector<std::uint32_t> sampleColBWithLeading(Scene* scene, KDTNode<Reconstru
         if(remaining_samples > 0){
             nonleading_sample_indices = importanceSample(remaining_samples, rng, non_leading_probabilities);
         }
-        //std::cout << sample_indices.size() << " " << leading_indices.size() << " ";
         sample_indices.insert(sample_indices.end(), nonleading_sample_indices.begin(), nonleading_sample_indices.end());
-        //std::cout << nonleading_sample_indices.size() << " " << sample_indices.size() << std::endl;
     }
     else{
         sample_indices = sample_set;
@@ -938,6 +936,8 @@ std::vector<std::vector<std::uint8_t>> gf2elim(const std::vector<std::vector<std
     std::uint32_t curr_pivot_row = 0;
     std::uint32_t curr_pivot_col = 0;
 
+    leading_pos.clear();
+
     while(curr_pivot_row < rows && curr_pivot_col < cols){
         //this is to handle empty columns. we forward the column pivot to the next non-empty column of the submatrix
         for(; curr_pivot_col < cols; ++curr_pivot_col){
@@ -955,6 +955,10 @@ std::vector<std::vector<std::uint8_t>> gf2elim(const std::vector<std::vector<std
         //finished
         if(curr_pivot_col >= cols){
             break;
+        }
+
+        if(curr_pivot_col != 0){
+            leading_pos.push_back(curr_pivot_col);
         }
 
         //put first row with nonzero pivot element as the first
@@ -997,24 +1001,10 @@ std::vector<std::vector<std::uint8_t>> gf2elim(const std::vector<std::vector<std
         curr_pivot_col++;
     }
 
+    leading_pos.push_back(rows);
+
     //drop all zero rows
     reduced_basis.resize(curr_pivot_row);
-
-    //get all leading positions, will be needed when obtaining coefficients
-    leading_pos.clear();
-
-    for(std::uint32_t i = 0; i < reduced_basis.size(); ++i){
-        int nonzero_pos = -1;
-        for(std::uint32_t j = 0; j < reduced_basis[i].size(); ++j){
-            if(reduced_basis[i][j]){
-                nonzero_pos = j;
-                break;
-            }
-        }
-
-        assert(nonzero_pos >= 0);
-        leading_pos.push_back(nonzero_pos);
-    }
 
     return reduced_basis;
 }
@@ -1024,21 +1014,34 @@ bool gereconstruct(std::unordered_map<std::uint32_t, std::uint8_t>& sampled, con
     const std::vector<std::uint32_t>& leading_indices, std::uint32_t rows){
 
     std::vector<std::uint32_t> one_counts(rows, 0);
-    std::uint32_t leading_sampled = 0;
-    std::uint32_t actual_considered = 0;
+    std::uint32_t current_idx = 0;
 
     for(std::uint32_t i = 0; i < leading_indices.size(); ++i){
-        std::uint32_t idx = leading_indices[i];
+        //consider indices up to idx for current row
+        std::uint32_t upper = leading_indices[i];
 
-        //only consider basis if it's pivot has been sampled
-        if(sampled.find(idx) != sampled.end()){
-            leading_sampled++;
-            bool even = (one_counts[idx] & 1) == 0;
+        std::uint32_t consider_count = 0;
+        std::uint32_t donotconsider_count = 0;
 
-            //check if need to consider basis, if yes update tally, this works because the matrix is at least in echelon form after
-            //gaussian elimination, thus we know the column will be zero from now onwards
-            if((sampled[idx] == 1 && even) || (sampled[idx] == 0 && !even)){
-                actual_considered++;
+        for(; current_idx < upper; ++current_idx){
+            if(sampled.find(current_idx) != sampled.end()){
+                bool even = ((one_counts[current_idx] + reduced_basis[i][current_idx]) & 1) == 0;
+
+                if((sampled[idx] == 1 && even) || (sampled[idx] == 0 && !even)){
+                    consider_count++;
+                }
+                else{
+                    donotconsider_count++;
+                }
+            }
+        }
+
+        //if consider count is 0, then we can just ignore the row
+        if(consider_count > 0){
+            if(donotconsider_count > 0){
+                return false;
+            }
+            else{
                 for(std::uint32_t j = 0; j < one_counts.size(); ++j){
                     one_counts[j] += reduced_basis[i][j];
                 }
@@ -1046,38 +1049,12 @@ bool gereconstruct(std::unordered_map<std::uint32_t, std::uint8_t>& sampled, con
         }
     }
 
+    //if we get here, then we already know that the full row can be reconstructed
     for(std::uint32_t i = 0; i < one_counts.size(); ++i){
-        one_counts[i] &= 1;
+        sampled[i] = one_counts[i] & 1;
     }
 
-    bool matching = true;
-    for(auto iter = sampled.begin(); iter != sampled.end(); ++iter){
-        std::uint32_t idx = iter->first;
-        if(iter->second != one_counts[idx]){
-            matching = false;
-            break;
-        }
-    }
-
-    /*std::cout << leading_sampled << " " << actual_considered << " " << leading_indices.size() <<  (matching ? " true" : " false") << std::endl;
-
-    if(actual_considered == 0 && matching){
-        for(std::uint32_t i = 0; i < one_counts.size(); ++i){
-            if(sampled.find(i) != sampled.end())
-                std::cout << std::uint32_t(sampled[i]);
-            else std::cout << "-";
-        }
-        std::cout << std::endl << std::endl;
-    }*/
-
-    if(matching){
-        for(std::uint32_t i = 0; i < rows; ++i){
-            sampled[i] = one_counts[i];
-        }
-    }
-
-
-    return matching;
+    return true;
 }
 
 std::uint32_t adaptiveMatrixReconstructionBGE(
@@ -1138,8 +1115,11 @@ std::uint32_t adaptiveMatrixReconstructionBGE(
         std::uint32_t samples_for_col = 0;
 
        if(basis.size() > 0){
-            sampled = sampleColBWithLeading(scene, slice, vpls, order[i], min_dist, num_samples, rng, sample_omega,
-                leading_probabilities, non_leading_probabilities, leading_indices, 0.5f, sampled, regenerate_sample_indices);
+            /*sampled = sampleColBWithLeading(scene, slice, vpls, order[i], min_dist, num_samples, rng, sample_omega,
+                leading_probabilities, non_leading_probabilities, leading_indices, 0.5f, sampled, regenerate_sample_indices);*/
+            sampleColB(scene, slice, vpls, order[i], min_dist, num_samples, rng, sample_omega, 
+                probabilities, sampled, true);
+
             regenerate_sample_indices = false;
 
             full_col_sampled = false;
