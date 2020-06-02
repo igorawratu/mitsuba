@@ -957,7 +957,7 @@ std::vector<std::vector<std::uint8_t>> gf2elim(const std::vector<std::vector<std
             break;
         }
 
-        if(curr_pivot_col != 0){
+        if(curr_pivot_row != 0){
             leading_pos.push_back(curr_pivot_col);
         }
 
