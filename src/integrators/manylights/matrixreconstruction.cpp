@@ -1007,7 +1007,7 @@ std::vector<std::vector<std::uint8_t>> gf2elim(const std::vector<std::vector<std
     if(reduced_basis.size() > 0){
         leading_pos.push_back(cols);
 
-        /*for(std::uint32_t i = 0; i < reduced_basis.size(); ++i){
+        for(std::uint32_t i = 0; i < reduced_basis.size(); ++i){
             for(std::uint32_t j = 0; j < reduced_basis[i].size(); ++j){
                 std::cout << std::uint32_t(reduced_basis[i][j]);
             }
@@ -1020,7 +1020,7 @@ std::vector<std::vector<std::uint8_t>> gf2elim(const std::vector<std::vector<std
             std::cout << leading_pos[i] << " ";
         }
 
-        std::cout << std::endl << std::endl;*/
+        std::cout << std::endl << std::endl;
     }
 
     return reduced_basis;
@@ -1029,14 +1029,14 @@ std::vector<std::vector<std::uint8_t>> gf2elim(const std::vector<std::vector<std
 //basis is gaussian eliminated version of actual basis
 bool gereconstruct(std::unordered_map<std::uint32_t, std::uint8_t>& sampled, const std::vector<std::vector<std::uint8_t>>& reduced_basis, 
     const std::vector<std::uint32_t>& leading_indices, std::uint32_t rows){
-    /*
+    
     for(std::uint32_t i = 0; i < rows; ++i){
         if(sampled.find(i) != sampled.end()){
-            std::cout << sampled[i];
+            std::cout << std::uint32_t(sampled[i]);
         }
         else std::cout << "-";
     }
-    std::cout << std::endl;*/
+    std::cout << std::endl;
 
     std::vector<std::uint32_t> one_counts(rows, 0);
     std::uint32_t current_idx = 0;
@@ -1074,7 +1074,7 @@ bool gereconstruct(std::unordered_map<std::uint32_t, std::uint8_t>& sampled, con
         }
     }
 
-    //if we get here, then we already know that the full row can be reconstructed
+    //if we get here, then we know that the subsampled row can be reconstructed
     for(std::uint32_t i = 0; i < one_counts.size(); ++i){
         sampled[i] = one_counts[i] & 1;
     }
