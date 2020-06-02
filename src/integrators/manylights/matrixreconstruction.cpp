@@ -1045,8 +1045,6 @@ bool gereconstruct(std::unordered_map<std::uint32_t, std::uint8_t>& sampled, con
         }
     }
 
-    std::cout << leading_sampled << " " << actual_considered << " " << leading_indices.size() << std::endl;
-
     for(std::uint32_t i = 0; i < one_counts.size(); ++i){
         one_counts[i] &= 1;
     }
@@ -1065,6 +1063,9 @@ bool gereconstruct(std::unordered_map<std::uint32_t, std::uint8_t>& sampled, con
             sampled[i] = one_counts[i];
         }
     }
+
+    std::cout << leading_sampled << " " << actual_considered << " " << leading_indices.size() <<  matching ? " true" : " false"std::endl;
+
 
     return matching;
 }
