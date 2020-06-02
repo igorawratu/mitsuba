@@ -1053,7 +1053,7 @@ bool gereconstruct(std::unordered_map<std::uint32_t, std::uint8_t>& sampled, con
             break;
         }
     }
-    
+
     if(matching){
         for(std::uint32_t i = 0; i < rows; ++i){
             sampled[i] = one_counts[i];
@@ -2794,7 +2794,7 @@ std::tuple<std::uint64_t, std::uint64_t> recoverHW(KDTNode<ReconstructionSample>
 
         if(bin_vis){
             std::vector<std::uint8_t> bv(slice->sample_indices.size() * quadranted_vpls[i].size(), 0);
-            if(true){
+            if(false){
                 samples = adaptiveMatrixReconstructionBGE(bv, scene, slice, 
                     quadranted_vpls[i], min_dist, sample_perc, max_sample_perc, sample_inc, rng, 
                     basis_rank, cluster_contribs);
