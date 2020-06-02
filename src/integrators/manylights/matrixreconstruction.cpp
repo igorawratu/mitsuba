@@ -1005,7 +1005,7 @@ std::vector<std::vector<std::uint8_t>> gf2elim(const std::vector<std::vector<std
     reduced_basis.resize(curr_pivot_row);
 
     if(reduced_basis.size() > 0){
-        leading_pos.push_back(rows);
+        leading_pos.push_back(cols);
 
         for(std::uint32_t i = 0; i < reduced_basis.size(); ++i){
             for(std::uint32_t j = 0; j < reduced_basis[i].size(); ++j){
