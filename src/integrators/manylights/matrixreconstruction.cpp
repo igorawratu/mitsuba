@@ -1058,7 +1058,7 @@ bool gereconstruct(std::unordered_map<std::uint32_t, std::uint8_t>& sampled, con
         }
     }
 
-    std::cout << leading_sampled << " " << actual_considered << " " << leading_indices.size() <<  (matching ? " true" : " false") << std::endl;
+    /*std::cout << leading_sampled << " " << actual_considered << " " << leading_indices.size() <<  (matching ? " true" : " false") << std::endl;
 
     if(actual_considered == 0 && matching){
         for(std::uint32_t i = 0; i < one_counts.size(); ++i){
@@ -1067,7 +1067,7 @@ bool gereconstruct(std::unordered_map<std::uint32_t, std::uint8_t>& sampled, con
             else std::cout << "-";
         }
         std::cout << std::endl << std::endl;
-    }
+    }*/
 
     if(matching){
         for(std::uint32_t i = 0; i < rows; ++i){
@@ -3224,7 +3224,7 @@ std::tuple<std::uint64_t, std::uint64_t> MatrixReconstructionRenderer::renderHW(
     std::vector<float>& timings, const std::vector<KDTNode<ReconstructionSample>*>& slices, 
     std::uint32_t samples_per_slice, std::uint32_t slice_size){
     auto start = std::chrono::high_resolution_clock::now();
-    std::uint32_t num_workers = 1;//std::max(size_t(1), std::min(slices.size(), size_t(std::thread::hardware_concurrency() / 2)));
+    std::uint32_t num_workers = 15;//std::max(size_t(1), std::min(slices.size(), size_t(std::thread::hardware_concurrency() / 2)));
     std::uint32_t batch_size = 500 / (std::max(slice_size / 1000u, 1u) * std::max(1u, num_clusters_ / 4000));//std::max(num_workers * 2, 64u);
 
     BlockingQueue<HWWorkUnit> to_cluster;
