@@ -1074,6 +1074,8 @@ bool gereconstruct(std::unordered_map<std::uint32_t, std::uint8_t>& sampled, con
         }
     }
 
+    std::cout << "matching" << std::endl;
+
     //if we get here, then we know that the subsampled row can be reconstructed
     for(std::uint32_t i = 0; i < one_counts.size(); ++i){
         sampled[i] = one_counts[i] & 1;
