@@ -1047,6 +1047,7 @@ bool gereconstruct(std::unordered_map<std::uint32_t, std::uint8_t>& sampled, con
 
         std::uint32_t consider_count = 0;
         std::uint32_t donotconsider_count = 0;
+        std::uint32_t nonzero_vals = 0;
 
         for(; current_idx < upper; ++current_idx){
             if(sampled.find(current_idx) != sampled.end()){
@@ -1058,13 +1059,19 @@ bool gereconstruct(std::unordered_map<std::uint32_t, std::uint8_t>& sampled, con
                 else{
                     donotconsider_count++;
                 }
+
+                if(sampled[current_idx] == 1){
+                    nonzero_vals++;
+                }
             }
         }
 
         //if consider count is 0, then we can just ignore the row
-        if(consider_count > 0){
+        if(consider_count > 0 && donotconsider_count == 0){
             if(donotconsider_count > 0){
-                return false;
+                if(nonzero_vals > 0){
+                    return false;
+                }
             }
             else{
                 for(std::uint32_t j = 0; j < one_counts.size(); ++j){
