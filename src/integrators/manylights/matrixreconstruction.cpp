@@ -1034,7 +1034,6 @@ bool gereconstruct(std::unordered_map<std::uint32_t, std::uint8_t>& sampled, con
             //check if need to consider basis, if yes update tally, this works because the matrix is at least in echelon form after
             //gaussian elimination, thus we know the column will be zero from now onwards
             if((sampled[idx] == 1 && even) || (sampled[idx] == 0 && !even)){
-                actual_considered++;
                 for(std::uint32_t j = 0; j < one_counts.size(); ++j){
                     one_counts[j] += reduced_basis[i][j];
                 }
@@ -1054,18 +1053,7 @@ bool gereconstruct(std::unordered_map<std::uint32_t, std::uint8_t>& sampled, con
             break;
         }
     }
-
-    /*std::cout << leading_sampled << " " << actual_considered << " " << leading_indices.size() <<  (matching ? " true" : " false") << std::endl;
-
-    if(actual_considered == 0 && matching){
-        for(std::uint32_t i = 0; i < one_counts.size(); ++i){
-            if(sampled.find(i) != sampled.end())
-                std::cout << std::uint32_t(sampled[i]);
-            else std::cout << "-";
-        }
-        std::cout << std::endl << std::endl;
-    }*/
-
+    
     if(matching){
         for(std::uint32_t i = 0; i < rows; ++i){
             sampled[i] = one_counts[i];
