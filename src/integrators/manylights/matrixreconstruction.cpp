@@ -902,8 +902,9 @@ std::vector<std::uint32_t> sampleColBWithLeading(Scene* scene, KDTNode<Reconstru
         if(remaining_samples > 0){
             nonleading_sample_indices = importanceSample(remaining_samples, rng, non_leading_probabilities);
         }
-
+        std::cout << sample_indices.size() << " ";
         sample_indices.insert(sample_indices.end(), nonleading_sample_indices.begin(), nonleading_sample_indices.end());
+        std::cout << nonleading_sample_indices.size() << " " << sample_indices.size() << std::endl;
     }
     else{
         sample_indices = sample_set;
