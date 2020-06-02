@@ -1006,20 +1006,22 @@ std::vector<std::vector<std::uint8_t>> gf2elim(const std::vector<std::vector<std
 
     if(reduced_basis.size() > 0){
         leading_pos.push_back(rows);
-    }
 
-    for(std::uint32_t i = 0; i < reduced_basis.size(); ++i){
-        for(std::uint32_t j = 0; j < reduced_basis[i].size(); ++j){
-            std::cout << std::uint32_t(reduced_basis[i][j]);
+        for(std::uint32_t i = 0; i < reduced_basis.size(); ++i){
+            for(std::uint32_t j = 0; j < reduced_basis[i].size(); ++j){
+                std::cout << std::uint32_t(reduced_basis[i][j]);
+            }
+            std::cout << std::endl;
         }
-        std::cout << std::endl;
-    }
-    
-    for(std::uint32_t i = 0; i < leading_pos.size(); ++i){
-        std::cout << leading_pos[i] << " ";
-    }
 
-    std::cout << std::endl << std::endl;
+        std::cout << "rows: " << rows << " leading: ";
+        
+        for(std::uint32_t i = 0; i < leading_pos.size(); ++i){
+            std::cout << leading_pos[i] << " ";
+        }
+
+        std::cout << std::endl << std::endl;
+    }
 
     return reduced_basis;
 }
