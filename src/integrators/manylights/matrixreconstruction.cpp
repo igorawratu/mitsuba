@@ -1155,7 +1155,7 @@ std::uint32_t adaptiveMatrixReconstructionBGE(
                 std::unordered_map<std::uint32_t, std::uint8_t> reconstructed = sample_omega; 
                 if(gereconstruct(reconstructed, reduced_basis, leading_indices, num_rows)){
                     for(std::uint32_t j = 0; j < col_to_add.size(); ++j){
-                        col_to_add[j] = sample_omega[j];   
+                        col_to_add[j] = reconstructed[j];   
                     }
 
                     if(num_verification_samples > 0){
