@@ -1064,7 +1064,7 @@ bool gereconstruct(std::unordered_map<std::uint32_t, std::uint8_t>& sampled, con
         }
     }
 
-    std::cout << leading_sampled << " " << actual_considered << " " << leading_indices.size() <<  matching ? " true" : " false"std::endl;
+    std::cout << leading_sampled << " " << actual_considered << " " << leading_indices.size() <<  matching ? " true" : " false" << std::endl;
 
 
     return matching;
