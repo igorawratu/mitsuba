@@ -1058,19 +1058,21 @@ bool gereconstruct(std::unordered_map<std::uint32_t, std::uint8_t>& sampled, con
         }
     }
 
-    if(matching){
-        for(std::uint32_t i = 0; i < rows; ++i){
-            sampled[i] = one_counts[i];
-        }
-    }
-
     std::cout << leading_sampled << " " << actual_considered << " " << leading_indices.size() <<  (matching ? " true" : " false") << std::endl;
 
     if(actual_considered == 0 && matching){
         for(std::uint32_t i = 0; i < one_counts.size(); ++i){
-            std::cout << std::uint32_t(sampled[i]);
+            if(sampled.find(i) != sampled.end())
+                std::cout << std::uint32_t(sampled[i]);
+            else std::cout << "-";
         }
         std::cout << std::endl << std::endl;
+    }
+
+    if(matching){
+        for(std::uint32_t i = 0; i < rows; ++i){
+            sampled[i] = one_counts[i];
+        }
     }
 
 
