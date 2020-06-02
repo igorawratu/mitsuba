@@ -1008,7 +1008,18 @@ std::vector<std::vector<std::uint8_t>> gf2elim(const std::vector<std::vector<std
         leading_pos.push_back(rows);
     }
 
-    //std::cout << leading_pos.size() << " " << reduced_basis.size() << std::endl;
+    for(std::uint32_t i = 0; i < reduced_basis.size(); ++i){
+        for(std::uint32_t j = 0; j < reduced_basis[i].size(); ++j){
+            std::cout << reduced_basis[i][j];
+        }
+        std::cout << std::endl;
+    }
+    
+    for(std::uint32_t i = 0; i < leading_pos.size(); ++i){
+        std::cout << leading_pos[i] << " ";
+    }
+
+    std::cout << std::endl << std::endl;
 
     return reduced_basis;
 }
@@ -1016,10 +1027,6 @@ std::vector<std::vector<std::uint8_t>> gf2elim(const std::vector<std::vector<std
 //basis is gaussian eliminated version of actual basis
 bool gereconstruct(std::unordered_map<std::uint32_t, std::uint8_t>& sampled, const std::vector<std::vector<std::uint8_t>>& reduced_basis, 
     const std::vector<std::uint32_t>& leading_indices, std::uint32_t rows){
-
-    if(reduced_basis.size() != leading_indices.size()){
-        std::cout << reduced_basis.size() << " " << leading_indices.size() << std::endl;
-    }
 
     std::vector<std::uint32_t> one_counts(rows, 0);
     std::uint32_t current_idx = 0;
@@ -3213,7 +3220,7 @@ std::tuple<std::uint64_t, std::uint64_t> MatrixReconstructionRenderer::renderHW(
     std::vector<float>& timings, const std::vector<KDTNode<ReconstructionSample>*>& slices, 
     std::uint32_t samples_per_slice, std::uint32_t slice_size){
     auto start = std::chrono::high_resolution_clock::now();
-    std::uint32_t num_workers = 15;//std::max(size_t(1), std::min(slices.size(), size_t(std::thread::hardware_concurrency() / 2)));
+    std::uint32_t num_workers = 1;//std::max(size_t(1), std::min(slices.size(), size_t(std::thread::hardware_concurrency() / 2)));
     std::uint32_t batch_size = 500 / (std::max(slice_size / 1000u, 1u) * std::max(1u, num_clusters_ / 4000));//std::max(num_workers * 2, 64u);
 
     BlockingQueue<HWWorkUnit> to_cluster;
