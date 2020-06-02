@@ -1048,7 +1048,7 @@ bool gereconstruct(std::unordered_map<std::uint32_t, std::uint8_t>& sampled, con
             if(sampled.find(current_idx) != sampled.end()){
                 bool even = ((one_counts[current_idx] + reduced_basis[i][current_idx]) & 1) == 0;
 
-                if((sampled[current_idx] == 1 && even) || (sampled[current_idx] == 0 && !even)){
+                if((sampled[current_idx] == 0 && even) || (sampled[current_idx] == 1 && !even)){
                     consider_count++;
                 }
                 else{
@@ -1132,6 +1132,7 @@ std::uint32_t adaptiveMatrixReconstructionBGE(
 
     //The actual adaptive matrix recovery algorithm
     for(std::uint32_t i = 0; i < order.size(); ++i){
+        std::cout << i << std::endl;
         sample_omega.clear();
         std::uint32_t samples_for_col = 0;
 
