@@ -1027,7 +1027,7 @@ bool gereconstruct(std::unordered_map<std::uint32_t, std::uint8_t>& sampled, con
             if(sampled.find(current_idx) != sampled.end()){
                 bool even = ((one_counts[current_idx] + reduced_basis[i][current_idx]) & 1) == 0;
 
-                if((sampled[idx] == 1 && even) || (sampled[idx] == 0 && !even)){
+                if((sampled[current_idx] == 1 && even) || (sampled[current_idx] == 0 && !even)){
                     consider_count++;
                 }
                 else{
