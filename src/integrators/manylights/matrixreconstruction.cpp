@@ -1077,7 +1077,7 @@ bool gereconstruct(std::unordered_map<std::uint32_t, std::uint8_t>& sampled, con
             }
 
             //if consider count is 0, then we can just ignore the row
-            if(consider_count > 0 && donotconsider_count == 0){
+            if(consider_count > 0){
                 if(donotconsider_count > 0){
                     return false;
                 }
