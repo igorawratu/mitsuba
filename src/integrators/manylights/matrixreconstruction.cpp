@@ -1053,7 +1053,7 @@ bool gereconstruct(std::unordered_map<std::uint32_t, std::uint8_t>& sampled, con
             break;
         }
     }
-    
+
     if(matching){
         for(std::uint32_t i = 0; i < rows; ++i){
             sampled[i] = one_counts[i];
@@ -1123,7 +1123,7 @@ std::uint32_t adaptiveMatrixReconstructionBGE(
 
        if(basis.size() > 0){
             sampled = sampleColBWithLeading(scene, slice, vpls, order[i], min_dist, num_samples, rng, sample_omega,
-                leading_probabilities, non_leading_probabilities, leading_indices, 0.5f, sampled, regenerate_sample_indices);
+                leading_probabilities, non_leading_probabilities, leading_indices, 1.f, sampled, regenerate_sample_indices);
             regenerate_sample_indices = false;
 
             full_col_sampled = false;
