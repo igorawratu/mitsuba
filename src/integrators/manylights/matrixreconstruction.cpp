@@ -921,6 +921,7 @@ std::vector<std::uint32_t> sampleColBWithLeading(Scene* scene, KDTNode<Reconstru
 }
 
 std::vector<std::vector<std::uint8_t>> gf2elim(const std::vector<std::vector<std::uint8_t>>& basis, std::vector<std::uint32_t>& leading_pos){
+    std::cout << "gf2elim" << std::endl;
     std::vector<std::vector<std::uint8_t>> reduced_basis = basis;
     
     if(basis.size() == 0){
@@ -1029,6 +1030,7 @@ std::vector<std::vector<std::uint8_t>> gf2elim(const std::vector<std::vector<std
 //basis is gaussian eliminated version of actual basis
 bool gereconstruct(std::unordered_map<std::uint32_t, std::uint8_t>& sampled, const std::vector<std::vector<std::uint8_t>>& reduced_basis, 
     const std::vector<std::uint32_t>& leading_indices, std::uint32_t rows){
+    std::cout << "gereconstruct" << std::endl;
 
     if(reduced_basis.size() != leading_indices.size()){
         std::cout << reduced_basis.size() << " " << leading_indices.size() << std::endl;
