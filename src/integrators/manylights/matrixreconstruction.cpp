@@ -1138,7 +1138,7 @@ std::uint32_t adaptiveMatrixReconstructionBGE(
 
     //The actual adaptive matrix recovery algorithm
     for(std::uint32_t i = 0; i < order.size(); ++i){
-        std::cout << i << std::endl;
+        std::cout << num_samples << std::endl;
         sample_omega.clear();
         std::uint32_t samples_for_col = 0;
 
