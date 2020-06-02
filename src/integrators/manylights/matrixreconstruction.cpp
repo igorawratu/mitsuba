@@ -1038,44 +1038,49 @@ bool gereconstruct(std::unordered_map<std::uint32_t, std::uint8_t>& sampled, con
     }
     std::cout << std::endl;
 
-    std::vector<std::uint32_t> one_counts(rows, 0);
-    std::uint32_t current_idx = 0;
-
-    for(std::uint32_t i = 0; i < leading_indices.size(); ++i){
-        //consider indices up to idx for current row
-        std::uint32_t upper = leading_indices[i];
-
-        std::uint32_t consider_count = 0;
-        std::uint32_t donotconsider_count = 0;
-        std::uint32_t nonzero_vals = 0;
-
-        for(; current_idx < upper; ++current_idx){
-            if(sampled.find(current_idx) != sampled.end()){
-                bool even = ((one_counts[current_idx] + reduced_basis[i][current_idx]) & 1) == 0;
-
-                if((sampled[current_idx] == 0 && even) || (sampled[current_idx] == 1 && !even)){
-                    consider_count++;
-                }
-                else{
-                    donotconsider_count++;
-                }
-
-                if(sampled[current_idx] == 1){
-                    nonzero_vals++;
-                }
+    std::uint32_t one_count = 0;
+    for(std::uint32_t i = 0; i < rows; ++i){
+        if(sampled.find(i) != sampled.end()){
+            if(sampled[i]){
+                one_count++;
             }
         }
+    }
 
-        //if consider count is 0, then we can just ignore the row
-        if(consider_count > 0 && donotconsider_count == 0){
-            if(donotconsider_count > 0){
-                if(nonzero_vals > 0){
-                    return false;
+    std::vector<std::uint32_t> one_counts(rows, 0);
+
+    if(one_count > 0){
+        std::uint32_t current_idx = 0;
+
+        for(std::uint32_t i = 0; i < leading_indices.size(); ++i){
+            //consider indices up to idx for current row
+            std::uint32_t upper = leading_indices[i];
+
+            std::uint32_t consider_count = 0;
+            std::uint32_t donotconsider_count = 0;
+
+            for(; current_idx < upper; ++current_idx){
+                if(sampled.find(current_idx) != sampled.end()){
+                    bool even = ((one_counts[current_idx] + reduced_basis[i][current_idx]) & 1) == 0;
+
+                    if((sampled[current_idx] == 0 && even) || (sampled[current_idx] == 1 && !even)){
+                        consider_count++;
+                    }
+                    else{
+                        donotconsider_count++;
+                    }
                 }
             }
-            else{
-                for(std::uint32_t j = 0; j < one_counts.size(); ++j){
-                    one_counts[j] += reduced_basis[i][j];
+
+            //if consider count is 0, then we can just ignore the row
+            if(consider_count > 0 && donotconsider_count == 0){
+                if(donotconsider_count > 0){
+                    return false;
+                }
+                else{
+                    for(std::uint32_t j = 0; j < one_counts.size(); ++j){
+                        one_counts[j] += reduced_basis[i][j];
+                    }
                 }
             }
         }
