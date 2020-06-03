@@ -1265,11 +1265,11 @@ std::uint32_t adaptiveMatrixReconstructionBGE(
 
             std::uint32_t curr_pos = 0;
             for(std::uint32_t j = 0; j < leading_indices.size(); ++j){
-                std::uint32_t curr_bucket_size = leading_indices[i] - curr_pos;
+                std::uint32_t curr_bucket_size = leading_indices[j] - curr_pos;
 
                 //prob is number of buckets times bucket size
                 float p = 1.f / (leading_indices.size() * curr_bucket_size);
-                for(; curr_pos < leading_indices[i]; ++curr_pos){
+                for(; curr_pos < leading_indices[j]; ++curr_pos){
                     probabilities[curr_pos] = p;
                 }
             }
