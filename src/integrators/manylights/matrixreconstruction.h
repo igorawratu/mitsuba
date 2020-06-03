@@ -61,7 +61,7 @@ public:
         std::uint32_t slice_size, bool visibility_only, bool adaptive_col, bool adaptive_importance_sampling, 
         bool adaptive_force_resample, bool adaptive_recover_transpose, bool truncated, bool show_slices, bool vsl,
         bool gather_stat_images, bool show_svd, ClusteringStrategy clustering_strategy, float error_scale, bool hw,
-        bool bin_vis, std::uint32_t num_clusters, std::uint32_t samples_per_slice, float max_sample_perc, float ver_perc, bool show_vmat);
+        bool bin_vis, std::uint32_t num_clusters, std::uint32_t samples_per_slice, float max_sample_perc, float ver_perc, bool show_vmat, bool ge);
     MatrixReconstructionRenderer(const MatrixReconstructionRenderer& other) = delete;
     MatrixReconstructionRenderer(MatrixReconstructionRenderer&& other);
     MatrixReconstructionRenderer& operator = (const MatrixReconstructionRenderer& other) = delete;
