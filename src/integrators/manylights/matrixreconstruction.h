@@ -107,6 +107,7 @@ private:
     std::uint32_t samples_per_slice_;
     float sample_inc_, max_sample_perc_;
     bool show_vmat_;
+    bool ge_;
     std::mutex cancel_lock_;
     bool cancel_;
 
