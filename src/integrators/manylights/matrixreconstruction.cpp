@@ -1253,7 +1253,7 @@ std::uint32_t adaptiveMatrixReconstructionBGE(
             for(std::uint32_t j = 0; j < leading_indices.size(); ++j){
                 std::uint32_t idx = leading_indices[j];
                 non_leading_probabilities[idx] = 0.f;
-                leading_probabilities[idx] = float(one_count[j]) / total_ones;
+                leading_probabilities[idx] = float(num_rows - std::abs(2 * one_count[j] - num_rows));
             }
         }
 
