@@ -1236,12 +1236,24 @@ std::uint32_t adaptiveMatrixReconstructionBGE(
                 }
             }
 
+            //probability to select a basis row depends on how much information it has
+            std::vector<std::uint32_t> one_count(leading_indices.size(), 0);
+            std::uint32_t total_ones = 0;
+            for(std::uint32_t j = 0; j < reduced_basis.size(); ++j){
+                for(std::uint32_t k = 0; k < reduced_basis[j].size(); ++k){
+                    if(reduced_basis[j][k]){
+                        total_ones++;
+                        one_count[j]++;
+                    }
+                }
+            }
+
             //set leading and non-leading probabilities
             non_leading_probabilities = probabilities;
-            for(std::uint32_t i = 0; i < leading_indices.size(); ++i){
-                std::uint32_t idx = leading_indices[i];
+            for(std::uint32_t j = 0; j < leading_indices.size(); ++j){
+                std::uint32_t idx = leading_indices[j];
                 non_leading_probabilities[idx] = 0.f;
-                leading_probabilities[idx] = 1.f / leading_indices.size();
+                leading_probabilities[idx] = float(one_count[j]) / total_ones;
             }
         }
 
