@@ -887,7 +887,7 @@ std::vector<std::uint32_t> sampleColBWithLeading(Scene* scene, KDTNode<Reconstru
     std::vector<std::uint32_t> sample_indices;
 
     if(resample){
-        std::uint32_t num_leading_samples = std::min(std::uint32_t(leading_indices.size()), std::max(1u, std::uint32_t(leading_perc * num_samples)));
+        std::uint32_t num_leading_samples = std::min(std::uint32_t(leading_indices.size()), num_samples);
         if(num_leading_samples == leading_indices.size()){
             for(std::uint32_t i = 0; i < leading_indices.size(); ++i){
                 sample_indices.push_back(leading_indices[i]);
