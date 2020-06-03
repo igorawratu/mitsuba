@@ -1114,6 +1114,8 @@ std::uint32_t adaptiveMatrixReconstructionBGE(
 
     std::vector<std::uint32_t> sampled;
 
+    bool regenerate_sample_indices = false;
+
     //The actual adaptive matrix recovery algorithm
     for(std::uint32_t i = 0; i < order.size(); ++i){
         sample_omega.clear();
@@ -1121,7 +1123,8 @@ std::uint32_t adaptiveMatrixReconstructionBGE(
 
        if(basis.size() > 0){
             sampled = sampleColBWithLeading(scene, slice, vpls, order[i], min_dist, num_samples, rng, sample_omega,
-                leading_probabilities, non_leading_probabilities, leading_indices, sampled, true);
+                leading_probabilities, non_leading_probabilities, leading_indices, sampled, regenerate_sample_indices);
+            regenerate_sample_indices = false;
 
             full_col_sampled = false;
 
@@ -1245,6 +1248,8 @@ std::uint32_t adaptiveMatrixReconstructionBGE(
         std::uint32_t offset = order[i] * num_rows;
         std::copy(col_to_add.begin(), col_to_add.end(), mat.begin() + offset);
         total_samples += samples_for_col;
+
+        regenerate_sample_indices = true;
     }
     
     basis_rank = basis.size();
