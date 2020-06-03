@@ -1238,8 +1238,8 @@ std::uint32_t adaptiveMatrixReconstructionBGE(
 
             //set leading and non-leading probabilities
             non_leading_probabilities = probabilities;
-            for(std::uint32_t j = 0; j < leading_indices.size(); ++j){
-                std::uint32_t idx = leading_indices[j];
+            for(std::uint32_t i = 0; i < leading_indices.size(); ++i){
+                std::uint32_t idx = leading_indices[i];
                 non_leading_probabilities[idx] = 0.f;
                 leading_probabilities[idx] = 1.f / leading_indices.size();
             }
