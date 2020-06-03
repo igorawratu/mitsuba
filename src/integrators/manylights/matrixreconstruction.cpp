@@ -1035,20 +1035,20 @@ bool gereconstruct(std::unordered_map<std::uint32_t, std::uint8_t>& sampled, con
         bool add = false;
         bool dnadd = false;
 
-        for(; current_index < leading_indices[i]; ++current_index){
-            if(sampled.find(current_index) != sampled.end()){
-                std::uint8_t curr_val = one_counts[current_index] & 1;
-                if(reduced_basis[i][current_index] == 0){
+        for(; curr_index < leading_indices[i]; ++curr_index){
+            if(sampled.find(curr_index) != sampled.end()){
+                std::uint8_t curr_val = one_counts[curr_index] & 1;
+                if(reduced_basis[i][curr_index] == 0){
                     //if current basis with leading position is 0, it means that the value can no longer be changed, and thus we just need to check if the expected value
                     //is equal to the current to continue
-                    if(curr_val != sampled[current_index]){
+                    if(curr_val != sampled[curr_index]){
                         return false;
                     }
                 }
                 else{
                     //if value and expected value is not the same, we have to consider the current basis to change it as the column will no longer change.
                     //Otherwise we have to disregard it 
-                    if(curr_val != sampled[current_index]){
+                    if(curr_val != sampled[curr_index]){
                         add = true;
                     }
                     else{
