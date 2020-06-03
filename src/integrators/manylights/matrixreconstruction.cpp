@@ -1001,17 +1001,22 @@ std::vector<std::vector<std::uint8_t>> gf2elim(const std::vector<std::vector<std
     //get all leading positions, will be needed when obtaining coefficients
     leading_pos.clear();
 
+    std::uint32_t curr_leading_pos = 0;
+
     for(std::uint32_t i = 0; i < reduced_basis.size(); ++i){
-        int nonzero_pos = -1;
-        for(std::uint32_t j = 0; j < reduced_basis[i].size(); ++j){
-            if(reduced_basis[i][j]){
-                nonzero_pos = j;
+        //always consider rest of last basis
+        if(i == reduced_basis.size() - 1){
+            leading_pos.push_back(cols);
+            continue;
+        }
+
+        for(; curr_leading_pos < cols; ++curr_leading_pos){
+            if(reduced_basis[i + 1][curr_leading_pos] > 0){
                 break;
             }
         }
 
-        assert(nonzero_pos >= 0);
-        leading_pos.push_back(nonzero_pos);
+        leading_pos.push_back(curr_leading_pos);
     }
 
     return reduced_basis;
@@ -1022,46 +1027,66 @@ bool gereconstruct(std::unordered_map<std::uint32_t, std::uint8_t>& sampled, con
     const std::vector<std::uint32_t>& leading_indices, std::uint32_t rows){
 
     std::vector<std::uint32_t> one_counts(rows, 0);
+    std::uint32_t curr_index = 0;
+
+    assert(reduced_basis.size() == leading_indices.size());
 
     for(std::uint32_t i = 0; i < leading_indices.size(); ++i){
-        //consider
-        std::uint32_t idx = leading_indices[i];
+        bool add = false;
+        bool dnadd = false;
 
-        //only consider basis if it's pivot has been sampled
-        if(sampled.find(idx) != sampled.end()){
-            bool even = (one_counts[idx] & 1) == 0;
-
-            //check if need to consider basis, if yes update tally, this works because the matrix is at least in echelon form after
-            //gaussian elimination, thus we know the column will be zero from now onwards
-            if((sampled[idx] == 1 && even) || (sampled[idx] == 0 && !even)){
-                for(std::uint32_t j = 0; j < one_counts.size(); ++j){
-                    one_counts[j] += reduced_basis[i][j];
+        for(; curr_index < leading_indices[i]; ++curr_index){
+            if(sampled.find(curr_index) != sampled.end()){
+                std::uint8_t curr_val = one_counts[curr_index] & 1;
+                if(reduced_basis[i][curr_index] == 0){
+                    //if current basis with leading position is 0, it means that the value can no longer be changed, and thus we just need to check if the expected value
+                    //is equal to the current to continue
+                    if(curr_val != sampled[curr_index]){
+                        return false;
+                    }
+                }
+                else{
+                    //if value and expected value is not the same, we have to consider the current basis to change it as the column will no longer change.
+                    //Otherwise we have to disregard it 
+                    if(curr_val != sampled[curr_index]){
+                        add = true;
+                    }
+                    else{
+                        dnadd = true;
+                    }
                 }
             }
         }
-    }
 
-    for(std::uint32_t i = 0; i < one_counts.size(); ++i){
-        one_counts[i] &= 1;
-    }
+        //conflict, can't reconstruct
+        if(add && dnadd){
+            return false;
+        }
+        //add basis
+        else if(add){
+            for(std::uint32_t j = 0; j < rows; ++j){
+                one_counts[j] += reduced_basis[i][j];
+            }
+        }
+        //do not add, nothing happens
+        else if(dnadd){
 
-    bool matching = true;
-    for(auto iter = sampled.begin(); iter != sampled.end(); ++iter){
-        std::uint32_t idx = iter->first;
-        if(iter->second != one_counts[idx]){
-            matching = false;
-            break;
+        }
+        //in the case that both are false, it just means that we do not know whether or not to add it as only 0 values were sampled. Here we choose randomly
+        else{
+            /*if(rand() % 2){
+                for(std::uint32_t j = 0; j < rows; ++j){
+                    one_counts[j] += reduced_basis[i][j];
+                }
+            }*/
         }
     }
 
-    if(matching){
-        for(std::uint32_t i = 0; i < rows; ++i){
-            sampled[i] = one_counts[i];
-        }
+    for(std::uint32_t i = 0; i < rows; ++i){
+        sampled[i] = one_counts[i] & 1;
     }
 
-
-    return matching;
+    return true;
 }
 
 std::uint32_t adaptiveMatrixReconstructionBGE(
@@ -1122,8 +1147,10 @@ std::uint32_t adaptiveMatrixReconstructionBGE(
         std::uint32_t samples_for_col = 0;
 
        if(basis.size() > 0){
-            sampled = sampleColBWithLeading(scene, slice, vpls, order[i], min_dist, num_samples, rng, sample_omega,
-                leading_probabilities, non_leading_probabilities, leading_indices, 0.5f, sampled, regenerate_sample_indices);
+            //sampled = sampleColBWithLeading(scene, slice, vpls, order[i], min_dist, num_samples, rng, sample_omega,
+            //    leading_probabilities, non_leading_probabilities, leading_indices, 0.5f, sampled, regenerate_sample_indices);
+            sampled = sampleColB(scene, slice, vpls, order[i], min_dist, num_samples, rng, sample_omega, 
+                probabilities, sampled, true);
             regenerate_sample_indices = false;
 
             full_col_sampled = false;
@@ -1182,6 +1209,22 @@ std::uint32_t adaptiveMatrixReconstructionBGE(
                     }
                 }
                 else{
+                    for(std::uint32_t j = 0; j < num_rows; ++j){
+                        if(sample_omega.find(j) != sample_omega.end()){
+                            std::cout << std::uint32_t(sample_omega[j]);
+                        }
+                        else std::cout << "-";
+                    }
+                    std::cout << std::endl;
+
+                    for(std::uint32_t j = 0; j < reduced_basis.size(); ++j){
+                        for(std::uint32_t k = 0; k < reduced_basis[j].size(); ++k){
+                            std::cout << std::uint32_t(reduced_basis[j][k]);
+                        }
+                        std::cout << std::endl;
+                    }
+                    std::cout << std::endl;
+
                     sampleColB(scene, slice, vpls, order[i], min_dist, num_rows, rng, sample_omega, 
                         probabilities, sampled, true);
                     samples_for_col = num_rows;
@@ -1213,7 +1256,7 @@ std::uint32_t adaptiveMatrixReconstructionBGE(
             reduced_basis = gf2elim(basis, leading_indices);
 
             //probability update
-            std::vector<std::uint32_t> buckets;
+            /*std::vector<std::uint32_t> buckets;
             std::uint8_t last_sign = 2;
             for(std::uint32_t j = 0; j < col_to_add.size(); ++j){
                 if(last_sign != col_to_add[j]){
@@ -1234,14 +1277,17 @@ std::uint32_t adaptiveMatrixReconstructionBGE(
                 for(std::uint32_t k = bucket_start; k < bucket_end; ++k){
                     probabilities[k] += curr_bucket_prob;
                 }
-            }
+            }*/
 
-            //set leading and non-leading probabilities
-            non_leading_probabilities = probabilities;
-            for(std::uint32_t i = 0; i < leading_indices.size(); ++i){
-                std::uint32_t idx = leading_indices[i];
-                //non_leading_probabilities[idx] = 0.f;
-                leading_probabilities[idx] = probabilities[idx];
+            std::uint32_t curr_pos = 0;
+            for(std::uint32_t j = 0; j < leading_indices.size(); ++j){
+                std::uint32_t curr_bucket_size = leading_indices[j] - curr_pos;
+
+                //prob is number of buckets times bucket size
+                float p = 1.f / (leading_indices.size() * curr_bucket_size);
+                for(; curr_pos < leading_indices[j]; ++curr_pos){
+                    probabilities[curr_pos] = p;
+                }
             }
         }
 
@@ -1253,26 +1299,6 @@ std::uint32_t adaptiveMatrixReconstructionBGE(
     }
     
     basis_rank = basis.size();
-
-    /*if(basis.size() != reduced_basis.size()){
-        std::cout << "basis: " << std::endl;
-        for(std::uint32_t i = 0; i < basis.size(); ++i){
-            for(std::uint32_t j = 0; j < basis[i].size(); ++j){
-                std::cout << std::uint32_t(basis[i][j]);
-            }
-            std::cout << std::endl;
-        }
-        std::cout << std::endl;
-        std::cout << "reduced basis: " << std::endl;
-        for(std::uint32_t i = 0; i < reduced_basis.size(); ++i){
-            for(std::uint32_t j = 0; j < reduced_basis[i].size(); ++j){
-                std::cout << std::uint32_t(reduced_basis[i][j]);
-            }
-            std::cout << std::endl;
-        }
-        std::cout << std::endl;
-    }*/
-    //std::cout << basis.size() << " " << reduced_basis.size() << " " << vpls.size() << " " << slice->sample_indices.size() << std::endl;
 
     return total_samples;
 }
@@ -3209,7 +3235,7 @@ std::tuple<std::uint64_t, std::uint64_t> MatrixReconstructionRenderer::renderHW(
     std::vector<float>& timings, const std::vector<KDTNode<ReconstructionSample>*>& slices, 
     std::uint32_t samples_per_slice, std::uint32_t slice_size){
     auto start = std::chrono::high_resolution_clock::now();
-    std::uint32_t num_workers = 15;//std::max(size_t(1), std::min(slices.size(), size_t(std::thread::hardware_concurrency() / 2)));
+    std::uint32_t num_workers = 1;//std::max(size_t(1), std::min(slices.size(), size_t(std::thread::hardware_concurrency() / 2)));
     std::uint32_t batch_size = 500 / (std::max(slice_size / 1000u, 1u) * std::max(1u, num_clusters_ / 4000));//std::max(num_workers * 2, 64u);
 
     BlockingQueue<HWWorkUnit> to_cluster;
