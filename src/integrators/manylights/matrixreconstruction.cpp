@@ -1074,11 +1074,11 @@ bool gereconstruct(std::unordered_map<std::uint32_t, std::uint8_t>& sampled, con
         }
         //in the case that both are false, it just means that we do not know whether or not to add it as only 0 values were sampled. Here we choose randomly
         else{
-            if(rand() % 2){
+            /*if(rand() % 2){
                 for(std::uint32_t j = 0; j < rows; ++j){
                     one_counts[j] += reduced_basis[i][j];
                 }
-            }
+            }*/
         }
     }
 
