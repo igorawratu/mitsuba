@@ -1029,11 +1029,9 @@ bool gereconstruct(std::unordered_map<std::uint32_t, std::uint8_t>& sampled, con
 
         //only consider basis if it's pivot has been sampled
         if(sampled.find(idx) != sampled.end()){
-            bool even = (one_counts[idx] & 1) == 0;
-
             //check if need to consider basis, if yes update tally, this works because the matrix is at least in echelon form after
             //gaussian elimination, thus we know the column will be zero from now onwards
-            if((sampled[idx] == 1 && even) || (sampled[idx] == 0 && !even)){
+            if((one_counts[idx] & 1) != sampled[idx]){
                 for(std::uint32_t j = 0; j < one_counts.size(); ++j){
                     one_counts[j] += reduced_basis[i][j];
                 }
@@ -1114,8 +1112,6 @@ std::uint32_t adaptiveMatrixReconstructionBGE(
 
     std::vector<std::uint32_t> sampled;
 
-    bool regenerate_sample_indices = false;
-
     //The actual adaptive matrix recovery algorithm
     for(std::uint32_t i = 0; i < order.size(); ++i){
         sample_omega.clear();
@@ -1123,8 +1119,7 @@ std::uint32_t adaptiveMatrixReconstructionBGE(
 
        if(basis.size() > 0){
             sampled = sampleColBWithLeading(scene, slice, vpls, order[i], min_dist, num_samples, rng, sample_omega,
-                leading_probabilities, non_leading_probabilities, leading_indices, sampled, regenerate_sample_indices);
-            regenerate_sample_indices = false;
+                leading_probabilities, non_leading_probabilities, leading_indices, sampled, true);
 
             full_col_sampled = false;
 
@@ -1248,8 +1243,6 @@ std::uint32_t adaptiveMatrixReconstructionBGE(
         std::uint32_t offset = order[i] * num_rows;
         std::copy(col_to_add.begin(), col_to_add.end(), mat.begin() + offset);
         total_samples += samples_for_col;
-
-        regenerate_sample_indices = true;
     }
     
     basis_rank = basis.size();
