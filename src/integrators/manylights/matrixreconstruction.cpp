@@ -1264,12 +1264,12 @@ std::uint32_t adaptiveMatrixReconstructionBGE(
             }
 
             //set leading and non-leading probabilities
-            non_leading_probabilities = probabilities;
+            /*non_leading_probabilities = probabilities;
             for(std::uint32_t i = 0; i < leading_indices.size(); ++i){
                 std::uint32_t idx = leading_indices[i];
                 //non_leading_probabilities[idx] = 0.f;
                 leading_probabilities[idx] = probabilities[idx];
-            }
+            }*/
         }
 
         std::uint32_t offset = order[i] * num_rows;
