@@ -1240,7 +1240,7 @@ std::uint32_t adaptiveMatrixReconstructionBGE(
             reduced_basis = gf2elim(basis, leading_indices);
 
             //probability update
-            std::vector<std::uint32_t> buckets;
+            /*std::vector<std::uint32_t> buckets;
             std::uint8_t last_sign = 2;
             for(std::uint32_t j = 0; j < col_to_add.size(); ++j){
                 if(last_sign != col_to_add[j]){
@@ -1261,15 +1261,18 @@ std::uint32_t adaptiveMatrixReconstructionBGE(
                 for(std::uint32_t k = bucket_start; k < bucket_end; ++k){
                     probabilities[k] += curr_bucket_prob;
                 }
-            }
-
-            //set leading and non-leading probabilities
-            /*non_leading_probabilities = probabilities;
-            for(std::uint32_t i = 0; i < leading_indices.size(); ++i){
-                std::uint32_t idx = leading_indices[i];
-                //non_leading_probabilities[idx] = 0.f;
-                leading_probabilities[idx] = probabilities[idx];
             }*/
+
+            std::uint32_t curr_pos = 0;
+            for(std::uint32_t j = 0; j < leading_indices.size(); ++j){
+                std::uint32_t curr_bucket_size = leading_indices[i] - curr_pos;
+
+                //prob is number of buckets times bucket size
+                float p = 1.f / (leading_indices.size() * curr_bucket_size);
+                for(; curr_pos < leading_indices[i]; ++curr_pos){
+                    probabilities[curr_pos] = p;
+                }
+            }
         }
 
         std::uint32_t offset = order[i] * num_rows;
