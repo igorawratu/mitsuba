@@ -27,8 +27,8 @@ chmod +x "${source_dir}/run_adaptive.sh"
 #${source_dir}/run_time_error_staircase.sh
 #${source_dir}/run_time_error_kitchen.sh
 #${source_dir}/run_time_error_bathroom.sh
-${source_dir}/run_time_error_staircase2.sh
-${source_dir}/run_time_error_living_room.sh
+#${source_dir}/run_time_error_staircase2.sh
+#${source_dir}/run_time_error_living_room.sh
 
 python3 "${source_dir}/../generate_plots.py" "${source_dir}/cbox" "cbox" "Cornell box" "${source_dir}/cbox" "diffuse"
 python3 "${source_dir}/../generate_plots.py" "${source_dir}/breakfast-room/breakfast-room" "scene" "Breakfast room" "${source_dir}/breakfast-room" "diffuse"
@@ -60,6 +60,10 @@ chmod +x "${source_dir}/run_is_kitchen.sh"
 python3 "${source_dir}/../generate_isb_plots.py" "${source_dir}/san_miguel" "san-miguel" "San-miguel" "${source_dir}/san-miguel_boolimport"
 python3 "${source_dir}/../generate_isb_plots.py" "${source_dir}/classroom" "classroom" "Classroom" "${source_dir}/classroom_boolimport"
 python3 "${source_dir}/../generate_isb_plots.py" "${source_dir}/kitchen" "kitchen" "Kitchen" "${source_dir}/kitchen_boolimport"
+
+python3 "${source_dir}/../generatebaccplots.py" "${source_dir}/san_miguel" "san-miguel" "San Miguel" "${source_dir}/san-miguel_bacc"
+python3 "${source_dir}/../generatebaccplots.py" "${source_dir}/classroom" "classroom" "Classroom" "${source_dir}/classroom_bacc"
+python3 "${source_dir}/../generatebaccplots.py" "${source_dir}/kitchen" "kitchen" "Kitchen" "${source_dir}/kitchen_bacc"
 
 # ${source_dir}/run_adaptive.sh
 
