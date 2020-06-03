@@ -1219,7 +1219,7 @@ std::uint32_t adaptiveMatrixReconstructionBGE(
 
                     for(std::uint32_t j = 0; j < reduced_basis.size(); ++j){
                         for(std::uint32_t k = 0; k < reduced_basis[j].size(); ++k){
-                            std::cout << reduced_basis[j][k];
+                            std::cout << std::uint32_t(reduced_basis[j][k]);
                         }
                         std::cout << std::endl;
                     }
