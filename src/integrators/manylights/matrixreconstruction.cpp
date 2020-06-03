@@ -879,7 +879,7 @@ std::vector<std::uint32_t> sampleColBWithLeading(Scene* scene, KDTNode<Reconstru
     const std::vector<VPL>& vpls, std::uint32_t col, float min_dist, std::uint32_t num_samples, 
     std::mt19937& rng, std::unordered_map<std::uint32_t, std::uint8_t>& sampled_vals, const std::vector<float>& leading_probabilities, 
     const std::vector<float>& non_leading_probabilities, const std::vector<std::uint32_t>& leading_indices, 
-    float leading_perc, const std::vector<std::uint32_t>& sample_set, bool resample){
+    const std::vector<std::uint32_t>& sample_set, bool resample){
 
     std::uint32_t max_samples = slice->sample_indices.size();
     assert(num_samples <= max_samples);
@@ -887,7 +887,7 @@ std::vector<std::uint32_t> sampleColBWithLeading(Scene* scene, KDTNode<Reconstru
     std::vector<std::uint32_t> sample_indices;
 
     if(resample){
-        std::uint32_t num_leading_samples = std::min(std::uint32_t(leading_indices.size()), std::max(1u, std::uint32_t(leading_perc * num_samples)));
+        std::uint32_t num_leading_samples = std::min(std::uint32_t(leading_indices.size()), num_samples);
         if(num_leading_samples == leading_indices.size()){
             for(std::uint32_t i = 0; i < leading_indices.size(); ++i){
                 sample_indices.push_back(leading_indices[i]);
@@ -1114,8 +1114,6 @@ std::uint32_t adaptiveMatrixReconstructionBGE(
 
     std::vector<std::uint32_t> sampled;
 
-    bool regenerate_sample_indices = false;
-
     //The actual adaptive matrix recovery algorithm
     for(std::uint32_t i = 0; i < order.size(); ++i){
         sample_omega.clear();
@@ -1123,8 +1121,7 @@ std::uint32_t adaptiveMatrixReconstructionBGE(
 
        if(basis.size() > 0){
             sampled = sampleColBWithLeading(scene, slice, vpls, order[i], min_dist, num_samples, rng, sample_omega,
-                leading_probabilities, non_leading_probabilities, leading_indices, 0.5f, sampled, regenerate_sample_indices);
-            regenerate_sample_indices = false;
+                leading_probabilities, non_leading_probabilities, leading_indices, sampled, true);
 
             full_col_sampled = false;
 
@@ -1240,7 +1237,7 @@ std::uint32_t adaptiveMatrixReconstructionBGE(
             non_leading_probabilities = probabilities;
             for(std::uint32_t j = 0; j < leading_indices.size(); ++j){
                 std::uint32_t idx = leading_indices[j];
-                //non_leading_probabilities[idx] = 0.f;
+                non_leading_probabilities[idx] = 0.f;
                 leading_probabilities[idx] = probabilities[idx];
             }
         }
@@ -1248,8 +1245,6 @@ std::uint32_t adaptiveMatrixReconstructionBGE(
         std::uint32_t offset = order[i] * num_rows;
         std::copy(col_to_add.begin(), col_to_add.end(), mat.begin() + offset);
         total_samples += samples_for_col;
-
-        regenerate_sample_indices = true;
     }
     
     basis_rank = basis.size();
