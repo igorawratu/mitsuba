@@ -8,7 +8,8 @@ scene_name = sys.argv[3]
 output = sys.argv[4]
 
 configurations = {
-    "Boolean" : ["bool_1_1000", "nbool_1_1000", "bool_2_1000", "nbool_2_1000", "bool_1_3000", "nbool_1_3000", "bool_2_3000", "nbool_2_3000"],
+    "Boolean" : ["bool_1_1000", "nbool_1_1000", "boolge_1_1000", "bool_2_1000", "nbool_2_1000", "boolge_2_1000", "bool_1_3000", "nbool_1_3000", "boolge_1_3000", 
+        "bool_2_3000", "nbool_2_3000", "boolge_2_3000"],
     "Importance Sampling" : ["import_05", "nimport_05", "import_1", "nimport_1", "import_15", "nimport_15", "import_2", "nimport_2"]
 }
 
