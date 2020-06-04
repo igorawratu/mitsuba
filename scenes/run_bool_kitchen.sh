@@ -111,7 +111,7 @@ mv "${source_dir}/kitchen/samplerates" "${source_dir}/kitchen/samplerates_boolge
 #BOOL
 for i in {1..50}
 do
-    sr=$(bc <<< "0.01 * $i")
+    sr=$(bc <<< "0.005 * $i")
     mitsuba "${source_dir}/kitchen/scene.xml" -Dcstrat=3 -Dsamplerate=$sr -Dcompcstrat=mdlc -Dcps=1000 -Dsps=1 -Dspp=4 -Dslice=1000 -Dis=1 -Dbv=1 -Dvp=0 -Diet=0 -Dge=0
     python3 "${source_dir}/../compare_err.py" "${source_dir}/kitchen/scene.exr" "${source_dir}/kitchen/groundtruth.exr" "${source_dir}/kitchen/kitchen_boolacc"
 done
@@ -121,7 +121,7 @@ mv "${source_dir}/kitchen/samplerates" "${source_dir}/kitchen/samplerates_boolac
 #NBOOL
 for i in {1..50}
 do
-    sr=$(bc <<< "0.01 * $i")
+    sr=$(bc <<< "0.005 * $i")
     mitsuba "${source_dir}/kitchen/scene.xml" -Dcstrat=3 -Dsamplerate=$sr -Dcompcstrat=mdlc -Dcps=1000 -Dsps=1 -Dspp=4 -Dslice=1000 -Dis=1 -Dbv=0 -Dvp=0 -Diet=0 -Dge=0
     python3 "${source_dir}/../compare_err.py" "${source_dir}/kitchen/scene.exr" "${source_dir}/kitchen/groundtruth.exr" "${source_dir}/kitchen/kitchen_nboolacc"
 done
@@ -131,7 +131,7 @@ mv "${source_dir}/kitchen/samplerates" "${source_dir}/kitchen/samplerates_nboola
 #GE
 for i in {1..50}
 do
-    sr=$(bc <<< "0.01 * $i")
+    sr=$(bc <<< "0.005 * $i")
     mitsuba "${source_dir}/kitchen/scene.xml" -Dcstrat=3 -Dsamplerate=$sr -Dcompcstrat=mdlc -Dcps=3000 -Dsps=1 -Dspp=4 -Dslice=1000 -Dis=1 -Dbv=1 -Dvp=0 -Diet=0 -Dge=1
     python3 "${source_dir}/../compare_err.py" "${source_dir}/kitchen/scene.exr" "${source_dir}/kitchen/groundtruth.exr" "${source_dir}/kitchen/kitchen_boolgeacc"
 done
