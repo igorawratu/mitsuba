@@ -15,7 +15,7 @@ configurations = {
 
 styles = {
     "BAMC" : ("blue", "square"),
-    "AMC (Cluster Only)" : ("red", "square"),
+    "AMC" : ("red", "square"),
     "BAMC (GE)" : ("green", "square"),
 }
 
