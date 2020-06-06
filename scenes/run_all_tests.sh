@@ -50,9 +50,9 @@ chmod +x "${source_dir}/run_is_classroom.sh"
 chmod +x "${source_dir}/run_bool_kitchen.sh"
 chmod +x "${source_dir}/run_is_kitchen.sh"
 
-${source_dir}/run_bool_sanmiguel.sh
+#${source_dir}/run_bool_sanmiguel.sh
 # ${source_dir}/run_is_sanmiguel.sh
-${source_dir}/run_bool_classroom.sh
+#${source_dir}/run_bool_classroom.sh
 # ${source_dir}/run_is_classroom.sh
 ${source_dir}/run_bool_kitchen.sh
 # ${source_dir}/run_is_kitchen.sh
