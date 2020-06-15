@@ -7,7 +7,6 @@
 #include "hwshader.h"
 #include "blockingqueue.hpp"
 #include <unordered_map>
-#include "filewriter.h"
 #include <chrono>
 
 MTS_NAMESPACE_BEGIN
@@ -332,7 +331,6 @@ bool LightClustererRenderer::render(Scene* scene, std::uint32_t spp, const Rende
     
     std::vector<float> timing;
     timing.push_back(std::chrono::duration_cast<std::chrono::duration<float>>(end - start).count());
-    writeOutputData(scene, "bftimings-", false, timing, ',');
 
     return true;
 }
