@@ -240,9 +240,6 @@ template<class Sample>
 void splitKDTree(KDTNode<Sample>* node, std::uint32_t size_threshold, std::uint32_t min_slice_size,
     float min_dist){
     if(node == nullptr || node->sample_indices.size() < size_threshold){
-        if(node != nullptr){
-            std::pair<Vector3f, Vector3f> bb = node->getBB();
-        }
         return;
     }
 
@@ -252,9 +249,6 @@ void splitKDTree(KDTNode<Sample>* node, std::uint32_t size_threshold, std::uint3
         if(node->left != nullptr && node->right != nullptr){
             splitKDTree(node->left.get(), size_threshold, min_slice_size, min_dist);
             splitKDTree(node->right.get(), size_threshold, min_slice_size, min_dist);
-        }
-        else{
-            std::pair<Vector3f, Vector3f> bb = node->getBB();
         }
     }
 }

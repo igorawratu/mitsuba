@@ -1135,7 +1135,6 @@ std::uint32_t adaptiveMatrixReconstruction(Eigen::MatrixXf& mat, Scene* scene, K
             //the pseudoinverse is recalculated
             if(sample_omega.rows() != reconstructed.rows() && full_col_sampled){
                 full_col_sampled = false;
-                auto sample_t = std::chrono::high_resolution_clock::now();
 
                 sampled = sampleCol(scene, slice, vpls, order[i], min_dist, num_samples, rng, sample_omega, sampled, 
                     true, importance_sample, probabilities);
@@ -1159,7 +1158,6 @@ std::uint32_t adaptiveMatrixReconstruction(Eigen::MatrixXf& mat, Scene* scene, K
             }
                 //no new direction was added so no need to regenerate sample indices
             else{
-                auto sample_t = std::chrono::high_resolution_clock::now();
                 sampled = sampleCol(scene, slice, vpls, order[i], min_dist, num_samples, rng, sample_omega, sampled, 
                     false, importance_sample, probabilities);
             }
@@ -1646,12 +1644,8 @@ void sliceWorkerLS(std::vector<std::int32_t>& work, std::uint32_t thread_id, std
             continue;
         }
 
-        auto start_t = std::chrono::high_resolution_clock::now();
-
         std::vector<std::vector<std::uint32_t>> cbsplit = clusterVPLsBySplitting(cbsamp, contribs, nn[slice_id], split_num_clusters, rng);
         auto vpls = sampleRepresentatives(contribs, total_vpls, cbsplit, rng, general_params.min_dist);
-
-        auto cluster_t = std::chrono::high_resolution_clock::now();
 
         recover(slices[slice_id], stats_mutex, vpls, scene, general_params, ac_params, total_samples, performed_samples, rng, ge);
 
@@ -1682,8 +1676,6 @@ void sliceWorkerMDLC(std::vector<std::int32_t>& work, std::uint32_t thread_id, s
             continue;
         }
 
-        auto start_t = std::chrono::high_resolution_clock::now();
-
         std::vector<Intersection> slice_points(slices[slice_id]->sample_indices.size());
 
         for(std::uint32_t i = 0; i < slice_points.size(); ++i){
@@ -1692,8 +1684,6 @@ void sliceWorkerMDLC(std::vector<std::int32_t>& work, std::uint32_t thread_id, s
 
         auto vpls = light_tree->getClusteringForPoints(scene, slice_points);
         updateVPLRadii(vpls, general_params.min_dist);
-
-        auto cluster_t = std::chrono::high_resolution_clock::now();
 
         recover(slices[slice_id], stats_mutex, vpls, scene, general_params, ac_params, total_samples, performed_samples, rng, ge);
         {
