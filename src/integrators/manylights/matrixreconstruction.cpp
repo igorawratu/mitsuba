@@ -561,7 +561,7 @@ void updateSliceWithMatData(const Eigen::MatrixXf& mat, KDTNode<ReconstructionSa
         }
         else{
             for(std::uint32_t j = 0; j < actual_vpl_indices.size(); ++j){
-                float coeff = ((recover_transpose ? mat(j, i) : mat(i, j)) + 1.f) / 2.f;
+                float coeff = (mat(i, j) + 1.f) / 2.f;
                 std::uint32_t idx = actual_vpl_indices[j];
                 slice->sample(i).color += slice->sample(i).unoccluded_samples[idx] * coeff;
             }
@@ -784,7 +784,7 @@ std::vector<std::vector<std::uint8_t>> gf2elim(const std::vector<std::vector<std
             }
         }
 
-        if(first_nonzero_idx != curr_pivot_row){
+        if(first_nonzero_idx != int(curr_pivot_row)){
             auto temp = reduced_basis[curr_pivot_row];
             reduced_basis[curr_pivot_row] = reduced_basis[first_nonzero_idx];
             reduced_basis[first_nonzero_idx] = temp;
@@ -1143,14 +1143,7 @@ std::uint32_t adaptiveMatrixReconstruction(Eigen::MatrixXf& mat, Scene* scene, K
                 q_omega.resize(expected_omega_rows, q.cols());
 
                 for(std::uint32_t j = 0; j < sampled.size(); ++j){
-                    if(visibility_only){
-                        q_omega.row(j) = q.row(sampled[j]);
-                    }
-                    else{
-                        q_omega.row(j * 3) = q.row(sampled[j] * 3);
-                        q_omega.row(j * 3 + 1) = q.row(sampled[j] * 3 + 1);
-                        q_omega.row(j * 3 + 2) = q.row(sampled[j] * 3 + 2);
-                    }
+                    q_omega.row(j) = q.row(sampled[j]);
                 }
 
                 auto svd = q_omega.jacobiSvd(Eigen::ComputeThinU | Eigen::ComputeThinV);
@@ -1180,8 +1173,6 @@ std::uint32_t adaptiveMatrixReconstruction(Eigen::MatrixXf& mat, Scene* scene, K
                 d += std::abs(reconstructed(sampled[j], 0) - sample_omega(j, 0));
             }
 
-            float largest = col_estimations[order[0]];
-            float curr = col_estimations[order[i]];
             //sampled values can't be reconstructed accurately so fully sample
             if(d > 1e-3f){
                 sampled = sampleCol(scene, slice, vpls, order[i], min_dist, total_rows, rng, 
@@ -1474,7 +1465,6 @@ MatrixReconstructionRenderer::MatrixReconstructionRenderer(MatrixReconstructionR
     vpls_(other.vpls_),
     sample_percentage_(other.sample_percentage_), 
     min_dist_(other.min_dist_), 
-    step_size_factor_(other.step_size_factor_), 
     slice_size_(other.slice_size_), 
     adaptive_importance_sampling_(other.adaptive_importance_sampling_),
     vsl_(other.vsl_),
@@ -1591,7 +1581,6 @@ void recover(KDTNode<ReconstructionSample>* slice, std::mutex& stats_mutex, cons
         std::uint32_t samples;
 
         if(!ac_params.bin_vis){
-            float svd_t, recon_t, adaptive_sample_t, other_t;
             samples = adaptiveMatrixReconstruction(mat, scene, slice, quadranted_vpls[i], general_params.min_dist, 
                 general_params.sample_perc, rng, ac_params.import_sample, cluster_contribs);
         }
@@ -1875,7 +1864,6 @@ std::tuple<std::uint64_t, std::uint64_t> recoverHW(KDTNode<ReconstructionSample>
                 sample_perc, rng, importance_sample, cluster_contribs);
 
             total_performed_samples += samples;
-            slice->rank_ratio[i] = float(basis_rank) / std::min(slice->sample_indices.size(), quadranted_vpls[i].size());
 
             for(std::uint32_t j = 0; j < actual_vpl_index[i].size(); ++j){
                 for(std::uint32_t k = 0; k < slice->sample_indices.size(); ++k){
@@ -1886,8 +1874,6 @@ std::tuple<std::uint64_t, std::uint64_t> recoverHW(KDTNode<ReconstructionSample>
         }
         
     }
-
-    slice->sample_ratio = float(total_performed_samples) / (slice->sample_indices.size() * vpls.size());
 
     return std::make_tuple(slice->sample_indices.size() * vpls.size(), total_performed_samples);
 }
@@ -1914,7 +1900,8 @@ void clusterWorkerMDLC(BlockingQueue<HWWorkUnit>& input, BlockingQueue<HWWorkUni
         updateVPLRadii(vpls[work_unit.second], min_dist);
 
         std::uint64_t slice_samples, num_slice_sampled;
-        std::tie(slice_samples, num_slice_sampled) = recoverHW(work_unit.first, vpls[work_unit.second], scene, gather_stats, show_svd, sample_perc,
+
+        std::tie(slice_samples, num_slice_sampled) = recoverHW(work_unit.first, vpls[work_unit.second], scene, sample_perc,
             max_sample_perc, sample_inc, min_dist, rng, importance_sample, bin_vis, ge);
         
         {
