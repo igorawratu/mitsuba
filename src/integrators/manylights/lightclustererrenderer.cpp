@@ -8,6 +8,7 @@
 #include "blockingqueue.hpp"
 #include <unordered_map>
 #include <chrono>
+#include <thread>
 
 MTS_NAMESPACE_BEGIN
 
