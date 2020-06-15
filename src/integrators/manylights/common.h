@@ -61,6 +61,7 @@ struct KDTNode{
     std::unique_ptr<KDTNode> right;
     std::vector<std::vector<int>> nearest_neighbours;
     std::vector<std::vector<float>> neighbour_distances;
+    std::vector<float> visibility_coefficients;
 
     KDTNode(std::vector<Sample>* sample_set) : sample_indices(), samples(sample_set), 
         left(nullptr), right(nullptr){

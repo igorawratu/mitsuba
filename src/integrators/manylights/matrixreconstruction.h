@@ -22,7 +22,7 @@ struct ReconstructionSample{
 
     ReconstructionSample(ReconstructionSample&& other) : image_x(other.image_x), image_y(other.image_y), 
         intersected_scene(other.intersected_scene), its(other.its), ray(other.ray), color(other.color),
-        fully_sampled_color(other.fully_sampled_color), unoccluded_samples(other.unoccluded_samples){
+        unoccluded_samples(other.unoccluded_samples){
     }
 
     ReconstructionSample& operator = (ReconstructionSample&& other){
@@ -33,7 +33,6 @@ struct ReconstructionSample{
             its = other.its;
             ray = other.ray;
             color = other.color;
-            fully_sampled_color = other.fully_sampled_color;
             unoccluded_samples = other.unoccluded_samples;
         }
 
