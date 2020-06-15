@@ -199,7 +199,6 @@ void divideByGreatestDimPA(const std::vector<VPL>& vpls,
 	}
 	proj_mean /= vpls.size();
 
-	float midpoint = (proj_max + proj_min) / 2.f;
 	for(std::uint32_t i = 0; i < projections.size(); ++i){
 		if(projections[i].first < proj_mean){
 			left.push_back(vpls[projections[i].second]);
@@ -350,7 +349,6 @@ std::unique_ptr<LightTreeNode> createLightTree(const std::vector<VPL>& vpls, EVP
 				
 				float c1_intensity = c1->emission_scale;
 				float c2_intensity = c2->emission_scale;
-				//float ratio = c1_intensity / (c1_intensity + c2_intensity);
 
 				float sample = gen(rng);
 
@@ -805,7 +803,6 @@ std::vector<VPL> LightTree::getClusteringForPoints(Scene* scene, const std::vect
 
 	std::priority_queue<ClusterAndScore, std::vector<ClusterAndScore>, decltype(comparator)> pqueue(comparator);
 	std::unordered_map<LightTreeNode*, float> contribution_cache;
-	std::uint32_t total_lights = point_vpls_.size() + directional_vpls_.size() + oriented_vpls_.size();
 
 	Point slice_centroid_pos(0.f);
 	Vector3f slice_centroid_normal(0.f);
