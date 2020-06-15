@@ -49,8 +49,8 @@ std::vector<HWBFPix> generateReceivers(Scene* scene, std::uint32_t spp, Sampler*
             float cell_side_len = 1.f / cell_dim;
 
             for(std::uint32_t j = 0; j < spp; ++j){
-                float x_jitter = /*sampler->next1D()*/ 0.5f * cell_side_len;
-                float y_jitter = /*sampler->next1D()*/ 0.5f * cell_side_len;
+                float x_jitter = 0.5f * cell_side_len;
+                float y_jitter = 0.5f * cell_side_len;
                 float x_off = (j % cell_dim) * cell_side_len;
                 float y_off = (j / cell_dim) * cell_side_len;
 
@@ -266,8 +266,8 @@ void LightClustererRenderer::renderNHW(Scene* scene, std::uint32_t spp, const Re
             for(std::uint32_t j = 0; j < spp; ++j){
                 Ray ray;
 
-                float x_jitter = /*sampler->next1D()*/ 0.5f * cell_side_len;
-                float y_jitter = /*sampler->next1D()*/ 0.5f * cell_side_len;
+                float x_jitter = 0.5f * cell_side_len;
+                float y_jitter = 0.5f * cell_side_len;
                 float x_off = (j % cell_dim) * cell_side_len;
                 float y_off = (j / cell_dim) * cell_side_len;
 
@@ -297,11 +297,6 @@ void LightClustererRenderer::renderNHW(Scene* scene, std::uint32_t spp, const Re
                     if(!intersected || its.isEmitter()){
                         break;
                     }
-
-                    /*if((vpls[i].its.p - its.p).length() < 3.f){
-                        accumulator = Spectrum(1.f);
-                        break;
-                    }*/
                 }
 
                 

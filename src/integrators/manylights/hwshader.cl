@@ -339,7 +339,7 @@ __kernel void shadeVSL(__global const struct PixelElement* pixels,
         return;
     }
 
-    float coeff = coefficients[i].coeff;// > 0 ? 1.0f : 0.0f;
+    float coeff = coefficients[i].coeff;
     int curr_light_idx = pixels[i].slice_id * clusters_per_slice + curr_pass;
 
     if(lights[curr_light_idx].type != 0){

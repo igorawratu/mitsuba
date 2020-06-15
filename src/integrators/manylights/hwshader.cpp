@@ -395,7 +395,6 @@ void HWShader::renderSlices(const std::vector<KDTNode<ReconstructionSample>*>& s
                 light_for_slice.light_surface_type = 0;
             }
             else{
-                //n = vpl.its.wi.z > 0.f ? n : -n;
                 light_for_slice.type = 2;
                 Vector light_wi = vpl.its.toWorld(vpl.its.wi);
 
@@ -722,7 +721,6 @@ void HWShader::renderHWBF(std::vector<HWBFPix>& receivers, const std::vector<VPL
         }
         else{
             light_for_slice.type = 2;
-            //n = vpl.its.wi.z > 0.f ? n : -n;
             
             Vector light_wi = vpl.its.toWorld(vpl.its.wi);
 
@@ -730,49 +728,25 @@ void HWShader::renderHWBF(std::vector<HWBFPix>& receivers, const std::vector<VPL
             light_for_slice.wi.s[1] = light_wi.y;
             light_for_slice.wi.s[2] = light_wi.z;
             
-            //if(vpl.emitter != nullptr || vpl.its.getBSDF() == nullptr){
-                light_for_slice.diff_col.s[0] = 1.f;
-                light_for_slice.diff_col.s[1] = 1.f;
-                light_for_slice.diff_col.s[2] = 1.f;
+            light_for_slice.diff_col.s[0] = 1.f;
+            light_for_slice.diff_col.s[1] = 1.f;
+            light_for_slice.diff_col.s[2] = 1.f;
 
-                light_for_slice.spec_col.s[0] = 0.f;
-                light_for_slice.spec_col.s[1] = 0.f;
-                light_for_slice.spec_col.s[2] = 0.f;
+            light_for_slice.spec_col.s[0] = 0.f;
+            light_for_slice.spec_col.s[1] = 0.f;
+            light_for_slice.spec_col.s[2] = 0.f;
 
-                light_for_slice.eta.s[0] = 1.f;
-                light_for_slice.eta.s[0] = 1.f;
-                light_for_slice.eta.s[0] = 1.f;
+            light_for_slice.eta.s[0] = 1.f;
+            light_for_slice.eta.s[0] = 1.f;
+            light_for_slice.eta.s[0] = 1.f;
 
-                light_for_slice.k.s[0] = 0.f;
-                light_for_slice.k.s[0] = 0.f;
-                light_for_slice.k.s[0] = 0.f;
+            light_for_slice.k.s[0] = 0.f;
+            light_for_slice.k.s[0] = 0.f;
+            light_for_slice.k.s[0] = 0.f;
 
-                light_for_slice.roughness = 1.5f;
+            light_for_slice.roughness = 1.5f;
 
-                light_for_slice.light_surface_type = 0;
-            /*}
-            else{
-                n = vpl.its.wi.z > 0.f ? n : -n;
-
-                const BSDF* bsdf = vpl.its.getBSDF();
-                Spectrum ldiffuse_col = bsdf->getDiffuseReflectance(vpl.its);
-                Spectrum lspecular_col = bsdf->getSpecularReflectance(vpl.its);
-                Spectrum eta = bsdf->getEtaSpec(vpl.its.wi);
-                Spectrum k = bsdf->getK(vpl.its.wi);
-
-                ldiffuse_col.toLinearRGB(light_for_slice.diff_col.s[0], light_for_slice.diff_col.s[1],
-                    light_for_slice.diff_col.s[2]);
-                lspecular_col.toLinearRGB(light_for_slice.spec_col.s[0], light_for_slice.spec_col.s[1],
-                    light_for_slice.spec_col.s[2]);
-                eta.toLinearRGB(light_for_slice.eta.s[0], light_for_slice.eta.s[1],
-                    light_for_slice.eta.s[2]);
-                k.toLinearRGB(light_for_slice.k.s[0], light_for_slice.k.s[1],
-                    light_for_slice.k.s[2]);
-
-                light_for_slice.roughness = std::min(1.5f, bsdf->getRoughness(vpl.its, 0));
-
-                light_for_slice.light_surface_type = 0;
-            }*/
+            light_for_slice.light_surface_type = 0;
         }
 
         light_for_slice.n.s[0] = n.x;

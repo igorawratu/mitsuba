@@ -4,33 +4,6 @@
 
 MTS_NAMESPACE_BEGIN
 
-std::tuple<float, float, float> floatToRGB(float v){
-    float r = 0.f, g = 0.f, b = 0.f;
-
-    if(v < 0.25f){
-        r = 0.f;
-        b = 1.f;
-        g = v * 4.f;
-    }
-    else if(v >= 0.25f && v < 0.5f){
-        r = 0.f;
-        b = 1.f - (v - 0.25f) * 4.f;
-        g = 1.f;
-    }
-    else if(v >= 0.5f && v < 0.75f){
-        r = (v - 0.5f) * 4.f;
-        b = 0.f;
-        g = 1.f;
-    }
-    else if(v >= 0.75f){
-        r = 1.f;
-        b = 0.f;
-        g = 1.f - (v - 0.75f) * 4.f;
-    }
-
-    return std::make_tuple(r, g, b);
-}
-
 bool raySphereIntersect(Point ray_origin, Vector3f ray_d, Point sphere_center, float sphere_radius){
     float d_sq = (ray_origin - sphere_center).lengthSquared();
     float sr2 = sphere_radius * sphere_radius;
@@ -286,18 +259,6 @@ bool sampleVisibility(Scene* scene, const Intersection& its, const VPL& vpl, flo
     }
 
     return visible;
-}
-
-std::uint64_t upperPo2(std::uint64_t v)
-{
-    v--;
-    v |= v >> 1;
-    v |= v >> 2;
-    v |= v >> 4;
-    v |= v >> 8;
-    v |= v >> 16;
-    v++;
-    return v;
 }
 
 MTS_NAMESPACE_END

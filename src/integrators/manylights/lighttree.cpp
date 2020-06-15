@@ -442,9 +442,6 @@ std::unique_ptr<LightTreeNode> tdCreateLightTree(const std::vector<VPL>& vpls, E
 		}
 	}
 
-	//curr_node->vpl.P = lc->vpl.P * lc_rat + rc->vpl.P * (1.f - lc_rat);
-	//curr_node->vpl.P /= curr_node->vpl.P.getLuminance();
-
 	curr_node->emission_scale = lc_intensity + rc_intensity;
 	curr_node->num_children = 2 + lc->num_children + rc->num_children;
 
@@ -561,9 +558,6 @@ float calculateClusterEstimate(Scene* scene, Point shading_point_position, Norma
 	float min_dist){
 	Intersection its;
 	its.p = shading_point_position;
-	/*if(!sampleVisibility(scene, its, node->vpl, min_dist)){
-		return 0.f;
-	}*/
 
 	float d;
 	float geometric = 0.f;
@@ -765,11 +759,6 @@ std::vector<VPL> LightTree::getClusteringForPoint(const Intersection& its) {
 	while((pqueue.size() + lights.size()) < max_lights_ && pqueue.size() > 0){
 		ClusterAndScore entry = pqueue.top();
 		pqueue.pop();
-		
-		//if the worst node is below threshold, then all nodes must be
-		//if(std::get<1>(entry) < error_threshold_){
-		//	break;
-		//}
 
 		LightTreeNode* node = std::get<0>(entry);
 		
