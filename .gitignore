@@ -48,3 +48,9 @@ mitsuba.*.log
 .settings
 .cproject
 .project
+
+*.jpg
+*.png
+*.mtl
+*.obj
+*.bmp
